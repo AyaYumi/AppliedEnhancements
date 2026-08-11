@@ -1,138 +1,180 @@
 # Applied Enhancements
 
-Applied Enhancements 是面向 Applied Energistics 2（AE2）的 NeoForge 增强模组。它不添加方块或物品，主要提供 Long 范围合成、合成计算进度、样板缓存、材料汇总修正及可选的 MAX_FAST 规划路径。
+Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 功能增强模组。
 
-## 兼容版本
+项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 MAX_FAST 合成规划器。
 
-| 项目 | 当前版本 |
+> 当前版本：`1.0.0`
+>
+> 目标平台：Minecraft `1.21.1` / NeoForge / Java `21`
+
+## 功能概览
+
+| 功能 | 当前行为 |
 |---|---|
-| Minecraft | 1.21.1 |
-| NeoForge | 21.1.220（开发环境）；元数据允许 21.1.0 及以上 |
-| Applied Energistics 2 | 19.2.17（精确版本依赖） |
-| Java | 21 |
+| Long 范围合成 | 合成订单、网络载荷和规划过程使用 `long` 数量；默认单次上限为 1 万亿，可配置到 `Long.MAX_VALUE` |
+| 精确数量校验 | 客户端与服务端共同校验输入，拒绝溢出、非法小数、负数以及会导致 AE2 原生规划器计数溢出的请求 |
+| 计算进度显示 | 合成确认界面显示等待、准备、编译、执行、原生计算、计划整理、完成或失败等阶段 |
+| 规划路径标识 | 计算结果可区分 `MAX_FAST`、`AE2 回退`、`AE2` 和 `EcoAE` 路径 |
+| MAX_FAST 规划器 | 尝试聚合并批量执行兼容的配方图；不兼容或超出预算时按模式回退到 AE2 原生规划 |
+| 样板缓存 | 缓存 AE2 样板输入有效性和容器物品结果，使用有界实例缓存控制内存占用 |
+| 材料汇总修正 | 使用饱和算术处理超大合成计划，避免存储、合成和缺失数量在预览中溢出 |
+| 无限容量显示 | 对无限存储容量和并行度使用 `9.2E` 紧凑显示，并对网络存储汇总使用安全的饱和加法 |
+| AE2WTLib 兼容 | 通过可选 Mixin 修正无线合成终端对负数可用量的处理；未安装 AE2WTLib 时不会加载目标类 |
+| Provider 批次接口 | 为第三方合成 Provider 提供一次 CPU 调度周期内成对的批次开始/结束回调 |
 
-AE2 版本被固定为 `19.2.17`，因为核心功能依赖该版本的 Mixin 注入点。升级 AE2 前应重新执行编译和运行期 Mixin 验证。
+## 版本与依赖
 
-## 当前功能
+| 组件 | 当前要求 | 类型 |
+|---|---:|---|
+| Minecraft | `1.21.1` | 必需，精确版本 |
+| Java | `21` | 开发与运行目标 |
+| NeoForge | 开发环境 `21.1.220`；运行时允许 `21.1.0` 及以上 | 必需 |
+| Applied Energistics 2 | `19.2.17` | 必需，精确版本 |
+| ExtendedAE | `1.21-2.2.32-neoforge` 及以上 | 可选元数据依赖 |
+| AE2WTLib | `1.21.1-19.2.16-neoforge` 及以上 | 可选兼容依赖 |
 
-| 功能 | 行为 |
-|---|---|
-| Long 范围合成 | 合成数量使用 `long` 传输和规划；默认上限 1 万亿，可配置至 `Long.MAX_VALUE` |
-| 精确数量输入 | 使用 `BigDecimal.longValueExact()` 语义，拒绝溢出、非法小数和回绕值 |
-| 合成计算进度 | 确认界面显示计算阶段、耗时、已处理步骤以及已知总量的进度条 |
-| 计算路径标识 | 区分 AE2 原生、MAX_FAST、AE2 回退及 EcoAE 路径 |
-| 样板缓存 | 对 AE2 样板输入有效性和容器物品结果做有界实例缓存 |
-| 材料汇总修正 | 对超大合成计划使用饱和算术，修正预览中的存储、合成和缺失数量 |
-| 无限存储显示 | 可抽取量超过自报库存的存储元件在 ME 终端和元件预览中显示为 `9.2E`；网络汇总采用饱和加法 |
-| 无限 CPU 显示 | 对特殊存储容量和并行度使用紧凑显示，避免界面整数溢出 |
-| AE2WTLib 兼容 | 使用 `@Pseudo` 可选目标；未安装时跳过，且不会提前加载目标类 |
+核心功能依赖 AE2 `19.2.17` 的内部类和 Mixin 注入点。升级 AE2 后即使能够编译，也必须重新检查所有 Mixin 并完成客户端、服务端和实际合成流程验证。
+
+## 安装
+
+目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
+
+```text
+build/libs/appliedenhancements-1.0.0.jar
+```
+
+同时需要安装匹配版本的 NeoForge 与 AE2。ExtendedAE 和 AE2WTLib 仅在使用对应兼容功能时安装。
+
+本模组包含服务端配置同步和客户端界面 Mixin，联机环境建议客户端与服务端同时安装相同版本。
 
 ## Long 范围合成
 
-合成数量界面允许最多 20 位输入。客户端先进行精确解析，服务端再校验功能开关和最大订单数量。以下输入不会被转换为其他合法数量：
+数量输入框最多接受 20 个字符，并采用精确整数解析。服务器会再次校验功能开关与订单上限，因此客户端配置无法绕过服务器限制。
 
-```text
-18446744073709551617
-9223372036854775807 + 1
-```
-
-默认最大订单为：
+默认最大订单量：
 
 ```text
 1,000,000,000,000
 ```
 
-将 `max_crafting_order_amount` 调高后，理论上可接受至：
+配置允许的理论最大值：
 
 ```text
 9,223,372,036,854,775,807
 ```
 
-实际能否完成如此大的计划仍取决于 AE2 网络、配方图、内存和执行时间。
+以下类型的输入会被拒绝，不会截断或回绕成其他数值：
+
+```text
+9223372036854775808
+1.5
+-1
+```
+
+即使输入处于 `long` 范围内，如果某个配方分支的乘法、输出聚合或 AE2 原生逐件尝试会越过安全边界，请求仍可能被拒绝。超大订单能否实际完成还取决于配方图规模、网络库存、内存和执行时间。
 
 ## MAX_FAST 规划器
 
-MAX_FAST 会尝试编译并批量执行兼容的配方图；多候选、可复用输入、模糊输入和副产物节点作为局部边界接收聚合请求，并由 AE2 原生逻辑处理，不会迫使整张图改用递归事务执行。遇到无法隔离的不支持结构时，`SAFE` 模式回退到 AE2 原生规划。已编译图只在单次计算会话内复用，不存在跨 Grid 的全局图缓存。
+MAX_FAST 会在单次合成计算会话中分析配方树，并尝试把可证明安全的节点聚合执行。存在容器物品、复杂候选、可复用输入或其他兼容边界时，规划器会保留局部原生语义，或把整次尝试交回 AE2。
 
-| 模式 | 说明 |
+| 模式 | 行为 |
 |---|---|
-| `OFF` | 完全关闭 MAX_FAST，使用 AE2 原生规划 |
-| `SAFE` | 默认值；保守检查边界与兼容性，不适用时回退 AE2 |
-| `AGGRESSIVE` | 放宽部分兼容性检查，可能产生硬失败，只建议排障或受控环境使用 |
+| `OFF` | 关闭 MAX_FAST，完全使用 AE2 原生规划 |
+| `SAFE` | 默认模式；执行保守兼容性检查，不适用时回退 AE2 |
+| `AGGRESSIVE` | 放宽部分兼容性限制，可能直接暴露规划错误，仅建议排障或受控测试时使用 |
 
-当前实现没有全局图缓存、并行图执行、智能候选模块或配方预编译。旧迁移记录中出现的这些选项不属于当前配置。
+MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成计算会话内复用，不会建立跨世界或跨 Grid 的持久全局缓存。
 
-启用自动退让且检测到 `ecoae` 时，如果本规划器优先级数值高于约定的 EcoAE 优先级 `50`，MAX_FAST 会停用。优先级数值越小，优先级越高。
+### EcoAE 退让规则
+
+启用 `maxFastAutoYield` 且检测到 EcoAE 时，MAX_FAST 会比较规划器优先级。数值越小表示优先级越高；EcoAE 的约定优先级为 `50`。
+
+默认 `maxFastPlannerPriority = 500`，因此默认配置下会向 EcoAE 退让。如需让 MAX_FAST 优先，需要关闭自动退让，或在充分验证兼容性后调整优先级。
 
 ## 配置
 
-首次启动后会生成两个配置文件。
+首次启动后会生成两个 COMMON 配置文件。
 
 ### `config/appliedenhancements-common.toml`
 
-```toml
-[crafting]
-max_crafting_order_amount = 1000000000000
-
-[caching]
-enable_pattern_caching = true
-pattern_cache_size = 32
-
-[crafting_plan]
-enable_enhanced_material_calculation = true
-```
+| 配置键 | 默认值 | 有效范围 | 说明 |
+|---|---:|---:|---|
+| `crafting.max_crafting_order_amount` | `1000000000000` | `1` ～ `Long.MAX_VALUE` | 单次 AE2 自动合成订单的最大数量 |
+| `caching.enable_pattern_caching` | `true` | 布尔值 | 启用样板输入验证与容器物品缓存 |
+| `caching.pattern_cache_size` | `32` | `8` ～ `256` | 每个样板的多键缓存最大条目数 |
+| `crafting_plan.enable_enhanced_material_calculation` | `true` | 布尔值 | 启用增强的存储、合成和缺失材料统计 |
 
 ### `config/appliedenhancements-maxfast.toml`
 
-```toml
-[features]
-enableLongRangeCrafting = true
-enableProgressDisplay = true
+| 配置键 | 默认值 | 有效范围 | 说明 |
+|---|---:|---:|---|
+| `features.enableLongRangeCrafting` | `true` | 布尔值 | 启用超过 `Integer.MAX_VALUE` 的合成订单 |
+| `features.enableProgressDisplay` | `true` | 布尔值 | 启用合成计算进度和路径显示 |
+| `maxfast.enableMaxFastPlanner` | `true` | 布尔值 | 启用 MAX_FAST 规划器 |
+| `maxfast.maxFastMode` | `SAFE` | `OFF` / `SAFE` / `AGGRESSIVE` | 选择规划器模式 |
+| `maxfast.maxFastMaxNodes` | `100000` | `1000` ～ `1000000` | 单次分析允许的最大节点数 |
+| `maxfast.maxFastCompileBudgetMs` | `2000` | `100` ～ `30000` | 单次配方树分析的时间预算，单位为毫秒 |
+| `maxfast.maxFastPlannerPriority` | `500` | `0` ～ `10000` | 与其他规划器比较的优先级，数值越小越优先 |
+| `maxfast.maxFastAutoYield` | `true` | 布尔值 | EcoAE 优先级更高时自动退让 |
+| `debug.maxFastDiagnostics` | `false` | 布尔值 | 输出详细的编译、执行与回退诊断日志 |
 
-[maxfast]
-enableMaxFastPlanner = true
-maxFastMode = "SAFE"
-maxFastMaxNodes = 100000
-maxFastCompileBudgetMs = 2000
-maxFastPlannerPriority = 500
-maxFastAutoYield = true
+`maxFastDiagnostics` 会产生大量日志，只应在定位回退原因或兼容问题时临时启用。
 
-[debug]
-maxFastDiagnostics = false
+## 构建与运行
+
+项目使用 Gradle Wrapper `8.14.2`，无需单独安装 Gradle，但需要可用的 JDK 21。
+
+| 任务 | Windows | Linux / macOS |
+|---|---|---|
+| 运行单元测试 | `.\gradlew.bat test --no-daemon --console=plain` | `./gradlew test --no-daemon --console=plain` |
+| 构建 JAR | `.\gradlew.bat build --no-daemon --console=plain` | `./gradlew build --no-daemon --console=plain` |
+| 启动开发客户端 | `.\gradlew.bat runClient` | `./gradlew runClient` |
+| 启动开发服务端 | `.\gradlew.bat runServer` | `./gradlew runServer` |
+| 启动 GameTest 服务端 | `.\gradlew.bat runGameTestServer --no-daemon --console=plain` | `./gradlew runGameTestServer --no-daemon --console=plain` |
+
+构建产物位于：
+
+```text
+build/libs/appliedenhancements-1.0.0.jar
 ```
 
-`maxFastDiagnostics` 会产生较多日志，仅应在定位规划回退或兼容问题时临时开启。
+## 验证范围
 
-## 构建与验证
+自动化测试目前覆盖以下重点：
 
-```powershell
-.\gradlew.bat test --no-daemon --console=plain
-.\gradlew.bat build --no-daemon --console=plain
-.\gradlew.bat runGameTestServer --no-daemon --console=plain
-```
+- `long` 数量解析、饱和加法/乘法和原生规划器安全边界；
+- 服务端配置同步、计算进度生命周期和路径网络 ID；
+- MAX_FAST 执行策略、递归保护、候选回退、数量反馈、稀疏容量求解和深度边界；
+- 合成 CPU 执行数量、模拟库存差量、外部计划材料汇总和终端任务生命周期；
+- 无限存储识别与网络存储检测缓存；
+- Provider 批次回调的正常与异常退出配对；
+- Mixin 所属包和目标源码的结构性保护。
 
-单元测试覆盖网络路径 ID、进度状态边界、Long 精确解析和饱和算术。`runGameTestServer` 可验证启动过程中实际被类加载的服务端 Mixin；仓库目前没有场景化 GameTest，因此该任务可能以“没有测试函数”退出，也不会覆盖完整的 MAX_FAST 配方执行。
-
-客户端 Mixin 还应通过 `runClient` 手工验证以下流程：
-
-1. 输入普通数量并进入合成确认界面。
-2. 输入大于 `Integer.MAX_VALUE` 的合法数量并进入确认界面。
-3. 输入超出 `Long.MAX_VALUE` 的值，确认按钮必须保持禁用。
-4. 分别关闭 Long 合成和进度显示开关，确认原生流程仍可用。
+`runGameTestServer` 可检查服务端启动和实际加载到的 Mixin，但仓库当前没有场景化 GameTest。客户端界面仍应通过 `runClient` 手动验证普通数量、超大数量、非法数量、进度显示和配置关闭后的原生流程。
 
 ## 开发者接口
 
-项目保留以下扩展接口：
+| 接口 | 用途 |
+|---|---|
+| `MolecularBalancedBatchProvider` | 在一次 AE2 合成 CPU 调度内接收成对的批次开始与结束回调；异常退出也会关闭批次 |
+| `LongCraftingAmountMenuBridge` | 为数量菜单暴露 `long` 合成请求入口 |
+| `LongCraftingConfirmMenuBridge` | 为确认菜单保存并提交 `long` 订单量 |
+| `OmniCalculationPathCarrier` | 在计算计划与客户端界面之间传递规划路径 |
+| `InfiniteConstants` | 提供无限存储容量与无限并行度的哨兵常量 |
 
-- `MolecularBalancedBatchProvider`：在一次 AE2 合成 CPU 调度中，首次向实现该接口的 Provider 推送配方前调用 `beginAdaptiveBatch`，调度结束（含异常退出）时配对调用 `endBalancedBatch`。
-- `InfiniteConstants`：无限存储和并行度常量。
-- `LongCraftingAmountMenuBridge`、`LongCraftingConfirmMenuBridge`：Long 合成菜单桥接。
-- `OmniCalculationPathCarrier`：规划结果路径传递。
+公共接口直接引用 AE2 类型，因此开发者依赖必须与本项目固定的 AE2 版本保持一致。
 
-## 文档说明
+## 已知限制
 
-[MAXFAST_MIGRATION_COMPLETE.md](MAXFAST_MIGRATION_COMPLETE.md) 记录当前 MAX_FAST 的落地范围和限制。配置与兼容性结论以本 README、源码和自动化测试为准。
+| 限制 | 影响 |
+|---|---|
+| AE2 依赖固定为 `19.2.17` | 其他 AE2 版本不在当前兼容范围内 |
+| MAX_FAST 只缓存当前计算会话 | 不提供跨 Grid、跨世界或持久化的配方图缓存 |
+| 没有场景化 GameTest | 自动化测试不能替代真实整合包中的客户端与服务端验证 |
+| `AGGRESSIVE` 模式可能硬失败 | 不建议用于未经验证的生产存档 |
+| 超大订单仍受资源限制 | 合法的 `long` 数量不代表一定能在可接受时间和内存内完成 |
 
-## 许可证
+## 许可证状态
 
-本项目使用 [MIT License](LICENSE)。
+项目构建元数据当前将许可证声明为 `MIT`，但仓库尚未包含独立的 `LICENSE` 文件。在正式分发或复用代码前，应由项目所有者补充并确认完整许可证文本。
