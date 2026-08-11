@@ -1,0 +1,38 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.appliedenhancements.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "AE2WTLibCraftingTerminalHandlerMixin",
+    "AECraftingPatternInputMixin",
+    "CraftAmountMenuMixin",
+    "CraftConfirmMenuMixin",
+    "CraftingCalculationLongSafetyMixin",
+    "CraftingCpuHelperLongSafetyMixin",
+    "CraftingCpuLogicBatchMixin",
+    "CraftingPlanMixin",
+    "CraftingPlanSummaryMixin",
+    "CraftingPlanSummaryAccessor",
+    "CraftingServiceLongSafetyMixin",
+    "CraftingSimulationStateLongSafetyAccessor",
+    "CraftingSimulationStateLongSafetyMixin",
+    "CraftingTreeNodeLongSafetyMixin",
+    "CraftingTreeProcessLongSafetyMixin",
+    "NetworkStorageMixin",
+    "OmniCraftingCalculationMixin",
+    "OmniCraftingTreeNodeAccessor",
+    "OmniCraftingTreeProcessAccessor"
+  ],
+  "client": [
+    "AEKeyAmountMixin",
+    "CraftAmountScreenMixin",
+    "NumberEntryWidgetAccessor",
+    "CPUSelectionListMixin",
+    "CraftConfirmScreenMixin",
+    "ItemStackStorageCellTooltipMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
