@@ -220,7 +220,7 @@ build/libs/appliedenhancements-1.0.0.jar
 
 ## 开发者接口
 
-完整的依赖配置、生命周期、线程/侧别要求及接入示例见 [API 接入文档](docs/API_INTEGRATION.md)。稳定兼容范围仅包括 `com.appliedenhancements.api` 与 `com.appliedenhancements.api.client`；Mixin、运行时实现和 `com.github.appliedenhancements` 下的内部桥接不属于公共 API。
+完整的依赖配置、生命周期、线程/侧别要求及接入示例见 [API 接入文档](docs/API_INTEGRATION_ZH.md)。稳定兼容范围仅包括 `com.appliedenhancements.api` 与 `com.appliedenhancements.api.client`；Mixin、运行时实现和 `com.github.appliedenhancements` 下的内部桥接不属于公共 API。
 
 | 接口 | 用途 |
 |---|---|

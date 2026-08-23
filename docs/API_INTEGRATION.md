@@ -1,51 +1,54 @@
-# Applied Enhancements API 接入文档
+# Applied Enhancements API Integration Guide
 
-本文面向希望接入 Applied Enhancements `1.0.0` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+[中文文档](API_INTEGRATION_ZH.md)
 
-## 兼容基线
+This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.0`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
-| 组件 | 最低版本 | 说明 |
+## Compatibility baseline
+
+| Component | Minimum version | Notes |
 |---|---:|---|
-| Minecraft | `1.21.1` | 精确游戏版本 |
-| Java | `21` | 编译与运行目标 |
-| NeoForge | `21.1.220` | 与当前发行版一致 |
-| Applied Energistics 2 | `19.2.17` | 公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.0.0` | 本文档对应版本 |
+| Minecraft | `1.21.1` | Exact game version |
+| Java | `21` | Compilation and runtime target |
+| NeoForge | `21.1.220` | Matches the current release |
+| Applied Energistics 2 | `19.2.17` | Public signatures directly reference AE2 types |
+| Applied Enhancements | `1.0.0` | Version covered by this guide |
 
-稳定兼容范围仅包括以下包：
+Only the following packages are part of the stable integration surface:
 
 ```text
 com.appliedenhancements.api
 com.appliedenhancements.api.client
 ```
 
-以下内容属于内部实现，不承诺源码或二进制兼容：
+The following are implementation details and do not carry source or binary compatibility guarantees:
 
-- `com.appliedenhancements.mixin`；
-- `com.appliedenhancements.client`；
-- `com.appliedenhancements.runtime`；
-- `com.appliedenhancements.integration`；
-- `com.github.appliedenhancements`；
-- 其他未位于公共 API 包中的桥接类、载荷和常量。
+- `com.appliedenhancements.mixin`;
+- `com.appliedenhancements.client`;
+- `com.appliedenhancements.runtime`;
+- `com.appliedenhancements.integration`;
+- `com.github.appliedenhancements`;
+- bridges, payloads, constants, and other classes outside the public API packages.
 
-## 开发环境依赖
+## Development dependency
 
-项目暂未发布独立 Maven API 构件。接入方可以把发行 JAR 放入自己项目的 `libs` 目录，并以 `compileOnly` 方式引用：
+Applied Enhancements does not yet publish a separate Maven API artifact. Place the release JAR in your project's `libs` directory and reference it with `compileOnly`:
 
 ```groovy
 dependencies {
-    // 接入方通常已经直接依赖 AE2；其类型出现在本模组的公共签名中。
+    // Integrations normally depend on AE2 directly because its types appear
+    // in the public Applied Enhancements signatures.
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
 
-    // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
+    // Compile against the API without embedding this mod in your own JAR.
     compileOnly files("libs/appliedenhancements-1.0.0.jar")
 
-    // 只有需要在开发运行环境中联调时才添加。
+    // Add this only when the development run needs the integration at runtime.
     runtimeOnly files("libs/appliedenhancements-1.0.0.jar")
 }
 ```
 
-如果接入代码会无条件加载公共 API，应在 `neoforge.mods.toml` 中声明硬依赖：
+If your integration unconditionally loads Applied Enhancements API classes, declare a required dependency in `neoforge.mods.toml`:
 
 ```toml
 [[dependencies.yourmod]]
@@ -56,7 +59,7 @@ ordering="AFTER"
 side="BOTH"
 ```
 
-如果只在检测到本模组时加载独立兼容类，可以声明可选依赖：
+If all API references are isolated behind an optional compatibility layer, declare an optional dependency instead:
 
 ```toml
 [[dependencies.yourmod]]
@@ -67,7 +70,7 @@ ordering="AFTER"
 side="BOTH"
 ```
 
-可选接入必须把所有 API 引用隔离到只有本模组已加载时才会触发类加载的兼容类中：
+Optional integrations must isolate every API reference in classes that are loaded only when Applied Enhancements is present:
 
 ```java
 if (ModList.get().isLoaded("appliedenhancements")) {
@@ -75,36 +78,36 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 }
 ```
 
-仅在运行时判断 Mod ID，但让主类字段、方法签名或静态初始化直接引用本 API，仍可能在缺少本模组时产生 `NoClassDefFoundError`。
+A runtime Mod ID check is not sufficient when a main mod class, field, method signature, or static initializer directly references this API. Such references can still cause `NoClassDefFoundError` before the check executes.
 
-## API 总览
+## API overview
 
-| API | 侧别 | 推荐注册/调用阶段 | 用途 |
+| API | Side | Recommended lifecycle | Purpose |
 |---|---|---|---|
-| `MaxFastCraftingPlanner` | 服务端 | 每次 AE2 合成计算 | 主动调用 MAX_FAST 规划器 |
-| `InfiniteStorageCellMarker` | 双端 | 运行时类型实现 | 标记运行时无限存储实现 |
-| `InfiniteStorageCells` | 双端 | 数据包或运行时查询 | 公共无限磁盘物品标签 |
-| `PatternDuplicateApi` | 双端可用 | Common Setup 注册 | 解析产物并查找重复样板 |
-| `PatternOutputResolver` | 双端可用 | Common Setup 注册 | 解析第三方编码样板产物 |
-| `PatternTerminalIntegrationApi` | 客户端 | Client Setup 注册 | 接入兼容的样板终端界面 |
-| `PatternBatchMoveApi` | 客户端与服务端 | Common Setup 注册服务端处理器 | 原子批量移动样板 |
-| `PatternQuickMoveSession` | 仅客户端 | 每个打开的界面创建 | 管理框选、剪切缓存和覆盖层 |
-| `PatternSlotRef` | 双端 | 当前终端会话内 | 稳定标识机器容器和样板槽 |
-| `MolecularBalancedBatchProvider` | 服务端 | Provider 类型实现 | 接收一次 CPU 调度批次的开始/结束回调 |
+| `MaxFastCraftingPlanner` | Server | Once per AE2 crafting calculation | Invokes the MAX_FAST planner explicitly |
+| `InfiniteStorageCellMarker` | Both | Implemented by a runtime storage type | Marks a runtime infinite-storage implementation |
+| `InfiniteStorageCells` | Both | Data pack or runtime query | Exposes the public infinite-cell item tag |
+| `PatternDuplicateApi` | Both | Register during Common Setup | Resolves outputs and finds duplicate patterns |
+| `PatternOutputResolver` | Both | Register during Common Setup | Decodes outputs from third-party encoded patterns |
+| `PatternTerminalIntegrationApi` | Client | Register during Client Setup | Adds support to a compatible pattern-terminal screen |
+| `PatternBatchMoveApi` | Client and server | Register server handlers during Common Setup | Performs atomic pattern batch movement |
+| `PatternQuickMoveSession` | Client only | Create once per open screen | Manages selection, cut buffers, and overlays |
+| `PatternSlotRef` | Both | Current terminal session only | Identifies a machine container and pattern slot |
+| `MolecularBalancedBatchProvider` | Server | Implemented by the provider type | Receives paired CPU scheduling-batch callbacks |
 
-## 1. MAX_FAST 规划器
+## 1. MAX_FAST planner
 
-### 基本规则
+### Core rules
 
-- 本模组的自动规划接入默认关闭，但其他 Mod 调用公共 API 不受 `enableAutomaticMaxFastPlanner` 影响。
-- 每次 AE2 合成计算创建一个 `MaxFastCraftingPlanner` 实例。
-- 同一计算的真实尝试与模拟尝试可以复用该实例。
-- 实例不是线程安全的，不得跨计算根节点或并行线程共享。
-- 该 API 使用 AE2 内部合成树类型，因此调用时必须确保 Applied Enhancements 已加载并且对应 Mixin 已生效。
+- Applied Enhancements' automatic planner integration is disabled by default, but public API calls are independent of `enableAutomaticMaxFastPlanner`.
+- Create one `MaxFastCraftingPlanner` instance for each AE2 crafting calculation.
+- The same instance may be reused for the real and simulated attempts of that calculation.
+- Planner instances are not thread-safe and must not be shared across calculation roots or parallel threads.
+- The API operates on AE2 crafting-tree internals, so Applied Enhancements must be loaded and its corresponding Mixins must be active.
 
-### 创建规划器
+### Creating a planner
 
-使用服务端配置中的节点数和编译时间预算：
+Use the server-configured node and compilation budgets:
 
 ```java
 MaxFastCraftingPlanner planner = MaxFastCraftingPlanner.createConfigured(
@@ -112,14 +115,15 @@ MaxFastCraftingPlanner planner = MaxFastCraftingPlanner.createConfigured(
         MaxFastCraftingPlanner.ProgressListener.NONE);
 ```
 
-使用接入方自己的预算和进度回调：
+Use integration-defined budgets and progress callbacks:
 
 ```java
 MaxFastCraftingPlanner planner = MaxFastCraftingPlanner.create(
         100_000,
         2_000,
         () -> {
-            // 可选的协作暂停点；需要取消时抛出 InterruptedException。
+            // Optional cooperative pause point. Throw InterruptedException
+            // when the calculation has been cancelled.
         },
         new MaxFastCraftingPlanner.ProgressListener() {
             @Override
@@ -140,7 +144,9 @@ MaxFastCraftingPlanner planner = MaxFastCraftingPlanner.create(
         });
 ```
 
-### 执行与回退
+Both `maxNodes` and `compileBudgetMillis` must be positive.
+
+### Execution and fallback
 
 ```java
 MaxFastCraftingPlanner.Result result = planner.tryExecute(
@@ -151,40 +157,44 @@ MaxFastCraftingPlanner.Result result = planner.tryExecute(
         missingItems);
 
 if (result.branchFailure() != null) {
-    // 这是 AE2 的终止分支失败，通常应继续向上抛出。
+    // This is a terminal AE2 branch failure and should normally propagate.
     throw result.branchFailure();
 }
 
 if (result.applied()) {
-    // MAX_FAST 已把本次请求应用到传入的模拟库存和缺失计数。
+    // MAX_FAST applied this request to the supplied simulation inventory and
+    // missing-item counter.
     return;
 }
 
 if (result.shouldFallback()) {
-    // API 已恢复 missingItems 和候选状态，可以安全调用自己的规划器或 AE2 原生路径。
+    // The API restored missingItems and AE2 candidate state. It is now safe to
+    // continue with another planner or AE2's native request path.
     runNativePlanner();
 }
 ```
 
-`Result` 中的 `fallbackReason`、`error`、节点统计和耗时用于诊断，不应把某个具体回退字符串当成稳定协议。`branchFailure` 非空时不属于普通兼容回退。
+`fallbackReason`, `error`, node statistics, and timing fields are diagnostic information. Do not treat a specific fallback-reason string as a stable protocol. A non-null `branchFailure` is not a normal compatibility fallback.
 
-## 2. 无限存储标记
+If `tryExecute` throws `InterruptedException`, a runtime exception, or an error, the wrapper restores the attempt state before propagating the failure.
 
-### 物品标签
+## 2. Infinite storage markers
 
-普通物品型存储元件优先使用公共标签：
+### Item tag
+
+Item-backed storage cells should prefer the public tag:
 
 ```text
 #appliedenhancements:infinite_storage_cells
 ```
 
-在接入模组中创建：
+Create this resource in the integrating mod:
 
 ```text
 src/main/resources/data/appliedenhancements/tags/item/infinite_storage_cells.json
 ```
 
-示例：
+Example:
 
 ```json
 {
@@ -196,14 +206,14 @@ src/main/resources/data/appliedenhancements/tags/item/infinite_storage_cells.jso
 }
 ```
 
-Java 中可以复用标签标识或查询物品：
+Java integrations can reuse the tag key or query a stack:
 
 ```java
 TagKey<Item> tag = InfiniteStorageCells.ITEM_TAG;
 boolean marked = InfiniteStorageCells.isMarked(stack);
 ```
 
-KubeJS 也可以写入该物品标签：
+KubeJS can also add items to the tag:
 
 ```javascript
 ServerEvents.tags('item', event => {
@@ -213,24 +223,24 @@ ServerEvents.tags('item', event => {
 })
 ```
 
-### 运行时标记
+### Runtime marker
 
-无法稳定关联回物品的特殊 AE2 `StorageCell` 实现，可以同时实现：
+Special AE2 `StorageCell` implementations that cannot be associated reliably with an item can also implement the marker interface:
 
 ```java
 public final class ExampleInfiniteInventory
         implements StorageCell, InfiniteStorageCellMarker {
-    // StorageCell 实现省略。
+    // StorageCell implementation omitted.
 }
 ```
 
-标记只告诉 Applied Enhancements：这个实现本身已经提供无限内容，应使用无限数量哨兵和 `9.2E` 显示。它不会把有限磁盘改造成真正的无限来源。
+The marker tells Applied Enhancements that the implementation already provides infinite contents and should use the infinite quantity sentinel and compact `9.2E` display. It does not turn a finite cell into an actual infinite source.
 
-## 3. 第三方编码样板与重复产物
+## 3. Third-party encoded patterns and duplicate outputs
 
-### 注册产物解析器
+### Registering an output resolver
 
-在 Common Setup 的 `enqueueWork` 中注册一次：
+Register once from Common Setup through `enqueueWork`:
 
 ```java
 event.enqueueWork(() -> PatternDuplicateApi.registerOutputResolver(
@@ -244,16 +254,16 @@ event.enqueueWork(() -> PatternDuplicateApi.registerOutputResolver(
         }));
 ```
 
-解析规则：
+Resolver behavior:
 
-- 优先级越高越早执行；优先级相同时按注册 ID 排序。
-- 同一个 `ResourceLocation` 只能注册一次。
-- 返回空列表表示“不处理这个物品”，API 会继续调用下一个解析器。
-- 第一个 `AEKey` 是重复分组使用的主产物。
-- 返回值不包含数量；重复判断故意忽略最终产量。
-- 解析器异常会被记录并跳过，随后继续其他解析器或 AE2 原生解码。
+- Higher priorities execute first. Equal priorities are ordered by registration ID.
+- A `ResourceLocation` can be registered only once.
+- Return an empty list when the resolver does not handle the item; the API then tries the next resolver.
+- The first returned `AEKey` is the primary output used for duplicate grouping.
+- Output quantities are deliberately absent, so duplicate comparison ignores produced amount.
+- Resolver exceptions are logged and skipped before the API continues with another resolver or AE2's native decoder.
 
-### 直接使用重复检测
+### Using duplicate detection directly
 
 ```java
 List<PatternDuplicateApi.PatternEntry> entries = collectEntries();
@@ -265,18 +275,20 @@ Set<PatternSlotRef> duplicateSlots =
         PatternDuplicateApi.findDuplicateSlots(outputs);
 ```
 
-也可以使用任意稳定键调用泛型重载：
+Integrations with their own stable grouping key can use the generic overload:
 
 ```java
 Set<PatternSlotRef> duplicates =
         PatternDuplicateApi.findDuplicateSlots(customSlotToKeyMap);
 ```
 
-`PatternSlotRef.containerId()` 是 AE2 为机器容器分配的服务端 ID，不是菜单槽位索引。该引用只应在当前终端保持打开期间使用。
+`PatternSlotRef.containerId()` is the server ID AE2 assigns to the machine container, not a menu slot index. A reference is valid only while the current terminal remains open.
 
-## 4. 兼容样板终端注册
+`PatternDuplicateApi.outputMatchesSearch(...)` checks the localized display names of all resolved output keys against a lowercase filter.
 
-在 Client Setup 中注册精确的客户端界面类名：
+## 4. Compatible pattern-terminal registration
+
+Register the exact client screen class name during Client Setup:
 
 ```java
 event.enqueueWork(() -> PatternTerminalIntegrationApi.register(
@@ -285,27 +297,29 @@ event.enqueueWork(() -> PatternTerminalIntegrationApi.register(
         "examplemod.client.gui.ExamplePatternAccessScreen"));
 ```
 
-可用布局族：
+Available layout families:
 
-| `Family` | 约束 |
+| `Family` | Requirements |
 |---|---|
-| `AE2_PATTERN_ACCESS` | 必须继承 AE2 样板管理终端并保留其槽位行与机器标题布局 |
-| `EXTENDEDAE_PATTERN_ACCESS` | 必须继承 ExtendedAE 扩展样板终端并保留其对应布局 |
+| `AE2_PATTERN_ACCESS` | The screen must extend the AE2 Pattern Access Terminal and preserve its slot-row and machine-header layout |
+| `EXTENDEDAE_PATTERN_ACCESS` | The screen must extend the ExtendedAE terminal and preserve its corresponding layout |
 
-注册成功的兼容终端会获得重复筛选、快速移动、框选、右键菜单和机器组剪切/粘贴控件。重复模式与移动模式互斥。
+A compatible registered terminal receives duplicate filtering, Quick Move, box selection, the right-click context menu, and machine-group Cut/Paste controls. Duplicate mode and Quick Move mode are mutually exclusive.
 
-内置注册已经覆盖：
+Built-in registrations already cover:
 
-- AE2 样板管理终端；
-- AE2WTLib 无线样板管理终端；
-- ExtendedAE 扩展样板管理终端；
-- ExtendedAE 无线扩展样板管理终端。
+- AE2 Pattern Access Terminal;
+- AE2WTLib Wireless Pattern Access Terminal;
+- ExtendedAE Extended Pattern Access Terminal;
+- ExtendedAE Wireless Extended Pattern Access Terminal.
 
-完全自定义的行模型不能仅靠注册自动获得功能，应直接使用 `PatternDuplicateApi`、`PatternBatchMoveApi` 和 `PatternQuickMoveSession` 实现自己的界面层。
+Registration IDs must be unique, and `screenClassName` must be the exact runtime class name rather than a superclass name.
 
-## 5. 原子批量移动样板
+Fully custom row models cannot obtain the feature by registration alone. They should use `PatternDuplicateApi`, `PatternBatchMoveApi`, and `PatternQuickMoveSession` directly in their own UI implementation.
 
-### 服务端菜单直接实现接口
+## 5. Atomic pattern batch movement
+
+### Implementing the server menu extension
 
 ```java
 public final class ExamplePatternMenu extends AbstractContainerMenu
@@ -315,17 +329,19 @@ public final class ExamplePatternMenu extends AbstractContainerMenu
     public PatternBatchMoveApi.Result movePatterns(
             ServerPlayer player,
             PatternBatchMoveApi.Request request) {
-        // 1. 验证玩家仍有权访问当前终端。
-        // 2. 重新读取并验证每个来源样板。
-        // 3. 验证目标机器、目标槽和容量。
-        // 4. 先保存全部快照，再一次性提交。
-        // 5. 任意失败都恢复全部来源和目标。
+        // 1. Verify that the player can still access the terminal.
+        // 2. Re-read and validate every source pattern.
+        // 3. Validate target machines, slots, and capacity.
+        // 4. Snapshot every source and target before committing.
+        // 5. Restore all slots when any operation fails.
         return PatternBatchMoveApi.Result.success(movedCount);
     }
 }
 ```
 
-### 为不能实现接口的菜单注册处理器
+### Registering a handler for an external menu
+
+Menus that cannot implement `MenuExtension` directly can register a server handler:
 
 ```java
 event.enqueueWork(() -> PatternBatchMoveApi.registerMenuHandler(
@@ -342,14 +358,15 @@ event.enqueueWork(() -> PatternBatchMoveApi.registerMenuHandler(
                     ServerPlayer player,
                     AbstractContainerMenu menu,
                     PatternBatchMoveApi.Request request) {
-                return executeAtomicMove(player, (ExamplePatternMenu) menu, request);
+                return executeAtomicMove(
+                        player, (ExamplePatternMenu) menu, request);
             }
         }));
 ```
 
-处理器优先级越高越早检查。第一个 `supports(menu)` 返回 `true` 的处理器负责该请求。
+Higher-priority handlers are checked first. The first handler whose `supports(menu)` method returns `true` owns the request. Registration IDs must be unique.
 
-### 客户端发起请求
+### Sending a client request
 
 ```java
 PatternBatchMoveApi.requestMove(
@@ -359,22 +376,27 @@ PatternBatchMoveApi.requestMove(
         preferredTargetSlot);
 ```
 
-字段与限制：
+Fields and limits:
 
-| 字段 | 含义 |
+| Field | Meaning |
 |---|---|
-| `sources` | 来源 `PatternSlotRef`，最多 `512` 个 |
-| `targetContainerIds` | 候选目标机器容器 ID，最多 `128` 个 |
-| `preferredTargetSlot` | 首选目标槽；`-1` 表示自动选择 |
+| `sources` | Source `PatternSlotRef` values; maximum `512` |
+| `targetContainerIds` | Candidate target machine container IDs; maximum `128` |
+| `preferredTargetSlot` | Preferred destination slot; use `-1` for automatic placement |
 
-客户端数据不可信。服务端处理器必须重新验证菜单 ID、玩家权限、来源内容、目标容量和同源目标，并保证全有或全无。`PatternBatchMoveApi` 会捕获处理器运行时异常并返回 `APPLY_FAILED`，但自定义处理器自己的库存回滚仍由接入方负责。
+Client data is untrusted. The server handler must revalidate the menu ID, player access, source contents, target capacity, and same-source targets, then guarantee all-or-nothing behavior.
 
-## 6. 自定义客户端快速移动会话
+`PatternBatchMoveApi` catches handler runtime exceptions and returns `APPLY_FAILED`, but a custom handler remains responsible for restoring any inventory state it modified before throwing.
 
-`PatternQuickMoveSession` 仅能在客户端代码中引用。每个打开的终端界面创建一个实例：
+Use the provided `Result.success(...)` and `Result.failure(...)` factories so moved counts and failure reasons remain internally consistent.
+
+## 6. Custom client Quick Move sessions
+
+`PatternQuickMoveSession` is client-only. Create one instance for each open terminal screen:
 
 ```java
-private final PatternQuickMoveSession quickMove = new PatternQuickMoveSession();
+private final PatternQuickMoveSession quickMove =
+        new PatternQuickMoveSession();
 
 @Override
 public void onClose() {
@@ -383,31 +405,35 @@ public void onClose() {
 }
 ```
 
-典型输入流程：
+Typical input lifecycle:
 
-1. `setEnabled(true)` 开启移动模式。
-2. 鼠标按下时调用 `beginSelection(...)`。
-3. 拖动时调用 `drag(...)`。
-4. 松开时调用 `finishSelection(...)`。
-5. 绘制阶段调用 `renderSelectionBox(...)` 与 `renderSelectedSlots(...)`。
-6. 剪切时调用 `cutSelectedPattern(...)` 或 `cutGroup(...)`。
-7. 粘贴时调用 `paste(...)`，由公共网络 API 发往服务端。
-8. 关闭界面或切换到互斥模式时调用 `setEnabled(false)` 或 `clear()`。
+1. Call `setEnabled(true)` to enter Quick Move mode.
+2. Call `beginSelection(...)` when the left mouse button is pressed.
+3. Call `drag(...)` while the pointer moves.
+4. Call `finishSelection(...)` when the button is released.
+5. Call `renderSelectionBox(...)` and `renderSelectedSlots(...)` during rendering.
+6. Call `cutSelectedPattern(...)` or `cutGroup(...)` to populate the cut buffer.
+7. Call `paste(...)` to send the server-authoritative move request.
+8. Call `setEnabled(false)` or `clear()` when the mode or screen closes.
 
-`PatternQuickMoveSession` 不直接修改服务端库存。界面层仍需正确维护“显示槽位到真实来源槽位”的 `Map<PatternSlotRef, PatternSlotRef>`。
+`PatternQuickMoveSession` never modifies server inventory directly. The screen must maintain the `Map<PatternSlotRef, PatternSlotRef>` that maps displayed slots back to their original source slots after client-side filtering or sorting.
 
-## 7. Provider 调度批次回调
+Disabling the session clears selection and the cut buffer. A box selection replaces the previous selection, while individual pattern clicks can toggle one slot.
 
-需要感知 AE2 合成 CPU 调度批次的 Provider，可以在实际 Provider 实例上实现：
+## 7. Provider scheduling-batch callbacks
+
+Providers that need to observe an AE2 crafting CPU scheduling batch can implement the interface on the actual provider instance:
 
 ```java
-public final class ExampleProvider implements MolecularBalancedBatchProvider {
+public final class ExampleProvider
+        implements MolecularBalancedBatchProvider {
     private KeyCounter[] currentBatch;
 
     @Override
-    public void appliedenhancements$beginBalancedBatch(KeyCounter[] firstInputs) {
+    public void appliedenhancements$beginBalancedBatch(
+            KeyCounter[] firstInputs) {
         currentBatch = firstInputs;
-        // 创建批次队列或事务上下文。
+        // Create a batch queue or transaction context.
     }
 
     @Override
@@ -421,37 +447,40 @@ public final class ExampleProvider implements MolecularBalancedBatchProvider {
 }
 ```
 
-语义保证：
+Lifecycle guarantees:
 
-- 同一次 AE2 CPU 调度中，第一次 `pushPattern` 前调用开始回调。
-- 同一 Provider 的后续推送属于同一批次。
-- 每次成功开始都会配对一次结束，包括推送或外层调度异常退出。
-- `firstInputs` 是第一次尝试输入的防御性快照。
-- 开始回调不表示第一次推送一定会被 Provider 接受。
+- The begin callback runs before the first `pushPattern` for that provider in one AE2 CPU scheduling pass.
+- Later pushes to the same provider in the pass belong to the same batch.
+- Every successful begin callback is paired with exactly one end callback, including exceptional push or scheduling exits.
+- `firstInputs` is a defensive snapshot of the first attempted pattern inputs.
+- A begin callback does not guarantee that the provider will accept the first push.
 
-默认的 `appliedenhancements$beginAdaptiveBatch(...)` 会转发到 `appliedenhancements$beginBalancedBatch(...)`，现有实现无需额外覆盖。
+The default `appliedenhancements$beginAdaptiveBatch(...)` implementation delegates to `appliedenhancements$beginBalancedBatch(...)`; existing implementations do not need to override both methods.
 
-## KubeJS 边界
+Implementations should release batch state in a `finally` block and should not retain the input snapshot after the batch ends unless they make their own copy.
 
-KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS API：
+## KubeJS boundary
 
-- MAX_FAST 会话调用；
-- 编码样板 Java 解析器注册；
-- 样板终端界面注册；
-- 原子批量移动处理器；
-- Provider 批次回调。
+KubeJS is supported only for adding item IDs to the infinite-storage-cell tag. There is no KubeJS API for:
 
-这些能力涉及 AE2 Java 类型、客户端界面或服务端事务验证，应由 Java 模组接入。
+- MAX_FAST planner sessions;
+- encoded-pattern Java resolver registration;
+- pattern-terminal screen registration;
+- atomic batch movement handlers;
+- provider scheduling-batch callbacks.
 
-## 发布前检查清单
+These features require AE2 Java types, client UI integration, or server-authoritative transactional validation and must be implemented by a Java mod.
 
-- [ ] 只从稳定 API 包导入类型。
-- [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。
-- [ ] 客户端 API 只在客户端类和 Client Setup 中使用。
-- [ ] 注册 ID 使用接入方自己的命名空间且不会重复。
-- [ ] MAX_FAST 实例没有跨计算或跨线程共享。
-- [ ] 普通回退时继续自己的规划器或 AE2 原生路径。
-- [ ] 批量移动处理器在服务端重新验证所有客户端字段。
-- [ ] 批量移动失败能恢复所有来源和目标槽。
-- [ ] `PatternQuickMoveSession` 在关闭界面时清除。
-- [ ] 已在 AE2 `19.2.17` 和目标整合包中完成客户端与服务端验证。
+## Pre-release integration checklist
+
+- [ ] Imports are limited to the stable API packages.
+- [ ] Optional compatibility classes cannot load when Applied Enhancements is absent.
+- [ ] Client APIs are referenced only from client classes and Client Setup.
+- [ ] Registration IDs use the integrating mod's namespace and are unique.
+- [ ] MAX_FAST planner instances are not shared across calculations or threads.
+- [ ] Normal planner fallback continues through another planner or AE2's native path.
+- [ ] Batch movement revalidates every client-supplied field on the server.
+- [ ] Batch movement restores every source and target after failure.
+- [ ] `PatternQuickMoveSession` is cleared when its screen closes.
+- [ ] Infinite markers are applied only to storage implementations that are already infinite.
+- [ ] The integration has been tested with AE2 `19.2.17` and the target modpack on both client and server.
