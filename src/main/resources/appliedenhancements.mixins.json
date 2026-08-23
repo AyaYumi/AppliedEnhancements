@@ -20,17 +20,29 @@
     "CraftingTreeNodeLongSafetyMixin",
     "CraftingTreeProcessLongSafetyMixin",
     "NetworkStorageMixin",
+    "NetworkCraftingSimulationStateInventoryLockMixin",
     "OmniCraftingCalculationMixin",
     "OmniCraftingTreeNodeAccessor",
-    "OmniCraftingTreeProcessAccessor"
+    "OmniCraftingTreeProcessAccessor",
+    "PatternAccessTermMenuBatchMoveMixin",
+    "PatternContainerTrackerAccessor",
+    "StorageCellsMixin"
   ],
   "client": [
     "AEKeyAmountMixin",
+    "AbstractContainerScreenQuickMoveMixin",
     "CraftAmountScreenMixin",
     "NumberEntryWidgetAccessor",
     "CPUSelectionListMixin",
     "CraftConfirmScreenMixin",
-    "ItemStackStorageCellTooltipMixin"
+    "ExtendedPatternAccessGroupHeaderMixin",
+    "ExtendedPatternAccessSlotsRowMixin",
+    "ItemStackStorageCellTooltipMixin",
+    "PatternAccessGroupHeaderMixin",
+    "PatternAccessSlotsRowMixin",
+    "PatternAccessTermScreenDuplicateMixin",
+    "ScreenWidgetAccessor",
+    "WirelessExtendedPatternAccessDuplicateMixin"
   ],
   "injectors": {
     "defaultRequire": 1

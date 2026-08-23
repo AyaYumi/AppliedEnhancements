@@ -34,8 +34,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public final class OmniMaxFastPlanner {
-    private static final int MAX_CONTEXT_SPLIT_KEYS = 64;
     private static final long MAX_LINEAR_ORDERED_NATIVE_ITEMS = 1_000_000L;
+    private static final long MAX_LINEAR_NATIVE_BOUNDARY_ITEMS = 8_192L;
     private static final long MAX_SIMULATION_ORDERED_REPLAY_STEPS = 64L;
     private static final String ADVANCED_AE_PROCESSING_PATTERN =
             "net.pedroksl.advanced_ae.common.patterns.AdvProcessingPattern";
@@ -74,7 +74,6 @@ public final class OmniMaxFastPlanner {
         private final long compileBudgetNanos;
         private final PauseCheckpoint pauseCheckpoint;
         private final ProgressSink progressSink;
-        private final OmniMaxFastMode mode;
         private CraftingTreeNode root;
         private Graph graph;
         private String structuralFailure;
@@ -89,16 +88,10 @@ public final class OmniMaxFastPlanner {
 
         public Session(int maxNodes, int compileBudgetMillis,
                 PauseCheckpoint pauseCheckpoint, ProgressSink progressSink) {
-            this(maxNodes, compileBudgetMillis, pauseCheckpoint, progressSink, OmniMaxFastMode.SAFE);
-        }
-
-        public Session(int maxNodes, int compileBudgetMillis,
-                PauseCheckpoint pauseCheckpoint, ProgressSink progressSink, OmniMaxFastMode mode) {
             this.maxNodes = maxNodes;
             this.compileBudgetNanos = TimeUnit.MILLISECONDS.toNanos(compileBudgetMillis);
             this.pauseCheckpoint = pauseCheckpoint;
             this.progressSink = progressSink == null ? ProgressSink.NONE : progressSink;
-            this.mode = mode == null ? OmniMaxFastMode.SAFE : mode;
         }
 
         public Result tryExecute(CraftingTreeNode requestedRoot, CraftingSimulationState inventory,
@@ -126,11 +119,14 @@ public final class OmniMaxFastPlanner {
                 try {
                     while (graph == null && structuralFailure == null) {
                         var compiler = new Compiler(maxNodes, compileDeadline,
-                                pauseCheckpoint, Set.copyOf(contextSplitKeys), progressSink, mode);
+                                pauseCheckpoint, Set.copyOf(contextSplitKeys), progressSink);
                         try {
                             graph = compiler.compile(requestedRoot);
                         } catch (ContextSplit split) {
-                            int splitLimit = Math.min(MAX_CONTEXT_SPLIT_KEYS, maxNodes);
+                            // The existing node and compile-time budgets already
+                            // bound retries. Do not impose an unrelated 64-key
+                            // ceiling on otherwise stable contextual graphs.
+                            int splitLimit = maxNodes;
                             boolean changed = false;
                             if (contextSplitKeys.size() < splitLimit) {
                                 changed = contextSplitKeys.add(split.triggerKey);
@@ -194,22 +190,12 @@ public final class OmniMaxFastPlanner {
                         compileNanos, System.nanoTime() - startedAt);
             } catch (CraftBranchFailure failure) {
                 if (graph.hasOrderedChoices()) {
-                    // In AGGRESSIVE mode, treat CraftBranchFailure as a hard failure instead of fallback
-                    if (mode == OmniMaxFastMode.AGGRESSIVE) {
-                        AppliedEnhancements.LOGGER.warn("Omni MAX_FAST AGGRESSIVE mode: CraftBranchFailure treated as hard failure: {}", failure.getMessage());
-                        return Result.branchFailure(graph.nodes.size(), graph.mergedOccurrences,
-                                graph.barrierCount, compileNanos, System.nanoTime() - startedAt, failure);
-                    }
-                    // A real attempt can fail only because the compiled first
-                    // candidate is unavailable. Native AE2 must still get this
-                    // attempt so it can try later candidates, but the graph is
-                    // not structurally invalid: the following simulated pass
-                    // can use it to produce the same first-candidate missing
-                    // list without another native per-craft traversal.
-                    AppliedEnhancements.LOGGER.warn("Omni MAX_FAST CraftBranchFailure: {}", failure.getMessage());
-                    return Result.fallback("ordered_choice_candidate_failed", graph.nodes.size(),
-                            graph.mergedOccurrences, graph.barrierCount,
-                            compileNanos, System.nanoTime() - startedAt, null);
+                    AppliedEnhancements.LOGGER.warn(
+                            "Omni MAX_FAST CraftBranchFailure treated as hard failure: {}",
+                            failure.getMessage());
+                    return Result.branchFailure(graph.nodes.size(), graph.mergedOccurrences,
+                            graph.barrierCount, compileNanos,
+                            System.nanoTime() - startedAt, failure);
                 }
                 // Reusable-only graphs have no later recipe candidate whose
                 // result AE2 could change. Propagate the exact branch failure
@@ -299,9 +285,6 @@ public final class OmniMaxFastPlanner {
 
             // Hybrid barrier execution: upstream nodes aggregate, barrier node calls AE2
             if (node.executionMode == ExecutionMode.HYBRID_BARRIER) {
-                if (node.logicalOccurrences != 1 && graph.mode != OmniMaxFastMode.AGGRESSIVE) {
-                    throw new Fallback("shared_unsafe_boundary:" + node.barrierReason);
-                }
                 if (usesCompiledCandidateTrial(node)) {
                     if (tryExecuteCompiledCandidates(
                             graph, nodeIndex, inventory, requestMultipliers,
@@ -332,9 +315,6 @@ public final class OmniMaxFastPlanner {
 
             if (node.barrier) {
                 // Legacy path for barriers that couldn't be upgraded to hybrid
-                if (node.logicalOccurrences != 1 && graph.mode != OmniMaxFastMode.AGGRESSIVE) {
-                    throw new Fallback("shared_unsafe_boundary:" + node.barrierReason);
-                }
                 if (isReusableBoundaryReason(node.barrierReason)
                         && tryExecuteReusableContainerBoundary(
                         node, inventory, requestMultipliers, pauseCheckpoint)) {
@@ -393,19 +373,11 @@ public final class OmniMaxFastPlanner {
 
             long effectiveOutputPerPattern = node.outputPerPattern;
             if (effectiveOutputPerPattern <= 0) {
-                // Runtime data integrity issue - this node has invalid recipe data
-                if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
-                    AppliedEnhancements.LOGGER.warn(
-                            "Omni MAX_FAST invalid outputPerPattern: key={}, amount={}, barrier={}, executionMode={}, logicalOccurrences={}",
-                            node.key, node.amount, node.barrier, node.executionMode, node.logicalOccurrences);
-                }
-                if (graph.mode == OmniMaxFastMode.AGGRESSIVE) {
-                    // In AGGRESSIVE mode, assume outputPerPattern = 1 and continue
-                    AppliedEnhancements.LOGGER.warn("Omni MAX_FAST AGGRESSIVE mode: assuming outputPerPattern=1 for node={}", node.key);
-                    effectiveOutputPerPattern = 1;
-                } else {
-                    throw new Fallback("invalid_output_per_pattern:node=" + node.key);
-                }
+                AppliedEnhancements.LOGGER.warn(
+                        "Omni MAX_FAST rejected invalid outputPerPattern: key={}, amount={}, barrier={}, executionMode={}, logicalOccurrences={}",
+                        node.key, node.amount, node.barrier,
+                        node.executionMode, node.logicalOccurrences);
+                throw new Fallback("invalid_output_per_pattern");
             }
             long patternTimes = ceilDiv(totalRequestedItems, effectiveOutputPerPattern);
             for (Edge edge : node.edges) {
@@ -464,10 +436,6 @@ public final class OmniMaxFastPlanner {
         boolean executeCompiledBoundary = nodeIndex == compiledBoundaryIndex;
         if (!executeCompiledBoundary
                 && (node.barrier || node.executionMode == ExecutionMode.HYBRID_BARRIER)) {
-            if (node.logicalOccurrences != 1
-                    && graph.mode != OmniMaxFastMode.AGGRESSIVE) {
-                throw new Fallback("shared_unsafe_boundary:" + node.barrierReason);
-            }
             if (usesCompiledCandidateTrial(node)) {
                 if (tryExecuteCompiledCandidates(
                         graph, nodeIndex, inventory, requestMultipliers,
@@ -551,19 +519,11 @@ public final class OmniMaxFastPlanner {
                 ? compiledCandidate.outputPerPattern
                 : node.outputPerPattern;
         if (effectiveOutputPerPattern <= 0) {
-            // Runtime data integrity issue - this node has invalid recipe data
-            if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
-                AppliedEnhancements.LOGGER.warn(
-                        "Omni MAX_FAST invalid outputPerPattern (transactional): key={}, amount={}, barrier={}, barrierReason={}, executionMode={}, logicalOccurrences={}",
-                        node.key, node.amount, node.barrier, node.barrierReason, node.executionMode, node.logicalOccurrences);
-            }
-            if (graph.mode == OmniMaxFastMode.AGGRESSIVE) {
-                // In AGGRESSIVE mode, assume outputPerPattern = 1 and continue
-                AppliedEnhancements.LOGGER.warn("Omni MAX_FAST AGGRESSIVE mode: assuming outputPerPattern=1 for transactional node={}", node.key);
-                effectiveOutputPerPattern = 1;
-            } else {
-                throw new Fallback("invalid_output_per_pattern:node=" + node.key);
-            }
+            AppliedEnhancements.LOGGER.warn(
+                    "Omni MAX_FAST rejected invalid transactional outputPerPattern: key={}, amount={}, barrier={}, barrierReason={}, executionMode={}, logicalOccurrences={}",
+                    node.key, node.amount, node.barrier, node.barrierReason,
+                    node.executionMode, node.logicalOccurrences);
+            throw new Fallback("invalid_output_per_pattern");
         }
         long patternTimes = ceilDiv(totalRequestedItems, effectiveOutputPerPattern);
         if (runtimeQuantityGuard != null) {
@@ -770,7 +730,7 @@ public final class OmniMaxFastPlanner {
         }
         OmniOrderedChoiceFallback.Decision decision =
                 OmniOrderedChoiceFallback.afterCompiledFailure(
-                        graph.mode, node.amount, requestMultipliers,
+                        node.amount, requestMultipliers,
                         rootRequestedAmount,
                         MAX_LINEAR_ORDERED_NATIVE_ITEMS);
         if (decision != OmniOrderedChoiceFallback.Decision.CONTROLLED_REJECT) {
@@ -823,7 +783,7 @@ public final class OmniMaxFastPlanner {
             long rootRequestedAmount, boolean simulation, KeyCounter stagedMissing,
             PauseCheckpoint pauseCheckpoint, String path,
             GraphConsumableInput requestInput)
-            throws CraftBranchFailure, InterruptedException {
+            throws CraftBranchFailure, InterruptedException, Fallback {
         Node node = graph.nodes.get(nodeIndex);
         node.orderedFallbackReason = null;
         node.orderedFallbackDetail = null;
@@ -837,7 +797,7 @@ public final class OmniMaxFastPlanner {
                 : node.occurrences.getFirst();
         CandidateOccurrenceCheck entryCandidateCheck =
                 inspectSimulationFirstCandidateOccurrence(
-                        node, candidateRoot, true, graph.mode, simulation);
+                        node, candidateRoot, true, true, simulation);
         if (!entryCandidateCheck.safe) {
             if (certifiedPrefixProbe) {
                 throw new CertifiedPrefixProbeFallback(
@@ -967,13 +927,13 @@ public final class OmniMaxFastPlanner {
                 && (deterministicCandidates || directStockCandidateSet);
         boolean batchCandidateMix = !certifiedPrefixProbe
                 && OmniMaxFastExecutionPolicy.canBatchCandidateMix(
-                        graph.mode, simulation, node.allCandidatesCompiled,
+                        simulation, node.allCandidatesCompiled,
                         node.compiledCandidates.size(), node.candidatePatterns.size(),
                         safeCandidateMix);
         int candidateLimit = certifiedPrefixProbe
                 ? 1
                 : OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        graph.mode, simulation, deterministicCandidates,
+                        simulation, deterministicCandidates,
                         simulation
                                 ? simulationCandidateBatchValid
                                 : firstCandidateBatchValid,
@@ -1041,7 +1001,7 @@ public final class OmniMaxFastPlanner {
             if (attempt.status == CandidateAttemptStatus.SHORTAGE
                     && OmniMaxFastExecutionPolicy
                             .shouldTrySparseCandidateSetAfterFirstShortage(
-                                    graph.mode, simulation, exactRequest,
+                                    simulation, exactRequest,
                                     node.allCandidatesCompiled,
                                     node.compiledCandidates.size(),
                                     node.candidatePatterns.size(),
@@ -1057,7 +1017,6 @@ public final class OmniMaxFastPlanner {
             }
             if (attempt.status == CandidateAttemptStatus.SHORTAGE
                     && !simulation
-                    && graph.mode == OmniMaxFastMode.AGGRESSIVE
                     && exactRequest
                     && requestMultipliers > 1
                     && tryExecuteNativeAggregateCandidateMix(
@@ -1067,7 +1026,6 @@ public final class OmniMaxFastPlanner {
                 return true;
             }
             if (!simulation
-                    && graph.mode == OmniMaxFastMode.AGGRESSIVE
                     && exactRequest
                     && requestMultipliers > 1
                     && attempt.status == CandidateAttemptStatus.SHORTAGE) {
@@ -1125,15 +1083,17 @@ public final class OmniMaxFastPlanner {
             boolean diagnostics)
             throws CraftBranchFailure, InterruptedException {
         Node node = graph.nodes.get(nodeIndex);
+        var rejection = new String[1];
         List<CraftingTreeProcess> processes =
-                getNativeAggregateCandidateSet(node, candidateRoot);
+                getNativeAggregateCandidateSet(node, candidateRoot, rejection);
         if (processes == null) {
             if (diagnostics || requestMultipliers >= 1_000) {
                 AppliedEnhancements.LOGGER.info(
-                        "Omni MAX_FAST native aggregate candidate set rejected: path={}, key={}, requested={}, compiledCandidates={}, totalCandidates={}, allCompiled={}, compileFailures={}",
+                        "Omni MAX_FAST native aggregate candidate set rejected: path={}, key={}, requested={}, compiledCandidates={}, totalCandidates={}, allCompiled={}, compileFailures={}, reason={}",
                         path, node.key, requestMultipliers,
                         node.compiledCandidates.size(), node.candidatePatterns.size(),
-                        node.allCandidatesCompiled, node.candidateCompileFailures);
+                        node.allCandidatesCompiled, node.candidateCompileFailures,
+                        rejection[0]);
             }
             return false;
         }
@@ -1232,34 +1192,53 @@ public final class OmniMaxFastPlanner {
     }
 
     private static List<CraftingTreeProcess> getNativeAggregateCandidateSet(
-            Node node, CraftingTreeNode candidateRoot) {
+            Node node, CraftingTreeNode candidateRoot,
+            String[] rejection) {
         if (candidateRoot == null) {
+            rejection[0] = "missing_root";
             return null;
         }
         try {
             List<CraftingTreeProcess> processes =
                     ((OmniCraftingTreeNodeBridge) candidateRoot)
                             .molecularmanipulator$getProcesses();
+            processes = withoutNoProgressCandidates(node, processes);
             if (processes == null || processes.size() <= 1
                     || processes.size() != node.candidatePatterns.size()) {
+                rejection[0] = "candidate_count";
                 return null;
             }
             for (int index = 0; index < processes.size(); index++) {
                 CraftingTreeProcess process = processes.get(index);
                 var bridge = (OmniCraftingTreeProcessBridge) process;
                 if (bridge.molecularmanipulator$getDetails()
-                                != node.candidatePatterns.get(index)
-                        || bridge.molecularmanipulator$hasContainerItems()
-                        || bridge.molecularmanipulator$limitsQuantity()
-                        || bridge.molecularmanipulator$hasMultiplePaths()
-                        || getExactCandidateOutputCount(
-                                node.key,
-                                bridge.molecularmanipulator$getDetails()) <= 0) {
+                        != node.candidatePatterns.get(index)) {
+                    rejection[0] = "details_identity:" + index;
+                    return null;
+                }
+                if (bridge.molecularmanipulator$hasContainerItems()) {
+                    rejection[0] = "container_items:" + index;
+                    return null;
+                }
+                if (bridge.molecularmanipulator$limitsQuantity()) {
+                    rejection[0] = "quantity_limit:" + index;
+                    return null;
+                }
+                if (bridge.molecularmanipulator$hasMultiplePaths()) {
+                    rejection[0] = "nested_multiple_paths:" + index;
+                    return null;
+                }
+                if (getExactCandidateOutputCount(
+                        node.key,
+                        bridge.molecularmanipulator$getDetails()) <= 0) {
+                    rejection[0] = "non_exact_output:" + index;
                     return null;
                 }
             }
             return List.copyOf(processes);
         } catch (RuntimeException exception) {
+            rejection[0] = "validation_error:"
+                    + exception.getClass().getSimpleName();
             return null;
         }
     }
@@ -1382,7 +1361,7 @@ public final class OmniMaxFastPlanner {
      * missing inputs and nested ordered nodes keep candidate-zero priority.
      */
     private static boolean tryExecuteSparseSimulationFirstCandidate(
-            Graph graph, int nodeIndex, CompiledCandidate candidate,
+            Graph graph, int nodeIndex, CompiledCandidate ignoredFirstCandidate,
             CraftingSimulationState parent, long requestMultipliers,
             long rootRequestedAmount, KeyCounter stagedMissing,
             PauseCheckpoint pauseCheckpoint, String path,
@@ -1398,6 +1377,26 @@ public final class OmniMaxFastPlanner {
         if (plan == null || !plan.supported() || !plan.complete()) {
             return false;
         }
+
+        long[] allocations = plan.candidateAllocations();
+        int selectedCandidate = -1;
+        for (int candidateIndex = 0;
+                candidateIndex < allocations.length; candidateIndex++) {
+            if (allocations[candidateIndex] <= 0) {
+                continue;
+            }
+            if (selectedCandidate >= 0
+                    || allocations[candidateIndex] != requestMultipliers
+                    || candidateIndex >= node.compiledCandidates.size()) {
+                return false;
+            }
+            selectedCandidate = candidateIndex;
+        }
+        if (selectedCandidate < 0) {
+            return false;
+        }
+        CompiledCandidate candidate =
+                node.compiledCandidates.get(selectedCandidate);
 
         var possibleSnapshot = snapshotPossibleStates(candidateRoot);
         CandidateAttempt attempt = executeCompiledCandidate(
@@ -1420,8 +1419,10 @@ public final class OmniMaxFastPlanner {
         restorePossibleStates(candidateRoot, attempt.possibleStates);
         if (logHighCost) {
             AppliedEnhancements.LOGGER.info(
-                    "Omni MAX_FAST sparse simulation first candidate committed: path={}, key={}, requested={}, nodeVisits={}",
-                    path, node.key, requestMultipliers, plan.probes());
+                    "Omni MAX_FAST sparse simulation progressing candidate committed: path={}, key={}, requested={}, candidate={}, nodeVisits={}, noProgressSkipped={}",
+                    path, node.key, requestMultipliers,
+                    candidate.sourceIndex, plan.probes(),
+                    plan.noProgressCandidatesSkipped());
         }
         return true;
     }
@@ -1441,7 +1442,7 @@ public final class OmniMaxFastPlanner {
             PauseCheckpoint pauseCheckpoint, String path,
             GraphConsumableInput requestInput, CraftingTreeNode candidateRoot,
             boolean diagnostics)
-            throws CraftBranchFailure, InterruptedException {
+            throws CraftBranchFailure, InterruptedException, Fallback {
         Node node = graph.nodes.get(nodeIndex);
         if (!OmniSimulationSinglePattern.canReplayWithin(
                 node.amount, requestMultipliers, candidate.outputPerPattern,
@@ -1521,7 +1522,7 @@ public final class OmniMaxFastPlanner {
             GraphConsumableInput requestInput, CraftingTreeNode candidateRoot,
             IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot,
             boolean diagnostics)
-            throws CraftBranchFailure, InterruptedException {
+            throws CraftBranchFailure, InterruptedException, Fallback {
         Node node = graph.nodes.get(nodeIndex);
         OmniMaximumSuccessfulPrefix.Result<CandidateAttempt> prefix =
                 OmniMaximumSuccessfulPrefix.find(
@@ -1592,9 +1593,10 @@ public final class OmniMaxFastPlanner {
         var mixedInventory = new ChildCraftingSimulationState(parent);
         var mixedMissing = new KeyCounter();
 
+        boolean logSparsePlan = diagnostics || requestMultipliers >= 1_000;
         OmniSparseCapacitySolver.Plan sparsePlan = tryPlanSparseCandidateMix(
                 graph, nodeIndex, mixedInventory, requestMultipliers,
-                requestInput, pauseCheckpoint, path, diagnostics, false);
+                requestInput, pauseCheckpoint, path, logSparsePlan, false);
         if (sparsePlan != null && sparsePlan.supported()) {
             if (!sparsePlan.complete()) {
                 restorePossibleStates(candidateRoot, possibleSnapshot);
@@ -1741,6 +1743,7 @@ public final class OmniMaxFastPlanner {
         long startedAt = diagnostics ? System.nanoTime() : 0;
         var usedNodes = new boolean[graph.nodes.size()];
         var states = new byte[graph.nodes.size()];
+        var liveTerminalNodes = new boolean[graph.nodes.size()];
         var reusableKeys = new LinkedHashMap<AEKey, Boolean>();
         var consumableTemplates =
                 new IdentityHashMap<GraphConsumableInput, List<InputTemplate>>();
@@ -1755,8 +1758,20 @@ public final class OmniMaxFastPlanner {
                     graph, nodeIndex, requestMultipliers, path,
                     diagnostics, startedAt, "root_templates");
         }
+        OmniCraftingTreeNodeBridge rootOccurrence;
+        try {
+            rootOccurrence = requestInput == null
+                    ? (OmniCraftingTreeNodeBridge) graph.nodes.get(nodeIndex)
+                            .occurrences.getFirst()
+                    : requestInput.child;
+        } catch (RuntimeException exception) {
+            return rejectSparseCapacityPlan(
+                    graph, nodeIndex, requestMultipliers, path,
+                    diagnostics, startedAt, "root_occurrence");
+        }
         if (!collectSparseCapacitySubgraph(
-                        graph, nodeIndex, inventory, usedNodes, states,
+                        graph, nodeIndex, rootOccurrence, inventory,
+                        usedNodes, states, liveTerminalNodes,
                         reusableKeys, consumableTemplates, templateKeys,
                         validatedReusableInputs, pauseCheckpoint,
                         simulationFirstCandidate)) {
@@ -1805,7 +1820,7 @@ public final class OmniMaxFastPlanner {
                         keyIndex, graphNode.amount);
                 continue;
             }
-            if (graphNode.terminal) {
+            if (graphNode.terminal || liveTerminalNodes[index]) {
                 modelNodes[index] = OmniSparseCapacitySolver.Node.terminal(
                         keyIndex, graphNode.amount);
                 continue;
@@ -1861,13 +1876,14 @@ public final class OmniMaxFastPlanner {
 
         if (diagnostics) {
             AppliedEnhancements.LOGGER.info(
-                    "Omni MAX_FAST sparse capacity plan: path={}, key={}, requested={}, mode={}, complete={}, remaining={}, candidates={}, keys={}, probes={}, equivalentSkipped={}, planMs={}",
+                    "Omni MAX_FAST sparse capacity plan: path={}, key={}, requested={}, mode={}, complete={}, remaining={}, candidates={}, keys={}, probes={}, equivalentSkipped={}, noProgressSkipped={}, planMs={}",
                     path, graph.nodes.get(nodeIndex).key,
                     requestMultipliers,
                     simulationFirstCandidate ? "simulation_first" : "real_mix",
                     plan.complete(), plan.remaining(),
                     plan.candidateAllocations().length, keyIndexes.size(),
                     plan.probes(), plan.equivalentCandidatesSkipped(),
+                    plan.noProgressCandidatesSkipped(),
                     (System.nanoTime() - startedAt) / 1_000_000.0);
         }
         return plan;
@@ -1929,26 +1945,42 @@ public final class OmniMaxFastPlanner {
     }
 
     private static boolean collectSparseCapacitySubgraph(
-            Graph graph, int nodeIndex, CraftingSimulationState inventory,
+            Graph graph, int nodeIndex,
+            OmniCraftingTreeNodeBridge occurrence,
+            CraftingSimulationState inventory,
             boolean[] usedNodes, byte[] states,
+            boolean[] liveTerminalNodes,
             Map<AEKey, Boolean> reusableKeys,
             IdentityHashMap<GraphConsumableInput, List<InputTemplate>> consumableTemplates,
             Map<AEKey, Boolean> templateKeys,
             IdentityHashMap<GraphReusableInput, Boolean> validatedReusableInputs,
             PauseCheckpoint pauseCheckpoint,
             boolean simulationFirstCandidate) throws InterruptedException {
+        Node node = graph.nodes.get(nodeIndex);
+        boolean liveTerminalOccurrence =
+                isPrunedSimulationTerminalOccurrence(
+                        node, occurrence, simulationFirstCandidate);
         byte state = states[nodeIndex];
         if (state == 2) {
             usedNodes[nodeIndex] = true;
+            return node.terminal || node.emitter
+                    || liveTerminalNodes[nodeIndex]
+                            == liveTerminalOccurrence;
+        }
+        if (state == 1) {
+            // Candidate graphs may contain a cyclic alternative beside a
+            // productive recipe. Keep the component in the compact model; the
+            // solver's demand-state guard will reject only the transition that
+            // revisits it without reducing the outstanding deficit.
+            usedNodes[nodeIndex] = true;
             return true;
         }
-        if (state == 1 || state == 3) {
+        if (state == 3) {
             return false;
         }
         states[nodeIndex] = 1;
         usedNodes[nodeIndex] = true;
 
-        Node node = graph.nodes.get(nodeIndex);
         if (node.terminal || node.emitter) {
             states[nodeIndex] = 2;
             return true;
@@ -1956,6 +1988,11 @@ public final class OmniMaxFastPlanner {
         List<CompiledCandidate> candidates = getSparseCapacityCandidates(
                 graph, node, simulationFirstCandidate);
         if (candidates == null || candidates.isEmpty()) {
+            if (liveTerminalOccurrence) {
+                liveTerminalNodes[nodeIndex] = true;
+                states[nodeIndex] = 2;
+                return true;
+            }
             states[nodeIndex] = 3;
             return false;
         }
@@ -2009,8 +2046,10 @@ public final class OmniMaxFastPlanner {
                     }
                 }
                 if (!collectSparseCapacitySubgraph(
-                                graph, consumable.childIndex, inventory,
-                                usedNodes, states, reusableKeys,
+                                graph, consumable.childIndex,
+                                consumable.child, inventory,
+                                usedNodes, states, liveTerminalNodes,
+                                reusableKeys,
                                 consumableTemplates, templateKeys,
                                 validatedReusableInputs, pauseCheckpoint,
                                 simulationFirstCandidate)) {
@@ -2023,6 +2062,28 @@ public final class OmniMaxFastPlanner {
         return true;
     }
 
+    private static boolean isPrunedSimulationTerminalOccurrence(
+            Node node, OmniCraftingTreeNodeBridge occurrence,
+            boolean simulationFirstCandidate) {
+        if (node == null || occurrence == null) {
+            return false;
+        }
+        try {
+            List<CraftingTreeProcess> processes =
+                    occurrence.molecularmanipulator$getProcesses();
+            return OmniMaxFastExecutionPolicy
+                    .mayTreatMissingCompiledSimulationCandidateAsTerminal(
+                            simulationFirstCandidate,
+                            node.emitter,
+                            !node.compiledCandidates.isEmpty(),
+                            occurrence.molecularmanipulator$canEmit(),
+                            processes != null,
+                            processes != null && processes.isEmpty());
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
     private static List<CompiledCandidate> getSparseCapacityCandidates(
             Graph graph, Node node, boolean simulationFirstCandidate) {
         if (usesCompiledCandidateTrial(node)) {
@@ -2030,14 +2091,49 @@ public final class OmniMaxFastPlanner {
                 if (node.compiledCandidates.isEmpty()) {
                     return null;
                 }
-                return List.of(node.compiledCandidates.getFirst());
+                boolean allSimulationShapesExact =
+                        node.allCandidatesCompiled
+                                && node.compiledCandidates.size()
+                                        == node.candidatePatterns.size();
+                if (allSimulationShapesExact) {
+                    for (int candidateIndex = 0;
+                            candidateIndex < node.compiledCandidates.size();
+                            candidateIndex++) {
+                        CompiledCandidate candidate =
+                                node.compiledCandidates.get(candidateIndex);
+                        if (candidate.sourceIndex != candidateIndex
+                                || !isKnownDeterministicPattern(candidate.details)
+                                || !hasOnlyExactPrimaryOutputs(node, candidate)
+                                || !hasDeterministicCandidateFlags(candidate)) {
+                            allSimulationShapesExact = false;
+                            break;
+                        }
+                    }
+                }
+                return allSimulationShapesExact
+                        ? node.compiledCandidates
+                        : List.of(node.compiledCandidates.getFirst());
             }
-            if (!node.allCandidatesCompiled
-                    || node.compiledCandidates.isEmpty()
-                    || node.compiledCandidates.size()
-                            != node.candidatePatterns.size()
-                    || !haveEqualCandidateOutputs(node.compiledCandidates)
-                            && !hasDirectStockCandidateSet(graph, node)) {
+            boolean allLocalShapesExact = true;
+            for (int candidateIndex = 0;
+                    candidateIndex < node.compiledCandidates.size();
+                    candidateIndex++) {
+                CompiledCandidate candidate =
+                        node.compiledCandidates.get(candidateIndex);
+                if (candidate.sourceIndex != candidateIndex
+                        || !isKnownDeterministicPattern(candidate.details)
+                        || !hasOnlyExactPrimaryOutputs(node, candidate)
+                        || !hasDeterministicCandidateFlags(candidate)) {
+                    allLocalShapesExact = false;
+                    break;
+                }
+            }
+            if (!OmniMaxFastExecutionPolicy
+                    .mayModelSparseOrderedCandidateSet(
+                            node.allCandidatesCompiled,
+                            node.compiledCandidates.size(),
+                            node.candidatePatterns.size(),
+                            allLocalShapesExact)) {
                 return null;
             }
             return node.compiledCandidates;
@@ -2301,7 +2397,8 @@ public final class OmniMaxFastPlanner {
             return false;
         }
         var rootBridge = (OmniCraftingTreeNodeBridge) candidateRoot;
-        List<CraftingTreeProcess> processes = rootBridge.molecularmanipulator$getProcesses();
+        List<CraftingTreeProcess> processes = withoutNoProgressCandidates(
+                node, rootBridge.molecularmanipulator$getProcesses());
         if (processes == null || processes.isEmpty()
                 || processes.getFirst() != candidate.sourceProcess) {
             return false;
@@ -2316,7 +2413,8 @@ public final class OmniMaxFastPlanner {
             return false;
         }
         var rootBridge = (OmniCraftingTreeNodeBridge) candidateRoot;
-        List<CraftingTreeProcess> processes = rootBridge.molecularmanipulator$getProcesses();
+        List<CraftingTreeProcess> processes = withoutNoProgressCandidates(
+                node, rootBridge.molecularmanipulator$getProcesses());
         if (processes == null
                 || processes.size() != node.candidatePatterns.size()) {
             return false;
@@ -2347,7 +2445,7 @@ public final class OmniMaxFastPlanner {
 
     /**
      * Proves that one aggregated first-candidate transaction contains no
-     * uncompiled native leaf or stateful input. AGGRESSIVE mode intentionally
+     * uncompiled native leaf or stateful input. The single execution policy
      * permits a different, inventory-valid material allocation from AE2's
      * craft-by-craft chooser; the child transaction still provides atomic
      * commit/rollback. This is deliberately stricter than the capacity-probe
@@ -2410,7 +2508,7 @@ public final class OmniMaxFastPlanner {
                 inspectSimulationFirstCandidateOccurrence(
                         root, requestedOccurrence,
                         requestedOccurrence == root.occurrences.getFirst(),
-                        graph.mode, true);
+                        true, true);
         if (!requestedCheck.safe) {
             return SimulationFirstCandidateProof.reject(
                     "stale_requested_candidate0", requestedCheck.detail);
@@ -2478,7 +2576,7 @@ public final class OmniMaxFastPlanner {
             CompiledCandidate candidate = node.compiledCandidates.getFirst();
             CandidateOccurrenceCheck canonicalCheck =
                     inspectSimulationFirstCandidateOccurrence(
-                            node, occurrence, true, graph.mode, true);
+                            node, occurrence, true, true, true);
             if (!canonicalCheck.safe) {
                 return SimulationFirstCandidateProof.reject(
                         "stale_candidate0", canonicalCheck.detail);
@@ -2579,7 +2677,7 @@ public final class OmniMaxFastPlanner {
                         inspectSimulationFirstCandidateOccurrence(
                                 child, childOccurrence,
                                 childOccurrence == child.occurrences.getFirst(),
-                                graph.mode, true);
+                                true, true);
                 if (!childCheck.safe) {
                     return SimulationFirstCandidateProof.reject(
                             "stale_child_candidate0", childCheck.detail);
@@ -2633,14 +2731,14 @@ public final class OmniMaxFastPlanner {
                 node, occurrence,
                 occurrence != null && !node.occurrences.isEmpty()
                         && occurrence == node.occurrences.getFirst(),
-                OmniMaxFastMode.SAFE, true).safe;
+                false, true).safe;
     }
 
     private static CandidateOccurrenceCheck
             inspectSimulationFirstCandidateOccurrence(
                     Node node, CraftingTreeNode occurrence,
                     boolean requireCanonicalSource,
-                    OmniMaxFastMode mode, boolean simulation) {
+                    boolean allowStateRecovery, boolean simulation) {
         if (occurrence == null) {
             return CandidateOccurrenceCheck.reject(
                     candidateOccurrenceDetail(node, "missing_occurrence", null));
@@ -2654,6 +2752,7 @@ public final class OmniMaxFastPlanner {
             }
             List<CraftingTreeProcess> processes =
                     bridge.molecularmanipulator$getProcesses();
+            processes = withoutNoProgressCandidates(node, processes);
             if (node.terminal) {
                 return !node.emitter && processes != null && processes.isEmpty()
                         ? CandidateOccurrenceCheck.accept()
@@ -2711,9 +2810,9 @@ public final class OmniMaxFastPlanner {
             boolean statelessCandidate = !candidate.hasContainerItems
                     && !candidate.limitsQuantity
                     && !candidate.quantityFeedbackBatch;
-            if (OmniMaxFastExecutionPolicy
+            if (allowStateRecovery && OmniMaxFastExecutionPolicy
                     .mayRecoverSimulationCandidateState(
-                            mode, simulation,
+                            simulation,
                             isKnownDeterministicPattern(candidate.details),
                             hasOnlyExactPrimaryOutputs(node, candidate),
                             statelessCandidate, true)) {
@@ -2739,6 +2838,30 @@ public final class OmniMaxFastPlanner {
                         ? "missing"
                         : Integer.toHexString(
                                 System.identityHashCode(liveCandidate)));
+    }
+
+    private static List<CraftingTreeProcess> withoutNoProgressCandidates(
+            Node node, List<CraftingTreeProcess> processes) {
+        if (processes == null || processes.isEmpty() || node == null
+                || node.noProgressPatterns.isEmpty()) {
+            return processes;
+        }
+        var result = new ArrayList<CraftingTreeProcess>(processes.size());
+        for (CraftingTreeProcess process : processes) {
+            try {
+                IPatternDetails details =
+                        ((OmniCraftingTreeProcessBridge) process)
+                                .molecularmanipulator$getDetails();
+                if (node.noProgressPatterns.containsKey(details)) {
+                    continue;
+                }
+            } catch (RuntimeException exception) {
+                // Keep unknown live processes visible so the ordinary identity
+                // validation rejects them instead of silently pruning them.
+            }
+            result.add(process);
+        }
+        return List.copyOf(result);
     }
 
     private static void addRecoverableProcess(
@@ -3327,14 +3450,22 @@ public final class OmniMaxFastPlanner {
 
     private static void executeNativeBoundary(Node node,
             CraftingSimulationState inventory, long requestedAmount, String path)
-            throws CraftBranchFailure, InterruptedException {
+            throws CraftBranchFailure, InterruptedException, Fallback {
         executeNativeBoundary(node, inventory, requestedAmount, path, null);
     }
 
     private static void executeNativeBoundary(Node node,
             CraftingSimulationState inventory, long requestedAmount, String path,
             GraphConsumableInput requestInput)
-            throws CraftBranchFailure, InterruptedException {
+            throws CraftBranchFailure, InterruptedException, Fallback {
+        if (!OmniMaxFastExecutionPolicy.mayExecuteNativeBoundary(
+                node.amount, requestedAmount, MAX_LINEAR_NATIVE_BOUNDARY_ITEMS)) {
+            AppliedEnhancements.LOGGER.warn(
+                    "Omni MAX_FAST delegated oversized native boundary: path={}, key={}, amount={}, aggregatedRequest={}, reason={}, linearLimit={}",
+                    path, node.key, node.amount, requestedAmount,
+                    node.barrierReason, MAX_LINEAR_NATIVE_BOUNDARY_ITEMS);
+            throw new Fallback("native_boundary_work_limit:" + node.barrierReason);
+        }
         boolean diagnostics = AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get();
         long startedAt = System.nanoTime();
         boolean completed = false;
@@ -3456,14 +3587,14 @@ public final class OmniMaxFastPlanner {
         var inputPlans = new ArrayList<BoundaryInputPlan>(inputs.length);
         boolean fuzzyCraftedBoundary = "fuzzy_crafted_input".equals(node.barrierReason);
         int selectedSubstituteInputs = 0;
-        int deterministicDamageInputs = 0;
         int inputIndex = 0;
         for (var entry : childNodes.entrySet()) {
             checkpoint(pauseCheckpoint);
             CraftingTreeNode child = entry.getKey();
             var childBridge = (OmniCraftingTreeNodeBridge) child;
             IPatternDetails.IInput input = inputs[inputIndex++];
-            if (childBridge.molecularmanipulator$getParentInput() != input) {
+            if (!sameInputSemantics(
+                    childBridge.molecularmanipulator$getParentInput(), input)) {
                 return rejectReusableBoundary(node, details, "dynamic_input_identity", null);
             }
             if (!input.isValid(
@@ -3477,12 +3608,9 @@ public final class OmniMaxFastPlanner {
             }
 
             GenericStack primaryInput = getPrimaryInputChoice(input);
-            if (primaryInput == null) {
-                return rejectReusableBoundary(node, details,
-                        "missing_primary_input", null);
-            }
-            boolean selectedSubstitute = !primaryInput.what().equals(
-                    childBridge.molecularmanipulator$getWhat())
+            boolean selectedSubstitute = primaryInput == null
+                    || !primaryInput.what().equals(
+                            childBridge.molecularmanipulator$getWhat())
                     || primaryInput.amount()
                             != childBridge.molecularmanipulator$getAmount();
 
@@ -3499,23 +3627,20 @@ public final class OmniMaxFastPlanner {
             }
             if (selectedSubstitute) {
                 selectedSubstituteInputs++;
-                if (!fuzzyCraftedBoundary
-                        || mode != BoundaryInputMode.DETERMINISTIC_DAMAGE
-                        || multiplier != 1
-                        || childBridge.molecularmanipulator$getAmount() != 1) {
+                if (!OmniMaxFastExecutionPolicy
+                        .mayBatchDeterministicDamageSubstitute(
+                                node.barrierReason,
+                                mode == BoundaryInputMode.DETERMINISTIC_DAMAGE,
+                                multiplier,
+                                childBridge.molecularmanipulator$getAmount())) {
                     return rejectReusableBoundary(node, details,
                             "unsupported_selected_substitute", null);
                 }
             }
             if (mode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
-                deterministicDamageInputs++;
-                if (multiplier != 1) {
+                if (multiplier <= 0) {
                     return rejectReusableBoundary(node, details,
                             "unsupported_damage_input_multiplier", null);
-                }
-                if (deterministicDamageInputs > 1) {
-                    return rejectReusableBoundary(node, details,
-                            "multiple_damage_inputs", null);
                 }
             }
             long childRequest = switch (mode) {
@@ -3583,6 +3708,19 @@ public final class OmniMaxFastPlanner {
                         throw new Fallback("reusable_byte_count_overflow");
                     }
                 } else {
+                    if (!OmniMaxFastExecutionPolicy.mayExecuteNativeBoundary(
+                            inputPlan.child.molecularmanipulator$getAmount(),
+                            inputPlan.requestedAmount,
+                            MAX_LINEAR_NATIVE_BOUNDARY_ITEMS)
+                            && !canSatisfyConsumableBoundaryInputFromStock(
+                                    attempt, inputPlan, pauseCheckpoint)) {
+                        return rejectReusableBoundary(
+                                node,
+                                details,
+                                "oversized_recursive_consumable_input:"
+                                        + inputPlan.child.molecularmanipulator$getWhat(),
+                                null);
+                    }
                     inputPlan.child.molecularmanipulator$request(
                             attempt, inputPlan.requestedAmount, containerItems);
                 }
@@ -3612,6 +3750,42 @@ public final class OmniMaxFastPlanner {
                     node.barrierReason, describePattern(details));
         }
         return true;
+    }
+
+    private static boolean canSatisfyConsumableBoundaryInputFromStock(
+            CraftingSimulationState inventory,
+            BoundaryInputPlan inputPlan,
+            PauseCheckpoint pauseCheckpoint) throws InterruptedException {
+        if (inputPlan == null
+                || inputPlan.mode != BoundaryInputMode.CONSUMABLE
+                || inputPlan.requestedAmount <= 0) {
+            return false;
+        }
+        var probe = new ChildCraftingSimulationState(inventory);
+        long remaining = inputPlan.requestedAmount;
+        try {
+            for (InputTemplate template
+                    : inputPlan.child.molecularmanipulator$getValidItemTemplates(probe)) {
+                checkpoint(pauseCheckpoint);
+                if (template == null || template.key() == null
+                        || template.amount() <= 0
+                        || classifyRemainingKey(
+                                inputPlan.input,
+                                template.key(),
+                                inputPlan.child.molecularmanipulator$getLevel())
+                                != BoundaryInputMode.CONSUMABLE) {
+                    return false;
+                }
+                remaining -= extractTemplateMultipliers(
+                        probe, template, remaining);
+                if (remaining == 0) {
+                    return true;
+                }
+            }
+        } catch (RuntimeException exception) {
+            return false;
+        }
+        return false;
     }
 
     private static boolean rejectReusableBoundary(Node node, IPatternDetails details,
@@ -3705,7 +3879,7 @@ public final class OmniMaxFastPlanner {
             OmniCraftingTreeNodeBridge child, long inputMultiplier,
             long patternTimes, PauseCheckpoint pauseCheckpoint)
             throws CraftBranchFailure, InterruptedException, Fallback {
-        if (inputMultiplier != 1 || patternTimes <= 0
+        if (inputMultiplier <= 0 || patternTimes <= 0
                 || child.molecularmanipulator$getAmount() != 1) {
             return false;
         }
@@ -3939,7 +4113,8 @@ public final class OmniMaxFastPlanner {
     private static boolean leaseInvariantReusableInput(
             CraftingSimulationState inventory, GraphReusableInput reusableInput,
             long patternTimes, KeyCounter returned,
-            PauseCheckpoint pauseCheckpoint) throws InterruptedException, Fallback {
+            PauseCheckpoint pauseCheckpoint)
+            throws CraftBranchFailure, InterruptedException, Fallback {
         if (reusableInput.multiplier <= 0
                 || patternTimes <= 0
                 || reusableInput.child.molecularmanipulator$getAmount() != 1) {
@@ -3975,10 +4150,6 @@ public final class OmniMaxFastPlanner {
             selected.add(template.key(), selectedAmount);
             remaining -= selectedAmount;
         }
-        if (remaining != 0) {
-            return false;
-        }
-
         for (var selection : selected) {
             checkpoint(pauseCheckpoint);
             long extracted = inventory.extract(
@@ -3993,12 +4164,27 @@ public final class OmniMaxFastPlanner {
             returned.set(selection.getKey(), returnedAmount);
         }
 
+        long freshlyRequested = remaining;
+        if (freshlyRequested > 0) {
+            if (!OmniMaxFastExecutionPolicy.mayExecuteNativeBoundary(
+                    reusableInput.child.molecularmanipulator$getAmount(),
+                    freshlyRequested,
+                    MAX_LINEAR_NATIVE_BOUNDARY_ITEMS)) {
+                return false;
+            }
+            reusableInput.child.molecularmanipulator$request(
+                    inventory, freshlyRequested, returned);
+        }
+
         long logicalUses = checkedMultiply(
                 reusableInput.multiplier, patternTimes,
                 "reusable_input_bytes_overflow");
-        inventory.addStackBytes(
-                reusableInput.child.molecularmanipulator$getWhat(), 1,
-                logicalUses);
+        long additionalLogicalUses = Math.max(0, logicalUses - freshlyRequested);
+        if (additionalLogicalUses > 0) {
+            inventory.addStackBytes(
+                    reusableInput.child.molecularmanipulator$getWhat(), 1,
+                    additionalLogicalUses);
+        }
         return true;
     }
 
@@ -4212,20 +4398,19 @@ public final class OmniMaxFastPlanner {
         private final ArrayDeque<Integer> pendingInspections = new ArrayDeque<>();
         private final Set<AEKey> contextSplitKeys;
         private final ProgressSink progressSink;
-        private final OmniMaxFastMode mode;
         private long mergedOccurrences;
         private long pausedNanos;
         private int orderedChoiceCount;
         private boolean hasSubstituteInputs;
+        private boolean hasReusableInputs;
 
         private Compiler(int maxNodes, long deadline, PauseCheckpoint pauseCheckpoint,
-                Set<AEKey> contextSplitKeys, ProgressSink progressSink, OmniMaxFastMode mode) {
+                Set<AEKey> contextSplitKeys, ProgressSink progressSink) {
             this.maxNodes = maxNodes;
             this.deadline = deadline;
             this.pauseCheckpoint = pauseCheckpoint;
             this.contextSplitKeys = contextSplitKeys;
             this.progressSink = progressSink;
-            this.mode = mode;
         }
 
         private Graph compile(CraftingTreeNode root)
@@ -4269,13 +4454,8 @@ public final class OmniMaxFastPlanner {
             long logicalNodeCount = countLogicalNodes(rootIndex, topologicalOrder);
             int barrierCount = 0;
 
-            // Analyze graph structure for selective fallback decisions
-            // In AGGRESSIVE mode, skip this analysis to force all nodes through MAX_FAST
-            if (mode != OmniMaxFastMode.AGGRESSIVE) {
-                analyzeExecutionModes(topologicalOrder);
-            } else {
-                AppliedEnhancements.LOGGER.info("Omni MAX_FAST AGGRESSIVE mode: skipped analyzeExecutionModes() for {} nodes", nodes.size());
-            }
+            // The single MAX_FAST policy keeps compatible nodes in the fast
+            // graph and relies on local runtime barriers for unsupported work.
 
             for (Node node : nodes) {
                 if (node.reachable && node.barrier) {
@@ -4290,7 +4470,7 @@ public final class OmniMaxFastPlanner {
                     logicalNodeCount, mergedOccurrences, barrierCount, orderedChoiceCount,
                     !contextSplitKeys.isEmpty()
                             || !crossAmountContextSensitiveKeys.isEmpty(),
-                    hasSubstituteInputs, mode);
+                    hasSubstituteInputs, hasReusableInputs);
         }
 
         /**
@@ -4357,7 +4537,7 @@ public final class OmniMaxFastPlanner {
                 }
 
                 if (needsFullFallback) {
-                    // In AGGRESSIVE mode, use HYBRID_BARRIER instead of FULL_FALLBACK
+                    // Keep a local hybrid boundary instead of forcing a full fallback.
                     // This allows MAX_FAST to try batch execution first, falling back
                     // to AE2 bridge only if needed, rather than skipping entirely
                     node.executionMode = ExecutionMode.HYBRID_BARRIER;
@@ -4668,6 +4848,7 @@ public final class OmniMaxFastPlanner {
             if (processes == null) {
                 throw new Fallback("missing_process_state");
             }
+            processes = getProgressCandidateProcesses(node, processes, true);
             if (processes.isEmpty()) {
                 recordKeyContextBehavior(node, context, false, List.of());
                 node.terminal = true;
@@ -4689,7 +4870,7 @@ public final class OmniMaxFastPlanner {
                     node, processes.getFirst(), context, 0, true));
             node.allCandidatesCompiled = processes.size() == 1;
 
-            if (processes.size() > 1 && mode == OmniMaxFastMode.AGGRESSIVE) {
+            if (processes.size() > 1) {
                 node.allCandidatesCompiled = true;
                 for (int candidateIndex = 1;
                         candidateIndex < processes.size(); candidateIndex++) {
@@ -4728,8 +4909,7 @@ public final class OmniMaxFastPlanner {
                     // Unknown or stateful pattern implementations are outside
                     // the feedback batching proof and retain AE2's native loop.
                     throw new Barrier("quantity_limited_pattern");
-                } else if (mode == OmniMaxFastMode.AGGRESSIVE
-                        && patternBarrierReason.startsWith("unknown_pattern_type:")) {
+                } else if (patternBarrierReason.startsWith("unknown_pattern_type:")) {
                     if (primary && node.candidatePatterns.size() == 1) {
                         node.barrier = true;
                         node.barrierReason = patternBarrierReason;
@@ -4775,23 +4955,21 @@ public final class OmniMaxFastPlanner {
                 CraftingTreeNode child = entry.getKey();
                 var childBridge = (OmniCraftingTreeNodeBridge) child;
                 IPatternDetails.IInput input = inputs[inputIndex++];
-                if (childBridge.molecularmanipulator$getParentInput() != input) {
+                if (!sameInputSemantics(
+                        childBridge.molecularmanipulator$getParentInput(), input)) {
                     throw new Barrier("dynamic_input_identity");
                 }
 
-                GenericStack possibleInput = getPrimaryInputChoice(input);
-                if (possibleInput == null) {
-                    throw new Barrier("substitute_input");
-                }
                 AEKey selectedKey = childBridge.molecularmanipulator$getWhat();
                 long selectedAmount = childBridge.molecularmanipulator$getAmount();
-                if (possibleInput.amount() != selectedAmount) {
-                    throw new Barrier("fuzzy_crafted_input_amount");
-                }
-                if (!input.isValid(selectedKey, node.level)) {
+                if (selectedKey == null || selectedAmount <= 0
+                        || !input.isValid(selectedKey, node.level)) {
                     throw new Barrier("dynamic_input_validation");
                 }
-                boolean fuzzySelectedInput = !possibleInput.what().equals(selectedKey);
+                GenericStack possibleInput = getPrimaryInputChoice(input);
+                boolean fuzzySelectedInput = possibleInput == null
+                        || !possibleInput.what().equals(selectedKey)
+                        || possibleInput.amount() != selectedAmount;
 
                 long multiplier = input.getMultiplier();
                 if (multiplier <= 0 || entry.getValue() == null
@@ -4927,6 +5105,7 @@ public final class OmniMaxFastPlanner {
                     List.copyOf(edges), outputPerPattern,
                     hasContainerItems, limitsQuantity, quantityFeedbackBatch);
             hasSubstituteInputs |= candidateHasSubstituteInputs;
+            hasReusableInputs |= hasReusableInput;
             if (primary) {
                 node.details = details;
                 node.hasContainerItems = hasContainerItems;
@@ -4934,11 +5113,6 @@ public final class OmniMaxFastPlanner {
                 node.outputPerPattern = outputPerPattern;
                 node.orderedInputs.addAll(orderedInputs);
                 node.edges.addAll(edges);
-                if (hasReusableInput && !node.barrier
-                        && node.executionMode == ExecutionMode.PURE_FAST) {
-                    node.executionMode = ExecutionMode.HYBRID_BARRIER;
-                    node.barrierReason = "container_items";
-                }
             }
             return compiled;
         }
@@ -4993,6 +5167,7 @@ public final class OmniMaxFastPlanner {
             if (processes == null) {
                 throw new Fallback("missing_process_state");
             }
+            processes = getProgressCandidateProcesses(node, processes, false);
             if (processes.isEmpty()) {
                 if (!node.terminal) {
                     logContextualTerminalConflict(node, context, processes);
@@ -5011,7 +5186,9 @@ public final class OmniMaxFastPlanner {
                         node, context, "contextual_pattern_candidates");
             }
             for (int index = 0; index < candidatePatterns.size(); index++) {
-                if (candidatePatterns.get(index) != node.candidatePatterns.get(index)) {
+                if (!samePatternSemantics(
+                        candidatePatterns.get(index),
+                        node.candidatePatterns.get(index))) {
                     throw createContextSplit(
                             node, context, "contextual_pattern_candidates");
                 }
@@ -5026,12 +5203,114 @@ public final class OmniMaxFastPlanner {
             }
         }
 
+        /**
+         * Removes exact candidates whose own output component is consumed at
+         * least as quickly as it is produced. The process is marked impossible
+         * in the live AE2 tree as well, so a later compatibility boundary cannot
+         * re-enter the branch that the compiled planner already proved useless.
+         */
+        private List<CraftingTreeProcess> getProgressCandidateProcesses(
+                Node node, List<CraftingTreeProcess> processes,
+                boolean canonical) throws Fallback {
+            if (processes.isEmpty()) {
+                return processes;
+            }
+            var result = new ArrayList<CraftingTreeProcess>(processes.size());
+            for (int candidateIndex = 0;
+                    candidateIndex < processes.size(); candidateIndex++) {
+                CraftingTreeProcess candidate = processes.get(candidateIndex);
+                var bridge = (OmniCraftingTreeProcessBridge) candidate;
+                CandidateProgressCheck progress = checkDirectCandidateProgress(
+                        node, bridge);
+                if (progress.noProgress()) {
+                    bridge.molecularmanipulator$setPossible(false);
+                    if (canonical) {
+                        node.noProgressPatterns.put(
+                                bridge.molecularmanipulator$getDetails(),
+                                Boolean.TRUE);
+                        AppliedEnhancements.LOGGER.info(
+                                "Omni MAX_FAST pruned no-progress candidate: key={}, candidate={}, output={}, recursiveDemand={}, pattern={}",
+                                node.key, candidateIndex, progress.output(),
+                                progress.recursiveDemand(),
+                                describePattern(
+                                        bridge.molecularmanipulator$getDetails()));
+                    }
+                    continue;
+                }
+                result.add(candidate);
+            }
+            return List.copyOf(result);
+        }
+
+        private CandidateProgressCheck checkDirectCandidateProgress(
+                Node node, OmniCraftingTreeProcessBridge process) {
+            try {
+                if (process.molecularmanipulator$hasContainerItems()
+                        || process.molecularmanipulator$limitsQuantity()) {
+                    return CandidateProgressCheck.PROGRESS;
+                }
+                IPatternDetails details = process.molecularmanipulator$getDetails();
+                if (!isKnownDeterministicPattern(details)) {
+                    return CandidateProgressCheck.PROGRESS;
+                }
+
+                long output = 0;
+                for (GenericStack stack : details.getOutputs()) {
+                    if (stack == null || stack.what() == null
+                            || stack.amount() <= 0
+                            || !node.key.equals(stack.what())) {
+                        return CandidateProgressCheck.PROGRESS;
+                    }
+                    output = Math.addExact(output, stack.amount());
+                }
+                if (output <= 0) {
+                    return CandidateProgressCheck.PROGRESS;
+                }
+
+                IPatternDetails.IInput[] inputs = details.getInputs();
+                Map<CraftingTreeNode, Long> children =
+                        process.molecularmanipulator$getChildNodes();
+                if (inputs == null || children == null
+                        || inputs.length != children.size()) {
+                    return CandidateProgressCheck.PROGRESS;
+                }
+                long recursiveDemand = 0;
+                int inputIndex = 0;
+                for (var entry : children.entrySet()) {
+                    IPatternDetails.IInput input = inputs[inputIndex++];
+                    GenericStack exact = getSingleExactInputChoice(input);
+                    var child = (OmniCraftingTreeNodeBridge) entry.getKey();
+                    long multiplier = input.getMultiplier();
+                    if (exact == null || multiplier <= 0
+                            || entry.getValue() == null
+                            || entry.getValue() != multiplier
+                            || !node.key.equals(exact.what())
+                            || !node.key.equals(
+                                    child.molecularmanipulator$getWhat())
+                            || exact.amount()
+                                    != child.molecularmanipulator$getAmount()) {
+                        continue;
+                    }
+                    recursiveDemand = Math.addExact(
+                            recursiveDemand,
+                            Math.multiplyExact(exact.amount(), multiplier));
+                }
+                return recursiveDemand > 0 && recursiveDemand >= output
+                        ? new CandidateProgressCheck(
+                                true, output, recursiveDemand)
+                        : CandidateProgressCheck.PROGRESS;
+            } catch (RuntimeException exception) {
+                return CandidateProgressCheck.PROGRESS;
+            }
+        }
+
         private void validateCandidateOccurrence(Node node,
                 CraftingTreeProcess candidateProcess, CompiledCandidate candidate,
                 RecipeContext context)
                 throws Fallback, ContextSplit, InterruptedException {
             var process = (OmniCraftingTreeProcessBridge) candidateProcess;
-            if (process.molecularmanipulator$getDetails() != candidate.details
+            if (!samePatternSemantics(
+                    process.molecularmanipulator$getDetails(), candidate.details)
                     || process.molecularmanipulator$hasContainerItems()
                             != candidate.hasContainerItems
                     || process.molecularmanipulator$limitsQuantity()
@@ -5056,19 +5335,21 @@ public final class OmniMaxFastPlanner {
                 var childBridge = (OmniCraftingTreeNodeBridge) child;
                 IPatternDetails.IInput input = inputs[inputIndex];
                 OrderedGraphInput expected = candidate.orderedInputs.get(inputIndex++);
-                if (childBridge.molecularmanipulator$getParentInput() != input) {
+                if (!sameInputSemantics(
+                        childBridge.molecularmanipulator$getParentInput(), input)) {
                     throw new Fallback("contextual_input_identity");
                 }
 
                 GenericStack possibleInput = getPrimaryInputChoice(input);
                 AEKey selectedKey = childBridge.molecularmanipulator$getWhat();
                 long selectedAmount = childBridge.molecularmanipulator$getAmount();
-                if (possibleInput == null
-                        || possibleInput.amount() != selectedAmount
+                if (selectedKey == null || selectedAmount <= 0
                         || !input.isValid(selectedKey, node.level)) {
                     throw new Fallback("contextual_input_template");
                 }
-                boolean fuzzySelectedInput = !possibleInput.what().equals(selectedKey);
+                boolean fuzzySelectedInput = possibleInput == null
+                        || !possibleInput.what().equals(selectedKey)
+                        || possibleInput.amount() != selectedAmount;
 
                 long multiplier = input.getMultiplier();
                 if (multiplier <= 0 || entry.getValue() == null
@@ -5088,7 +5369,7 @@ public final class OmniMaxFastPlanner {
                     GraphReusableInput reusable = expected.reusableInput;
                     var canonicalChild = reusable.child;
                     if (inputMode == BoundaryInputMode.CONSUMABLE
-                            || reusable.input != input
+                            || !sameInputSemantics(reusable.input, input)
                             || reusable.mode != inputMode
                             || reusable.multiplier != multiplier
                             || !canonicalChild.molecularmanipulator$getWhat().equals(
@@ -5101,7 +5382,7 @@ public final class OmniMaxFastPlanner {
                     GraphConsumableInput consumable = expected.consumableInput;
                     if (inputMode != BoundaryInputMode.CONSUMABLE
                             || consumable == null
-                            || consumable.input != input
+                            || !sameInputSemantics(consumable.input, input)
                             || consumable.multiplier != multiplier
                             || consumable.substituteInput != substituteInput) {
                         throw new Fallback("contextual_consumable_input");
@@ -5169,8 +5450,9 @@ public final class OmniMaxFastPlanner {
                 return false;
             }
             for (int index = 0; index < left.candidatePatterns.size(); index++) {
-                if (left.candidatePatterns.get(index)
-                        != right.candidatePatterns.get(index)) {
+                if (!samePatternSemantics(
+                        left.candidatePatterns.get(index),
+                        right.candidatePatterns.get(index))) {
                     return false;
                 }
             }
@@ -5424,7 +5706,7 @@ public final class OmniMaxFastPlanner {
             return null;
         }
 
-        // AGGRESSIVE mode: try any pattern type, let runtime checks catch incompatibilities
+        // The single policy tries any pattern type and relies on runtime checks.
         // The compiler still validates inputs, outputs, remainders, and multipliers.
         // This enables future pattern types without code changes, at the cost of
         // potentially wasting compilation time on incompatible patterns.
@@ -5435,6 +5717,86 @@ public final class OmniMaxFastPlanner {
         return "missing_pattern_details".equals(barrierReason)
                 || "missing_primary_output".equals(barrierReason)
                 || barrierReason.startsWith("unsupported_pattern_type:");
+    }
+
+    private static boolean samePatternSemantics(
+            IPatternDetails left, IPatternDetails right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null || left.getClass() != right.getClass()) {
+            return false;
+        }
+        try {
+            if (!java.util.Objects.equals(
+                    left.getDefinition(), right.getDefinition())
+                    || !sameStacks(left.getOutputs(), right.getOutputs())) {
+                return false;
+            }
+            IPatternDetails.IInput[] leftInputs = left.getInputs();
+            IPatternDetails.IInput[] rightInputs = right.getInputs();
+            if (leftInputs == null || rightInputs == null
+                    || leftInputs.length != rightInputs.length) {
+                return false;
+            }
+            for (int index = 0; index < leftInputs.length; index++) {
+                if (!sameInputSemantics(leftInputs[index], rightInputs[index])) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static boolean sameInputSemantics(
+            IPatternDetails.IInput left, IPatternDetails.IInput right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null || left.getClass() != right.getClass()) {
+            return false;
+        }
+        try {
+            return left.getMultiplier() == right.getMultiplier()
+                    && sameStacks(
+                            left.getPossibleInputs(), right.getPossibleInputs());
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private static boolean sameStacks(
+            GenericStack[] left, GenericStack[] right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null || left.length != right.length) {
+            return false;
+        }
+        for (int index = 0; index < left.length; index++) {
+            if (!java.util.Objects.equals(left[index], right[index])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean sameStacks(
+            List<GenericStack> left, List<GenericStack> right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null || left.size() != right.size()) {
+            return false;
+        }
+        for (int index = 0; index < left.size(); index++) {
+            if (!java.util.Objects.equals(left.get(index), right.get(index))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static GenericStack getPrimaryInputChoice(IPatternDetails.IInput input) {
@@ -5657,6 +6019,8 @@ public final class OmniMaxFastPlanner {
         private final List<GraphReusableInput> reusableInputs = new ArrayList<>();
         private final List<OrderedGraphInput> orderedInputs = new ArrayList<>();
         private final List<CompiledCandidate> compiledCandidates = new ArrayList<>();
+        private final IdentityHashMap<IPatternDetails, Boolean>
+                noProgressPatterns = new IdentityHashMap<>();
         private final Map<Integer, String> candidateCompileFailures =
                 new LinkedHashMap<>();
         private int indegree;
@@ -5704,6 +6068,12 @@ public final class OmniMaxFastPlanner {
             boolean limitsQuantity, boolean quantityFeedbackBatch) {
     }
 
+    private record CandidateProgressCheck(
+            boolean noProgress, long output, long recursiveDemand) {
+        private static final CandidateProgressCheck PROGRESS =
+                new CandidateProgressCheck(false, 0, 0);
+    }
+
     private static final class RuntimeQuantityStockGuard {
         private long patternTimes;
         private int stockedInputKeys;
@@ -5721,20 +6091,8 @@ public final class OmniMaxFastPlanner {
     private record Graph(List<Node> nodes, int[] topologicalOrder, int rootIndex,
             long logicalNodeCount, long mergedOccurrences, int barrierCount,
             int orderedChoiceCount, boolean contextSensitive,
-            boolean hasSubstituteInputs, OmniMaxFastMode mode) {
+            boolean hasSubstituteInputs, boolean hasReusableInputs) {
         private String executionSafetyFailure() {
-            // AGGRESSIVE mode: allow unsafe boundaries and transactional features
-            // Let runtime checks catch any actual incompatibilities
-            if (mode == OmniMaxFastMode.AGGRESSIVE) {
-                return null;
-            }
-
-            if (contextSensitive || hasSubstituteInputs) {
-                if (hasLocalBoundaries()) {
-                    return "context_sensitive_graph_with_unsafe_boundary";
-                }
-                return null;
-            }
             return null;
         }
 
@@ -5755,7 +6113,8 @@ public final class OmniMaxFastPlanner {
 
         private OmniMaxFastExecutionPolicy.Scope executionScope() {
             return OmniMaxFastExecutionPolicy.select(
-                    contextSensitive, hasLocalBoundaries(), hasSubstituteInputs);
+                    contextSensitive, hasLocalBoundaries(),
+                    hasSubstituteInputs, hasReusableInputs);
         }
 
         private boolean hasOrderedChoices() {

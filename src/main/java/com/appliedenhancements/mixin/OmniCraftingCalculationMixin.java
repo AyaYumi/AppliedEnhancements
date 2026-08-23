@@ -11,24 +11,19 @@ import appeng.crafting.CraftBranchFailure;
 import appeng.crafting.CraftingCalculation;
 import appeng.crafting.CraftingPlan;
 import appeng.crafting.CraftingTreeNode;
-import appeng.crafting.CraftingTreeProcess;
 import appeng.crafting.inv.CraftingSimulationState;
-import com.appliedenhancements.AppliedEnhancements;
+import com.appliedenhancements.api.MaxFastCraftingPlanner;
 import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
-import com.github.appliedenhancements.crafting.maxfast.OmniMaxFastMode;
-import com.github.appliedenhancements.crafting.maxfast.OmniMaxFastPlanner;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressCarrier;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressHandle;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressRequester;
 import com.github.appliedenhancements.integration.ae2.OmniCalculationPath;
 import com.github.appliedenhancements.integration.ae2.OmniCalculationPathCarrier;
 import com.github.appliedenhancements.integration.ae2.OmniCraftingTreeNodeBridge;
-import com.github.appliedenhancements.integration.ae2.OmniCraftingTreeProcessBridge;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.world.level.Level;
-import net.neoforged.fml.ModList;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -38,11 +33,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.ArrayDeque;
-import java.util.IdentityHashMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Mixin(value = CraftingCalculation.class, remap = false)
 public abstract class OmniCraftingCalculationMixin
@@ -55,10 +47,6 @@ public abstract class OmniCraftingCalculationMixin
             new Semaphore(MOLECULARMANIPULATOR_MAX_BACKGROUND_CALCULATIONS, true);
     @Unique
     private static final Semaphore MOLECULARMANIPULATOR_INTERACTIVE_SLOT = new Semaphore(1, true);
-    @Unique
-    private static final int MOLECULARMANIPULATOR_ECOAE_PRIORITY = 50;
-    @Unique
-    private static final AtomicBoolean MOLECULARMANIPULATOR_YIELD_LOGGED = new AtomicBoolean();
 
     @Shadow
     abstract void handlePausing() throws InterruptedException;
@@ -74,7 +62,7 @@ public abstract class OmniCraftingCalculationMixin
     @Unique
     private boolean molecularmanipulator$interactiveRequest;
     @Unique
-    private OmniMaxFastPlanner.Session molecularmanipulator$maxFastSession;
+    private MaxFastCraftingPlanner molecularmanipulator$maxFastSession;
     @Unique
     private long molecularmanipulator$maxFastNodeCount = -1;
     @Unique
@@ -118,21 +106,7 @@ public abstract class OmniCraftingCalculationMixin
 
     @Unique
     private static boolean molecularmanipulator$shouldEnableMaxFast() {
-        if (!AppliedEnhancementsConfig.COMMON.enableMaxFastPlanner.get()
-                || AppliedEnhancementsConfig.COMMON.maxFastMode.get() == OmniMaxFastMode.OFF) {
-            return false;
-        }
-        if (AppliedEnhancementsConfig.COMMON.maxFastAutoYield.get()
-                && ModList.get().isLoaded("ecoae")
-                && AppliedEnhancementsConfig.COMMON.maxFastPlannerPriority.get()
-                        > MOLECULARMANIPULATOR_ECOAE_PRIORITY) {
-            if (MOLECULARMANIPULATOR_YIELD_LOGGED.compareAndSet(false, true)) {
-                AppliedEnhancements.LOGGER.info(
-                        "MAX_FAST yielded to EcoAE because its configured priority is lower");
-            }
-            return false;
-        }
-        return true;
+        return AppliedEnhancementsConfig.COMMON.enableAutomaticMaxFastPlanner.get();
     }
 
     @WrapMethod(method = "run")
@@ -191,9 +165,6 @@ public abstract class OmniCraftingCalculationMixin
                 throw new CancellationException(
                         "Crafting calculation was cancelled before execution");
             }
-            if (progress != null) {
-                progress.beginAe2(OmniCalculationPath.AE2_NATIVE);
-            }
             ICraftingPlan plan = original.call();
             if (progress != null) {
                 progress.complete(molecularmanipulator$finalCalculationPath(plan));
@@ -247,10 +218,8 @@ public abstract class OmniCraftingCalculationMixin
             return carriedPath;
         }
 
-        // Detect EcoAE plan by checking if the plan class is from EcoAE
-        String planClassName = plan.getClass().getName().toLowerCase(java.util.Locale.ROOT);
-        if (planClassName.contains("ecoae")) {
-            return OmniCalculationPath.ECOAE;
+        if (!(plan instanceof CraftingPlan)) {
+            return OmniCalculationPath.EXTERNAL;
         }
 
         return carriedPath != null ? carriedPath : molecularmanipulator$calculationPath;
@@ -277,9 +246,8 @@ public abstract class OmniCraftingCalculationMixin
         molecularmanipulator$calculationPath = OmniCalculationPath.AE2_NATIVE;
         var progress = molecularmanipulator$calculationProgress;
         var maxFastEnabled = molecularmanipulator$maxFastEnabled;
-        OmniMaxFastMode mode = AppliedEnhancementsConfig.COMMON.maxFastMode.get();
 
-        if (!maxFastEnabled || containerItems != null || mode == OmniMaxFastMode.OFF) {
+        if (!maxFastEnabled || containerItems != null) {
             if (progress != null) {
                 progress.beginAe2(OmniCalculationPath.AE2_NATIVE);
             }
@@ -289,12 +257,9 @@ public abstract class OmniCraftingCalculationMixin
 
         var session = molecularmanipulator$maxFastSession;
         if (session == null) {
-            session = new OmniMaxFastPlanner.Session(
-                    AppliedEnhancementsConfig.COMMON.maxFastMaxNodes.get(),
-                    AppliedEnhancementsConfig.COMMON.maxFastCompileBudgetMs.get(),
+            session = MaxFastCraftingPlanner.createConfigured(
                     this::handlePausing,
-                    molecularmanipulator$createProgressSink(progress),
-                    mode);
+                    molecularmanipulator$createProgressListener(progress));
             molecularmanipulator$maxFastSession = session;
         }
 
@@ -305,23 +270,8 @@ public abstract class OmniCraftingCalculationMixin
         KeyCounter missingItems = getMissingItems();
         AEKey requestedKey = ((OmniCraftingTreeNodeBridge) tree)
                 .molecularmanipulator$getWhat();
-        var missingSnapshot = new KeyCounter();
-        missingSnapshot.addAll(missingItems);
-        var possibleSnapshot = molecularmanipulator$snapshotPossibleStates(tree);
-
-        OmniMaxFastPlanner.Result result;
-        try {
-            result = session.tryExecute(
-                    tree, inventory, requestedAmount, isSimulation(), missingItems);
-        } catch (InterruptedException | RuntimeException | Error failure) {
-            molecularmanipulator$restoreAttemptState(
-                    tree, missingItems, missingSnapshot, possibleSnapshot);
-            throw failure;
-        }
-        if (!result.applied()) {
-            molecularmanipulator$restoreAttemptState(
-                    tree, missingItems, missingSnapshot, possibleSnapshot);
-        }
+        var result = session.tryExecute(
+                tree, inventory, requestedAmount, isSimulation(), missingItems);
         if (result.branchFailure() != null) {
             throw result.branchFailure();
         }
@@ -364,12 +314,13 @@ public abstract class OmniCraftingCalculationMixin
     }
 
     @Unique
-    private static OmniMaxFastPlanner.ProgressSink molecularmanipulator$createProgressSink(
+    private static MaxFastCraftingPlanner.ProgressListener
+            molecularmanipulator$createProgressListener(
             CraftingCalculationProgressHandle progress) {
         if (progress == null) {
-            return OmniMaxFastPlanner.ProgressSink.NONE;
+            return MaxFastCraftingPlanner.ProgressListener.NONE;
         }
-        return new OmniMaxFastPlanner.ProgressSink() {
+        return new MaxFastCraftingPlanner.ProgressListener() {
             @Override
             public void compilationStarted() {
                 progress.beginMaxFastCompilation();
@@ -395,59 +346,6 @@ public abstract class OmniCraftingCalculationMixin
                 progress.executionStep();
             }
         };
-    }
-
-    @Unique
-    private static IdentityHashMap<CraftingTreeProcess, Boolean>
-            molecularmanipulator$snapshotPossibleStates(CraftingTreeNode root) {
-        var result = new IdentityHashMap<CraftingTreeProcess, Boolean>();
-        molecularmanipulator$visitBuiltProcesses(root, process -> result.put(
-                process,
-                ((OmniCraftingTreeProcessBridge) process).molecularmanipulator$isPossible()));
-        return result;
-    }
-
-    @Unique
-    private static void molecularmanipulator$restoreAttemptState(
-            CraftingTreeNode root, KeyCounter missingItems, KeyCounter missingSnapshot,
-            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot) {
-        missingItems.clear();
-        missingItems.addAll(missingSnapshot);
-        molecularmanipulator$visitBuiltProcesses(root, process -> {
-            Boolean previous = possibleSnapshot.get(process);
-            ((OmniCraftingTreeProcessBridge) process).molecularmanipulator$setPossible(
-                    previous == null || previous);
-        });
-    }
-
-    @Unique
-    private static void molecularmanipulator$visitBuiltProcesses(
-            CraftingTreeNode root,
-            java.util.function.Consumer<CraftingTreeProcess> visitor) {
-        var pending = new ArrayDeque<CraftingTreeNode>();
-        var visited = new IdentityHashMap<CraftingTreeNode, Boolean>();
-        pending.addLast(root);
-        while (!pending.isEmpty()) {
-            CraftingTreeNode node = pending.removeFirst();
-            if (visited.put(node, Boolean.TRUE) != null) {
-                continue;
-            }
-            var bridge = (OmniCraftingTreeNodeBridge) node;
-            var processes = bridge.molecularmanipulator$getProcesses();
-            if (processes == null) {
-                continue;
-            }
-            for (CraftingTreeProcess process : processes) {
-                visitor.accept(process);
-                var processBridge = (OmniCraftingTreeProcessBridge) process;
-                var children = processBridge.molecularmanipulator$getChildNodes();
-                if (children != null) {
-                    for (CraftingTreeNode child : children.keySet()) {
-                        pending.addLast(child);
-                    }
-                }
-            }
-        }
     }
 
     @Inject(method = "runCraftAttempt", at = @At("RETURN"))

@@ -18,8 +18,8 @@ final class OmniMaxFastExecutionPolicy {
     }
 
     static Scope select(boolean contextSensitive, boolean hasLocalBoundaries,
-            boolean hasSubstituteInputs) {
-        if (contextSensitive || hasSubstituteInputs) {
+            boolean hasSubstituteInputs, boolean hasReusableInputs) {
+        if (contextSensitive || hasSubstituteInputs || hasReusableInputs) {
             return Scope.CONTEXTUAL_TRANSACTIONAL;
         }
         return hasLocalBoundaries
@@ -40,19 +40,77 @@ final class OmniMaxFastExecutionPolicy {
     }
 
     static boolean supportsDirectStockOutputMix(long nodeAmount) {
-        return nodeAmount == 1;
+        return nodeAmount > 0;
+    }
+
+    static boolean mayBatchDeterministicDamageSubstitute(
+            String barrierReason,
+            boolean deterministicDamage,
+            long multiplier,
+            long selectedAmount) {
+        return ("recursive_durability_input".equals(barrierReason)
+                || "fuzzy_crafted_input".equals(barrierReason))
+                && deterministicDamage
+                && multiplier > 0
+                && selectedAmount == 1;
+    }
+
+    static boolean mayExecuteNativeBoundary(
+            long nodeAmount, long requestMultipliers, long maxLinearItems) {
+        if (nodeAmount <= 0 || requestMultipliers <= 0 || maxLinearItems < 0) {
+            return false;
+        }
+        long total = nodeAmount > Long.MAX_VALUE / requestMultipliers
+                ? Long.MAX_VALUE
+                : nodeAmount * requestMultipliers;
+        return total <= maxLinearItems;
+    }
+
+    /**
+     * The sparse solver models each candidate's output count explicitly, so a
+     * complete exact candidate set does not need equal per-pattern outputs.
+     * Requiring equality here would force high-throughput alternatives back
+     * into AE2's per-item ordered loop even though the compact inventory model
+     * preserves their order, surplus and shared descendant capacity.
+     */
+    static boolean mayModelSparseOrderedCandidateSet(boolean allCandidatesCompiled,
+            int compiledCandidates, int totalCandidates,
+            boolean allLocalShapesExact) {
+        return allCandidatesCompiled
+                && compiledCandidates > 1
+                && compiledCandidates == totalCandidates
+                && allLocalShapesExact;
+    }
+
+    /**
+     * AE2 can prune a recursion-blocked child process after the compiler has
+     * interned the corresponding graph node. During simulation that live
+     * occurrence is semantically a terminal input: stock is consumed first and
+     * the remainder is reported missing. Only the first-candidate sparse model
+     * may make this occurrence-local substitution.
+     */
+    static boolean mayTreatMissingCompiledSimulationCandidateAsTerminal(
+            boolean simulationFirstCandidate, boolean graphEmitter,
+            boolean hasCompiledCandidates, boolean liveEmitter,
+            boolean liveProcessesKnown, boolean liveProcessesEmpty) {
+        return simulationFirstCandidate
+                && !graphEmitter
+                && !hasCompiledCandidates
+                && !liveEmitter
+                && liveProcessesKnown
+                && liveProcessesEmpty;
     }
 
     /**
      * Selects how many compiled candidates may be replayed transactionally.
      *
-     * <p>Real aggressive execution may probe every candidate only when the
-     * complete ordered choice is deterministic. If later candidates make the
+     * <p>Real execution may probe every candidate only when the complete
+     * ordered choice is deterministic. If later candidates make the
      * choice non-deterministic, a separately certified first candidate may
      * still be tried once: success preserves AE2's first-candidate priority,
      * while failure must fall through directly to one native request.</p>
      */
-    static int compiledCandidateTrialLimit(OmniMaxFastMode mode,
+    static int compiledCandidateTrialLimit(
             boolean simulation, boolean deterministicCandidates,
             boolean firstCandidateBatchValid, int compiledCandidates) {
         if (compiledCandidates <= 0) {
@@ -65,21 +123,17 @@ final class OmniMaxFastExecutionPolicy {
             // stricter first-candidate batch certificate.
             return firstCandidateBatchValid ? 1 : 0;
         }
-        if (mode != OmniMaxFastMode.AGGRESSIVE) {
-            return 1;
-        }
         if (deterministicCandidates) {
             return compiledCandidates;
         }
         return firstCandidateBatchValid ? 1 : 0;
     }
 
-    static boolean canBatchCandidateMix(OmniMaxFastMode mode,
+    static boolean canBatchCandidateMix(
             boolean simulation, boolean allCandidatesCompiled,
             int compiledCandidates, int totalCandidates,
             boolean safeCandidateMix) {
-        return mode == OmniMaxFastMode.AGGRESSIVE
-                && !simulation
+        return !simulation
                 && allCandidatesCompiled
                 && compiledCandidates > 0
                 && compiledCandidates == totalCandidates
@@ -87,17 +141,15 @@ final class OmniMaxFastExecutionPolicy {
     }
 
     /**
-     * AE2's {@code possible} bit is mutable trial state. AGGRESSIVE simulation
+     * AE2's {@code possible} bit is mutable trial state. Simulation
      * may temporarily re-enable a process only after the compiler has proven
-     * that its complete, stateless deterministic shape is unchanged. SAFE mode
-     * continues to treat the bit as authoritative.
+     * that its complete, stateless deterministic shape is unchanged.
      */
-    static boolean mayRecoverSimulationCandidateState(OmniMaxFastMode mode,
+    static boolean mayRecoverSimulationCandidateState(
             boolean simulation, boolean deterministicPattern,
             boolean exactPrimaryOutputs, boolean statelessCandidate,
             boolean structuralMatch) {
-        return mode == OmniMaxFastMode.AGGRESSIVE
-                && simulation
+        return simulation
                 && deterministicPattern
                 && exactPrimaryOutputs
                 && statelessCandidate
@@ -111,11 +163,10 @@ final class OmniMaxFastExecutionPolicy {
      * this method only gates when that proof may be attempted.
      */
     static boolean shouldTrySparseCandidateSetAfterFirstShortage(
-            OmniMaxFastMode mode, boolean simulation, boolean exactRequest,
+            boolean simulation, boolean exactRequest,
             boolean allCandidatesCompiled, int compiledCandidates,
             int totalCandidates, boolean liveCandidateSet) {
-        return mode == OmniMaxFastMode.AGGRESSIVE
-                && !simulation
+        return !simulation
                 && exactRequest
                 && allCandidatesCompiled
                 && compiledCandidates > 1

@@ -15,5 +15,10 @@ public final class NetworkHandler {
                 LongCraftingRequestPayload.STREAM_CODEC,
                 LongCraftingRequestPayload::handle
         );
+        registrar.playToServer(
+                PatternBatchMovePayload.TYPE,
+                PatternBatchMovePayload.STREAM_CODEC,
+                PatternBatchMovePayload::handle
+        );
     }
 }

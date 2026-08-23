@@ -4,7 +4,7 @@ public enum OmniCalculationPath {
     AE2_NATIVE(0),
     MAX_FAST(1),
     AE2_FALLBACK(2),
-    ECOAE(3);
+    EXTERNAL(3);
 
     private final int networkId;
 
@@ -21,7 +21,7 @@ public enum OmniCalculationPath {
             case 0 -> AE2_NATIVE;
             case 1 -> MAX_FAST;
             case 2 -> AE2_FALLBACK;
-            case 3 -> ECOAE;
+            case 3 -> EXTERNAL;
             default -> throw new IllegalArgumentException(
                     "Unknown crafting calculation path: " + networkId);
         };

@@ -50,8 +50,8 @@ public abstract class CraftConfirmScreenMixin {
                 translationKey = "gui.appliedenhancements.calculation_result.path.ae2_fallback";
                 color = ChatFormatting.GOLD;
             }
-            case ECOAE -> {
-                translationKey = "gui.appliedenhancements.calculation_result.path.ecoae";
+            case EXTERNAL -> {
+                translationKey = "gui.appliedenhancements.calculation_result.path.external";
                 color = ChatFormatting.AQUA;
             }
             case AE2_NATIVE -> {
@@ -165,8 +165,8 @@ public abstract class CraftConfirmScreenMixin {
             case AE2_FALLBACK -> Component.translatable(
                     "gui.appliedenhancements.calculation_progress.engine.ae2_fallback")
                     .withStyle(ChatFormatting.GOLD);
-            case ECOAE -> Component.translatable(
-                    "gui.appliedenhancements.calculation_progress.engine.ecoae")
+            case EXTERNAL -> Component.translatable(
+                    "gui.appliedenhancements.calculation_progress.engine.external")
                     .withStyle(ChatFormatting.AQUA);
             case AE2_NATIVE -> Component.translatable(
                     "gui.appliedenhancements.calculation_progress.engine.ae2_native")
@@ -202,7 +202,7 @@ public abstract class CraftConfirmScreenMixin {
         return switch (progress.path()) {
             case MAX_FAST -> 0xFF55FF55;
             case AE2_FALLBACK -> 0xFFFFAA00;
-            case ECOAE -> 0xFF55FFFF;
+            case EXTERNAL -> 0xFF55FFFF;
             case AE2_NATIVE -> 0xFF55FFFF;
         };
     }

@@ -9,34 +9,44 @@ class OmniMaxFastExecutionPolicyTest {
     void pureGraphsUseTopologicalExecution() {
         assertEquals(
                 OmniMaxFastExecutionPolicy.Scope.PURE_TOPOLOGICAL,
-                OmniMaxFastExecutionPolicy.select(false, false, false));
+                OmniMaxFastExecutionPolicy.select(false, false, false, false));
     }
 
     @Test
     void localBoundariesDoNotForceGraphWideTransactions() {
         assertEquals(
                 OmniMaxFastExecutionPolicy.Scope.TOPOLOGICAL_WITH_LOCAL_BOUNDARIES,
-                OmniMaxFastExecutionPolicy.select(false, true, false));
+                OmniMaxFastExecutionPolicy.select(false, true, false, false));
     }
 
     @Test
     void contextSensitiveGraphsRemainTransactional() {
         assertEquals(
                 OmniMaxFastExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL,
-                OmniMaxFastExecutionPolicy.select(true, false, false));
+                OmniMaxFastExecutionPolicy.select(true, false, false, false));
         assertEquals(
                 OmniMaxFastExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL,
-                OmniMaxFastExecutionPolicy.select(true, true, false));
+                OmniMaxFastExecutionPolicy.select(true, true, false, false));
     }
 
     @Test
     void substituteInputsPreserveInventoryOrderWithTransactionalExecution() {
         assertEquals(
                 OmniMaxFastExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL,
-                OmniMaxFastExecutionPolicy.select(false, false, true));
+                OmniMaxFastExecutionPolicy.select(false, false, true, false));
         assertEquals(
                 OmniMaxFastExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL,
-                OmniMaxFastExecutionPolicy.select(false, true, true));
+                OmniMaxFastExecutionPolicy.select(false, true, true, false));
+    }
+
+    @Test
+    void reusableInputsPreserveSlotOrderWithTransactionalExecution() {
+        assertEquals(
+                OmniMaxFastExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL,
+                OmniMaxFastExecutionPolicy.select(false, false, false, true));
+        assertEquals(
+                OmniMaxFastExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL,
+                OmniMaxFastExecutionPolicy.select(false, true, false, true));
     }
 
     @Test
@@ -69,12 +79,12 @@ class OmniMaxFastExecutionPolicyTest {
     }
 
     @Test
-    void mixedDirectStockOutputsRequireSingleItemRequestUnits() {
+    void mixedDirectStockOutputsAcceptAnyPositiveExactRequestUnit() {
         assertEquals(
                 true,
                 OmniMaxFastExecutionPolicy.supportsDirectStockOutputMix(1));
         assertEquals(
-                false,
+                true,
                 OmniMaxFastExecutionPolicy.supportsDirectStockOutputMix(2));
         assertEquals(
                 false,
@@ -82,25 +92,109 @@ class OmniMaxFastExecutionPolicyTest {
     }
 
     @Test
-    void aggressiveRealDeterministicChoicesCanProbeEveryCompiledCandidate() {
+    void provenDamageSubstitutesWorkForRecursiveAndFuzzyBoundaries() {
+        assertEquals(
+                true,
+                OmniMaxFastExecutionPolicy.mayBatchDeterministicDamageSubstitute(
+                        "recursive_durability_input", true, 2, 1));
+        assertEquals(
+                true,
+                OmniMaxFastExecutionPolicy.mayBatchDeterministicDamageSubstitute(
+                        "fuzzy_crafted_input", true, 1, 1));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy.mayBatchDeterministicDamageSubstitute(
+                        "container_items", true, 1, 1));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy.mayBatchDeterministicDamageSubstitute(
+                        "recursive_durability_input", false, 1, 1));
+    }
+
+    @Test
+    void nativeBoundaryWorkLimitUsesSaturatingLogicalVolume() {
+        assertEquals(
+                true,
+                OmniMaxFastExecutionPolicy.mayExecuteNativeBoundary(
+                        2, 4_096, 8_192));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy.mayExecuteNativeBoundary(
+                        2, 4_097, 8_192));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy.mayExecuteNativeBoundary(
+                        Long.MAX_VALUE, 2, 8_192));
+    }
+
+    @Test
+    void sparseOrderedModelAcceptsCompleteExactCandidatesWithDifferentOutputs() {
+        assertEquals(
+                true,
+                OmniMaxFastExecutionPolicy.mayModelSparseOrderedCandidateSet(
+                        true, 2, 2, true));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy.mayModelSparseOrderedCandidateSet(
+                        false, 2, 2, true));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy.mayModelSparseOrderedCandidateSet(
+                        true, 1, 2, true));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy.mayModelSparseOrderedCandidateSet(
+                        true, 2, 2, false));
+    }
+
+    @Test
+    void simulationCanModelOnlyAPrunedNonEmittingLeafAsTerminal() {
+        assertEquals(
+                true,
+                OmniMaxFastExecutionPolicy
+                        .mayTreatMissingCompiledSimulationCandidateAsTerminal(
+                                true, false, false,
+                                false, true, true));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy
+                        .mayTreatMissingCompiledSimulationCandidateAsTerminal(
+                                false, false, false,
+                                false, true, true));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy
+                        .mayTreatMissingCompiledSimulationCandidateAsTerminal(
+                                true, false, true,
+                                false, true, true));
+        assertEquals(
+                false,
+                OmniMaxFastExecutionPolicy
+                        .mayTreatMissingCompiledSimulationCandidateAsTerminal(
+                                true, false, false,
+                                false, true, false));
+    }
+
+    @Test
+    void realDeterministicChoicesCanProbeEveryCompiledCandidate() {
         assertEquals(
                 4,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, false,
+                        false,
                         true, true, 4));
     }
 
     @Test
-    void aggressiveRealNondeterministicChoiceOnlyTriesCertifiedFirstCandidate() {
+    void realNondeterministicChoiceOnlyTriesCertifiedFirstCandidate() {
         assertEquals(
                 1,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, false,
+                        false,
                         false, true, 4));
         assertEquals(
                 0,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, false,
+                        false,
                         false, false, 4));
     }
 
@@ -112,12 +206,12 @@ class OmniMaxFastExecutionPolicyTest {
         assertEquals(
                 1,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, false,
+                        false,
                         false, true, 2));
         assertEquals(
                 0,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, false,
+                        false,
                         false, false, 2));
     }
 
@@ -126,110 +220,95 @@ class OmniMaxFastExecutionPolicyTest {
         assertEquals(
                 0,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, true,
+                        true,
                         true, false, 4));
         assertEquals(
                 1,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, true,
+                        true,
                         false, true, 4));
         assertEquals(
                 0,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, true,
+                        true,
                         false, false, 4));
     }
 
     @Test
-    void safeModeRealAttemptPreservesFirstCandidateOrdering() {
-        assertEquals(
-                1,
-                OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.SAFE, false,
-                        false, false, 4));
+    void zeroCompiledCandidatesCannotBeTried() {
         assertEquals(
                 0,
                 OmniMaxFastExecutionPolicy.compiledCandidateTrialLimit(
-                        OmniMaxFastMode.AGGRESSIVE, false,
+                        false,
                         true, true, 0));
     }
 
     @Test
-    void aggressiveRealAttemptsCanBatchACompleteCandidateSet() {
+    void realAttemptsCanBatchACompleteCandidateSet() {
         assertEquals(
                 true,
                 OmniMaxFastExecutionPolicy.canBatchCandidateMix(
-                        OmniMaxFastMode.AGGRESSIVE, false, true,
+                        false, true,
                         2, 2, true));
     }
 
     @Test
-    void incompleteOrNonAggressiveCandidateSetsRemainNative() {
+    void incompleteSimulationOrUnsafeCandidateSetsRemainNative() {
         assertEquals(
                 false,
                 OmniMaxFastExecutionPolicy.canBatchCandidateMix(
-                        OmniMaxFastMode.AGGRESSIVE, false, false,
+                        false, false,
                         2, 3, true));
         assertEquals(
                 false,
                 OmniMaxFastExecutionPolicy.canBatchCandidateMix(
-                        OmniMaxFastMode.AGGRESSIVE, true, true,
+                        true, true,
                         2, 2, true));
         assertEquals(
                 false,
                 OmniMaxFastExecutionPolicy.canBatchCandidateMix(
-                        OmniMaxFastMode.SAFE, false, true,
-                        2, 2, true));
-        assertEquals(
-                false,
-                OmniMaxFastExecutionPolicy.canBatchCandidateMix(
-                        OmniMaxFastMode.AGGRESSIVE, false, true,
+                        false, true,
                         2, 2, false));
     }
 
     @Test
-    void aggressiveSimulationCanRecoverOnlyAProvenTransientCandidateState() {
+    void simulationCanRecoverOnlyAProvenTransientCandidateState() {
         assertEquals(
                 true,
                 OmniMaxFastExecutionPolicy.mayRecoverSimulationCandidateState(
-                        OmniMaxFastMode.AGGRESSIVE, true,
+                        true,
                         true, true, true, true));
         assertEquals(
                 false,
                 OmniMaxFastExecutionPolicy.mayRecoverSimulationCandidateState(
-                        OmniMaxFastMode.SAFE, true,
-                        true, true, true, true));
-        assertEquals(
-                false,
-                OmniMaxFastExecutionPolicy.mayRecoverSimulationCandidateState(
-                        OmniMaxFastMode.AGGRESSIVE, true,
+                        true,
                         true, true, false, true));
         assertEquals(
                 false,
                 OmniMaxFastExecutionPolicy.mayRecoverSimulationCandidateState(
-                        OmniMaxFastMode.AGGRESSIVE, true,
+                        true,
                         true, true, true, false));
     }
 
     @Test
-    void completeLiveAggressiveCandidateSetGetsSparseShortagePlanning() {
+    void completeLiveCandidateSetGetsSparseShortagePlanning() {
         assertEquals(
                 true,
                 OmniMaxFastExecutionPolicy
                         .shouldTrySparseCandidateSetAfterFirstShortage(
-                                OmniMaxFastMode.AGGRESSIVE, false, true,
+                                false, true,
                                 true, 2, 2, true));
         assertEquals(
                 false,
                 OmniMaxFastExecutionPolicy
                         .shouldTrySparseCandidateSetAfterFirstShortage(
-                                OmniMaxFastMode.AGGRESSIVE, true, true,
+                                true, true,
                                 true, 2, 2, true));
         assertEquals(
                 false,
                 OmniMaxFastExecutionPolicy
                         .shouldTrySparseCandidateSetAfterFirstShortage(
-                                OmniMaxFastMode.AGGRESSIVE, false, true,
+                                false, true,
                                 false, 1, 2, true));
     }
 

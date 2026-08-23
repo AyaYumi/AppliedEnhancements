@@ -74,10 +74,6 @@ public record CraftingCalculationProgressPayload(
                 || totalUnits < -1 || totalUnits >= 0 && completedUnits > totalUnits) {
             throw new DecoderException("Invalid crafting calculation progress values");
         }
-        if (pathId > OmniCalculationPath.ECOAE.networkId()) {
-            throw new DecoderException("Invalid crafting calculation path: " + pathId);
-        }
-
         CraftingCalculationProgressPhase phase;
         try {
             phase = CraftingCalculationProgressPhase.fromNetworkId(phaseId);

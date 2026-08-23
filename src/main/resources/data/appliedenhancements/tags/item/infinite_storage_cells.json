@@ -1,0 +1,14 @@
+{
+  "replace": false,
+  "values": [
+    "ae2:creative_storage_cell",
+    {
+      "id": "extendedae:infinity_water_cell",
+      "required": false
+    },
+    {
+      "id": "extendedae:infinity_cobblestone_cell",
+      "required": false
+    }
+  ]
+}

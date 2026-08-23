@@ -174,6 +174,93 @@ class OmniSparseCapacitySolverTest {
     }
 
     @Test
+    void prunesDirectNoProgressCandidateAndUsesNormalRecipe() {
+        var nodes = new OmniSparseCapacitySolver.Node[] {
+                OmniSparseCapacitySolver.Node.craftable(
+                        0, 1,
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(0, 1)),
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(1, 1))),
+                OmniSparseCapacitySolver.Node.terminal(1, 1)
+        };
+        var model = new OmniSparseCapacitySolver.Model(2, nodes);
+
+        var plan = OmniSparseCapacitySolver.plan(
+                model, 0, 4, new long[] { 0, 4 });
+
+        assertTrue(plan.supported());
+        assertTrue(plan.complete());
+        assertArrayEquals(new long[] { 0, 4 }, plan.candidateAllocations());
+        assertEquals(1, plan.noProgressCandidatesSkipped());
+    }
+
+    @Test
+    void componentStateCycleRejectsOnlyTheCyclicBranch() {
+        var nodes = new OmniSparseCapacitySolver.Node[] {
+                OmniSparseCapacitySolver.Node.craftable(
+                        0, 1,
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(1, 1)),
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(3, 1))),
+                OmniSparseCapacitySolver.Node.craftable(
+                        1, 1,
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(2, 1))),
+                // A recursion-filtered occurrence of component 0. It has a
+                // different graph node but the same inventory component.
+                OmniSparseCapacitySolver.Node.terminal(0, 1),
+                OmniSparseCapacitySolver.Node.terminal(2, 1)
+        };
+        var model = new OmniSparseCapacitySolver.Model(3, nodes);
+
+        var plan = OmniSparseCapacitySolver.plan(
+                model, 0, 3, new long[] { 0, 0, 3 });
+
+        assertTrue(plan.supported());
+        assertTrue(plan.complete());
+        assertArrayEquals(new long[] { 0, 3 }, plan.candidateAllocations());
+        assertTrue(plan.noProgressCandidatesSkipped() >= 1);
+    }
+
+    @Test
+    void simulationSkipsComponentCycleButNotOrdinaryShortage() {
+        var nodes = new OmniSparseCapacitySolver.Node[] {
+                OmniSparseCapacitySolver.Node.craftable(
+                        0, 1,
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(1, 1)),
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(3, 1))),
+                OmniSparseCapacitySolver.Node.craftable(
+                        1, 1,
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(2, 1))),
+                OmniSparseCapacitySolver.Node.terminal(0, 1),
+                OmniSparseCapacitySolver.Node.terminal(2, 1)
+        };
+        var model = new OmniSparseCapacitySolver.Model(3, nodes);
+
+        var plan = OmniSparseCapacitySolver.planSimulationFirstCandidate(
+                model, 0, 5, new long[] { 0, 0, 0 });
+
+        assertTrue(plan.supported());
+        assertTrue(plan.complete());
+        assertArrayEquals(new long[] { 0, 5 }, plan.candidateAllocations());
+        assertArrayEquals(new long[] { 0, 0, 5 }, plan.simulatedMissing());
+        assertTrue(plan.noProgressCandidatesSkipped() >= 1);
+    }
+
+    @Test
     void allocatesDirectStockCandidatesWithDifferentOutputs() {
         var nodes = new OmniSparseCapacitySolver.Node[] {
                 OmniSparseCapacitySolver.Node.craftable(
@@ -195,6 +282,37 @@ class OmniSparseCapacitySolverTest {
         assertTrue(plan.complete());
         assertArrayEquals(new long[] { 6, 4 }, plan.candidateAllocations());
         assertArrayEquals(new long[] { 0, 0, 0 }, plan.endingInventory());
+    }
+
+    @Test
+    void allocatesNestedOrderedCandidatesWithDifferentOutputs() {
+        var nodes = new OmniSparseCapacitySolver.Node[] {
+                OmniSparseCapacitySolver.Node.craftable(
+                        0, 1,
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(1, 1))),
+                OmniSparseCapacitySolver.Node.craftable(
+                        1, 1,
+                        new OmniSparseCapacitySolver.Candidate(
+                                1,
+                                OmniSparseCapacitySolver.Input.consumable(2, 1)),
+                        new OmniSparseCapacitySolver.Candidate(
+                                4,
+                                OmniSparseCapacitySolver.Input.consumable(3, 1))),
+                OmniSparseCapacitySolver.Node.terminal(2, 1),
+                OmniSparseCapacitySolver.Node.terminal(3, 1)
+        };
+        var model = new OmniSparseCapacitySolver.Model(4, nodes);
+
+        var plan = OmniSparseCapacitySolver.plan(
+                model, 0, 10, new long[] { 0, 0, 2, 2 });
+
+        assertTrue(plan.supported());
+        assertTrue(plan.complete());
+        assertEquals(0, plan.remaining());
+        assertArrayEquals(new long[] { 10 }, plan.candidateAllocations());
+        assertArrayEquals(new long[] { 0, 0, 0, 0 }, plan.endingInventory());
     }
 
     @Test

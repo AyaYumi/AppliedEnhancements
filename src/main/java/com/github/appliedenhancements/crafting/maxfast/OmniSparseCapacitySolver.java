@@ -244,7 +244,8 @@ final class OmniSparseCapacitySolver {
     record Plan(boolean supported, boolean complete, long remaining,
             long[] candidateAllocations, long[] endingInventory,
             long[] simulatedMissing, long probes,
-            int equivalentCandidatesSkipped) {
+            int equivalentCandidatesSkipped,
+            int noProgressCandidatesSkipped) {
         Plan {
             candidateAllocations = candidateAllocations.clone();
             endingInventory = endingInventory.clone();
@@ -270,6 +271,7 @@ final class OmniSparseCapacitySolver {
     private enum Status {
         SUCCESS,
         SHORTAGE,
+        NO_PROGRESS,
         UNSUPPORTED
     }
 
@@ -287,6 +289,8 @@ final class OmniSparseCapacitySolver {
     private final Model model;
     private long probes;
     private int equivalentCandidatesSkipped;
+    private int noProgressCandidatesSkipped;
+    private int simulationRootCandidateIndex = -1;
 
     private OmniSparseCapacitySolver(Model model) {
         this.model = model;
@@ -312,37 +316,41 @@ final class OmniSparseCapacitySolver {
         }
         if (requested == 0) {
             return new Plan(true, true, 0, new long[root.candidates.length],
-                    initialInventory, new long[model.keyCount], 0, 0);
+                    initialInventory, new long[model.keyCount], 0, 0, 0);
         }
 
         var solver = new OmniSparseCapacitySolver(model);
         long[] workingInventory = initialInventory.clone();
-        boolean[] activeNodes = new boolean[model.nodes.length];
-        activeNodes[rootNodeIndex] = true;
+        long[] activeComponentDeficits = inactiveComponentStates(model.keyCount);
+        int rootComponent = root.keyIndex;
+        activeComponentDeficits[rootComponent] = componentDeficit(
+                root.requestUnit, requested, workingInventory[rootComponent]);
         ChoiceAttempt result;
         try {
             result = solver.requestChoice(
                     rootNodeIndex, requested, workingInventory,
-                    activeNodes, true, 0);
+                    activeComponentDeficits, true, 0);
         } finally {
-            activeNodes[rootNodeIndex] = false;
+            activeComponentDeficits[rootComponent] = -1;
         }
 
         boolean supported = result.status != Status.UNSUPPORTED;
         boolean complete = result.status == Status.SUCCESS;
         return new Plan(supported, complete,
-                supported ? result.remaining : requested,
-                result.allocations, workingInventory,
-                new long[model.keyCount],
-                solver.probes, solver.equivalentCandidatesSkipped);
+                 supported ? result.remaining : requested,
+                 result.allocations, workingInventory,
+                 new long[model.keyCount],
+                 solver.probes, solver.equivalentCandidatesSkipped,
+                 solver.noProgressCandidatesSkipped);
     }
 
     /**
-     * Proves one aggregated simulation of candidate zero. AE2 simulation never
-     * switches to a later candidate merely because terminal inputs are missing;
-     * it records those inputs as missing and considers candidate zero applied.
-     * This compact execution mirrors that behavior without replaying one pattern
-     * at a time.
+     * Proves one aggregated simulation of the first progressing candidate. AE2
+     * simulation never switches merely because terminal inputs are missing; it
+     * records those inputs as missing and considers that candidate applied. A
+     * candidate whose component state repeats without reducing its deficit is
+     * the sole exception and is pruned before the next ordered candidate is
+     * tried.
      */
     static Plan planSimulationFirstCandidate(Model model, int rootNodeIndex,
             long requested, long[] initialInventory) {
@@ -359,27 +367,32 @@ final class OmniSparseCapacitySolver {
         }
 
         Node root = model.nodes[rootNodeIndex];
-        if (root.kind != NodeKind.CRAFTABLE || root.candidates.length != 1) {
+        if (root.kind != NodeKind.CRAFTABLE || root.candidates.length == 0) {
             return unsupportedPlan(model, rootNodeIndex, requested, initialInventory);
         }
         if (requested == 0) {
-            return new Plan(true, true, 0, new long[] { 0 },
-                    initialInventory, new long[model.keyCount], 0, 0);
+            return new Plan(true, true, 0, new long[root.candidates.length],
+                    initialInventory, new long[model.keyCount], 0, 0, 0);
         }
 
         var solver = new OmniSparseCapacitySolver(model);
         long[] workingInventory = initialInventory.clone();
         long[] missing = new long[model.keyCount];
-        boolean[] activeNodes = new boolean[model.nodes.length];
+        long[] activeComponentDeficits = inactiveComponentStates(model.keyCount);
         Status status = solver.requestSimulationNode(
                 rootNodeIndex, requested, workingInventory,
-                missing, activeNodes, 0);
+                missing, activeComponentDeficits, 0);
         boolean supported = status != Status.UNSUPPORTED;
         boolean complete = status == Status.SUCCESS;
+        long[] allocations = new long[root.candidates.length];
+        if (complete && solver.simulationRootCandidateIndex >= 0) {
+            allocations[solver.simulationRootCandidateIndex] = requested;
+        }
         return new Plan(supported, complete,
                 complete ? 0 : requested,
-                new long[] { complete ? requested : 0 },
-                workingInventory, missing, solver.probes, 0);
+                allocations,
+                workingInventory, missing, solver.probes, 0,
+                solver.noProgressCandidatesSkipped);
     }
 
     private static Plan unsupportedPlan(Model model, int rootNodeIndex,
@@ -396,11 +409,11 @@ final class OmniSparseCapacitySolver {
                 : new long[keyCount];
         return new Plan(false, false, Math.max(0, requested),
                 new long[candidates], safeInventory,
-                new long[keyCount], 0, 0);
+                new long[keyCount], 0, 0, 0);
     }
 
     private ChoiceAttempt requestChoice(int nodeIndex, long requested,
-            long[] inventory, boolean[] activeNodes,
+            long[] inventory, long[] activeComponentDeficits,
             boolean requireExactPartialAllocation, int depth) {
         Node node = model.nodes[nodeIndex];
         if (node.kind != NodeKind.CRAFTABLE || node.candidates.length == 0) {
@@ -415,6 +428,10 @@ final class OmniSparseCapacitySolver {
                 candidateIndex < node.candidates.length && remaining > 0;
                 candidateIndex++) {
             Candidate candidate = node.candidates[candidateIndex];
+            if (isDirectNoProgressCandidate(nodeIndex, candidate)) {
+                noProgressCandidatesSkipped++;
+                continue;
+            }
             if (hasEquivalentEarlierCandidate(
                     node, candidateIndex, candidate)) {
                 equivalentCandidatesSkipped++;
@@ -426,8 +443,12 @@ final class OmniSparseCapacitySolver {
             }
             Attempt full = attemptCandidate(
                     nodeIndex, candidateIndex, remaining,
-                    inventory, activeNodes, depth);
+                    inventory, activeComponentDeficits, depth);
             probes++;
+            if (full.status == Status.NO_PROGRESS) {
+                noProgressCandidatesSkipped++;
+                continue;
+            }
             if (full.status == Status.UNSUPPORTED) {
                 return new ChoiceAttempt(Status.UNSUPPORTED, requested, allocations);
             }
@@ -446,7 +467,7 @@ final class OmniSparseCapacitySolver {
 
             AllocationAttempt partial = findMaximumAllocation(
                     nodeIndex, candidateIndex, remaining,
-                    inventory, activeNodes, depth);
+                    inventory, activeComponentDeficits, depth);
             if (partial.status == Status.UNSUPPORTED) {
                 return new ChoiceAttempt(Status.UNSUPPORTED, requested, allocations);
             }
@@ -485,7 +506,7 @@ final class OmniSparseCapacitySolver {
 
     private AllocationAttempt findMaximumAllocation(int nodeIndex,
             int candidateIndex, long requested,
-            long[] inventory, boolean[] activeNodes, int depth) {
+            long[] inventory, long[] activeComponentDeficits, int depth) {
         long low = 0;
         long high = requested;
         long[] bestInventory = inventory.clone();
@@ -497,7 +518,7 @@ final class OmniSparseCapacitySolver {
             long trialAmount = upperMidpoint(low, high);
             Attempt trial = attemptCandidate(
                     nodeIndex, candidateIndex, trialAmount,
-                    inventory, activeNodes, depth);
+                    inventory, activeComponentDeficits, depth);
             probes++;
             if (trial.status == Status.UNSUPPORTED) {
                 return new AllocationAttempt(Status.UNSUPPORTED, 0, inventory);
@@ -513,62 +534,85 @@ final class OmniSparseCapacitySolver {
     }
 
     private Attempt attemptCandidate(int nodeIndex, int candidateIndex,
-            long requested, long[] inventory, boolean[] activeNodes,
+            long requested, long[] inventory, long[] activeComponentDeficits,
             int depth) {
         long[] trialInventory = inventory.clone();
         Status status = requestForcedCandidate(
                 nodeIndex, candidateIndex, requested,
-                trialInventory, activeNodes, depth);
+                trialInventory, activeComponentDeficits, depth);
         return new Attempt(status, trialInventory);
     }
 
     private Status requestNode(int nodeIndex, long requested,
-            long[] inventory, boolean[] activeNodes, int depth) {
+            long[] inventory, long[] activeComponentDeficits, int depth) {
         if (requested == 0) {
             return Status.SUCCESS;
         }
         if (depth >= MAX_NODE_DEPTH) {
             return Status.UNSUPPORTED;
         }
-        if (nodeIndex < 0 || nodeIndex >= model.nodes.length
-                || activeNodes[nodeIndex]) {
+        if (nodeIndex < 0 || nodeIndex >= model.nodes.length) {
             return Status.UNSUPPORTED;
         }
 
-        activeNodes[nodeIndex] = true;
+        Node node = model.nodes[nodeIndex];
+        int component = node.keyIndex;
+        long deficit = componentDeficit(
+                node.requestUnit, requested, inventory[component]);
+        long previousDeficit = activeComponentDeficits[component];
+        if (deficit > 0 && previousDeficit >= 0
+                && deficit >= previousDeficit) {
+            return Status.NO_PROGRESS;
+        }
+        boolean entered = deficit > 0;
+        if (entered) {
+            activeComponentDeficits[component] = deficit;
+        }
         try {
-            Node node = model.nodes[nodeIndex];
             if (node.kind == NodeKind.CRAFTABLE
                     && node.candidates.length > 1) {
                 ChoiceAttempt choice = requestChoice(
                         nodeIndex, requested, inventory,
-                        activeNodes, false, depth);
+                        activeComponentDeficits, false, depth);
                 return choice.status;
             }
             return requestForcedCandidate(
                     nodeIndex, 0, requested,
-                    inventory, activeNodes, depth);
+                    inventory, activeComponentDeficits, depth);
         } finally {
-            activeNodes[nodeIndex] = false;
+            if (entered) {
+                activeComponentDeficits[component] = previousDeficit;
+            }
         }
     }
 
     private Status requestSimulationNode(int nodeIndex, long requested,
             long[] inventory, long[] missing,
-            boolean[] activeNodes, int depth) {
+            long[] activeComponentDeficits, int depth) {
         if (requested == 0) {
             return Status.SUCCESS;
         }
         if (depth >= MAX_NODE_DEPTH || probes >= MAX_PROBES
-                || nodeIndex < 0 || nodeIndex >= model.nodes.length
-                || activeNodes[nodeIndex]) {
+                || nodeIndex < 0 || nodeIndex >= model.nodes.length) {
             return Status.UNSUPPORTED;
         }
 
         probes++;
-        activeNodes[nodeIndex] = true;
+        Node node = model.nodes[nodeIndex];
+        int component = node.keyIndex;
+        long deficit = componentDeficit(
+                node.requestUnit, requested, inventory[component]);
+        long previousDeficit = activeComponentDeficits[component];
+        if (deficit > 0 && previousDeficit >= 0
+                && deficit >= previousDeficit) {
+            noProgressCandidatesSkipped++;
+            return Status.NO_PROGRESS;
+        }
+        boolean entered = deficit > 0;
+        if (entered) {
+            activeComponentDeficits[component] = deficit;
+        }
         try {
-            Node node = model.nodes[nodeIndex];
             if (node.kind == NodeKind.UNSUPPORTED
                     || node.keyIndex >= inventory.length) {
                 return Status.UNSUPPORTED;
@@ -591,84 +635,118 @@ final class OmniSparseCapacitySolver {
                 return Status.SUCCESS;
             }
             if (node.kind == NodeKind.TERMINAL) {
-                long deficit = multiply(node.requestUnit, remaining);
-                if (deficit < 0) {
+                long missingAmount = multiply(node.requestUnit, remaining);
+                if (missingAmount < 0) {
                     return Status.UNSUPPORTED;
                 }
                 missing[node.keyIndex] = saturatingAdd(
-                        missing[node.keyIndex], deficit);
+                        missing[node.keyIndex], missingAmount);
                 return Status.SUCCESS;
             }
             if (node.kind != NodeKind.CRAFTABLE
-                    || node.candidates.length != 1) {
+                    || node.candidates.length == 0) {
                 return Status.UNSUPPORTED;
             }
 
-            Candidate candidate = node.candidates[0];
             long remainingItems = multiply(node.requestUnit, remaining);
             if (remainingItems < 0) {
                 return Status.UNSUPPORTED;
             }
-            long patternTimes = ceilDiv(
-                    remainingItems, candidate.outputPerPattern);
-            if (patternTimes < 0) {
-                return Status.UNSUPPORTED;
-            }
-
-            int[] leasedKeys = new int[candidate.inputs.length];
-            long[] leasedAmounts = new long[candidate.inputs.length];
-            int leaseCount = 0;
-            for (Input input : candidate.inputs) {
-                if (input.kind == InputKind.REUSABLE) {
-                    if (input.targetIndex >= inventory.length
-                            || inventory[input.targetIndex] < input.multiplier) {
-                        return Status.UNSUPPORTED;
-                    }
-                    inventory[input.targetIndex] -= input.multiplier;
-                    leasedKeys[leaseCount] = input.targetIndex;
-                    leasedAmounts[leaseCount] = input.multiplier;
-                    leaseCount++;
+            for (int candidateIndex = 0;
+                    candidateIndex < node.candidates.length; candidateIndex++) {
+                Candidate candidate = node.candidates[candidateIndex];
+                if (isDirectNoProgressCandidate(nodeIndex, candidate)) {
+                    noProgressCandidatesSkipped++;
                     continue;
                 }
-
-                long childRequest = multiply(input.multiplier, patternTimes);
-                if (childRequest < 0) {
-                    return Status.UNSUPPORTED;
+                long[] trialInventory = inventory.clone();
+                long[] trialMissing = missing.clone();
+                Status candidateStatus = requestSimulationCandidate(
+                        node, candidate, remainingItems,
+                        trialInventory, trialMissing,
+                        activeComponentDeficits, depth);
+                if (candidateStatus == Status.NO_PROGRESS) {
+                    noProgressCandidatesSkipped++;
+                    continue;
                 }
-                if (input.hasExplicitTemplates()) {
-                    childRequest = extractTemplateMultipliers(
-                            input.templates, childRequest, inventory);
+                if (candidateStatus != Status.SUCCESS) {
+                    return candidateStatus;
                 }
-                Status childStatus = requestSimulationNode(
-                        input.targetIndex, childRequest,
-                        inventory, missing, activeNodes, depth + 1);
-                if (childStatus != Status.SUCCESS) {
-                    return childStatus;
+                replaceInventory(inventory, trialInventory);
+                replaceInventory(missing, trialMissing);
+                if (depth == 0) {
+                    simulationRootCandidateIndex = candidateIndex;
                 }
+                return Status.SUCCESS;
             }
-
-            for (int index = 0; index < leaseCount; index++) {
-                int keyIndex = leasedKeys[index];
-                inventory[keyIndex] = saturatingAdd(
-                        inventory[keyIndex], leasedAmounts[index]);
-            }
-
-            long remainder = remainingItems % candidate.outputPerPattern;
-            long surplus = remainder == 0
-                    ? 0
-                    : candidate.outputPerPattern - remainder;
-            if (surplus > 0) {
-                inventory[node.keyIndex] = saturatingAdd(
-                        inventory[node.keyIndex], surplus);
-            }
-            return Status.SUCCESS;
+            return Status.NO_PROGRESS;
         } finally {
-            activeNodes[nodeIndex] = false;
+            if (entered) {
+                activeComponentDeficits[component] = previousDeficit;
+            }
         }
     }
 
+    private Status requestSimulationCandidate(Node node, Candidate candidate,
+            long remainingItems, long[] inventory, long[] missing,
+            long[] activeComponentDeficits, int depth) {
+        long patternTimes = ceilDiv(
+                remainingItems, candidate.outputPerPattern);
+        if (patternTimes < 0) {
+            return Status.UNSUPPORTED;
+        }
+
+        int[] leasedKeys = new int[candidate.inputs.length];
+        long[] leasedAmounts = new long[candidate.inputs.length];
+        int leaseCount = 0;
+        for (Input input : candidate.inputs) {
+            if (input.kind == InputKind.REUSABLE) {
+                if (input.targetIndex >= inventory.length
+                        || inventory[input.targetIndex] < input.multiplier) {
+                    return Status.UNSUPPORTED;
+                }
+                inventory[input.targetIndex] -= input.multiplier;
+                leasedKeys[leaseCount] = input.targetIndex;
+                leasedAmounts[leaseCount] = input.multiplier;
+                leaseCount++;
+                continue;
+            }
+
+            long childRequest = multiply(input.multiplier, patternTimes);
+            if (childRequest < 0) {
+                return Status.UNSUPPORTED;
+            }
+            if (input.hasExplicitTemplates()) {
+                childRequest = extractTemplateMultipliers(
+                        input.templates, childRequest, inventory);
+            }
+            Status childStatus = requestSimulationNode(
+                    input.targetIndex, childRequest,
+                    inventory, missing, activeComponentDeficits, depth + 1);
+            if (childStatus != Status.SUCCESS) {
+                return childStatus;
+            }
+        }
+
+        for (int index = 0; index < leaseCount; index++) {
+            int keyIndex = leasedKeys[index];
+            inventory[keyIndex] = saturatingAdd(
+                    inventory[keyIndex], leasedAmounts[index]);
+        }
+
+        long remainder = remainingItems % candidate.outputPerPattern;
+        long surplus = remainder == 0
+                ? 0
+                : candidate.outputPerPattern - remainder;
+        if (surplus > 0) {
+            inventory[node.keyIndex] = saturatingAdd(
+                    inventory[node.keyIndex], surplus);
+        }
+        return Status.SUCCESS;
+    }
+
     private Status requestForcedCandidate(int nodeIndex, int candidateIndex,
-            long requested, long[] inventory, boolean[] activeNodes,
+            long requested, long[] inventory, long[] activeComponentDeficits,
             int depth) {
         if (requested == 0) {
             return Status.SUCCESS;
@@ -741,7 +819,7 @@ final class OmniSparseCapacitySolver {
             }
             Status childStatus = requestNode(
                     input.targetIndex, childRequest,
-                    inventory, activeNodes, depth + 1);
+                    inventory, activeComponentDeficits, depth + 1);
             if (childStatus != Status.SUCCESS) {
                 return childStatus;
             }
@@ -762,6 +840,52 @@ final class OmniSparseCapacitySolver {
                     inventory[node.keyIndex], surplus);
         }
         return Status.SUCCESS;
+    }
+
+    /**
+     * Rejects an exact candidate that consumes at least as much of its own
+     * output component as it produces. Such a branch cannot reduce the
+     * outstanding demand regardless of the other inputs or available stock.
+     * Substitutable inputs are deliberately excluded because another key may
+     * satisfy them without feeding the component back into itself.
+     */
+    private boolean isDirectNoProgressCandidate(
+            int nodeIndex, Candidate candidate) {
+        Node owner = model.nodes[nodeIndex];
+        long recursiveDemand = 0;
+        for (Input input : candidate.inputs) {
+            if (input.kind != InputKind.CONSUMABLE
+                    || input.hasExplicitTemplates()) {
+                continue;
+            }
+            Node child = model.nodes[input.targetIndex];
+            if (child.keyIndex != owner.keyIndex) {
+                continue;
+            }
+            long demand = multiply(child.requestUnit, input.multiplier);
+            if (demand < 0) {
+                return false;
+            }
+            recursiveDemand = saturatingAdd(recursiveDemand, demand);
+        }
+        return recursiveDemand > 0
+                && recursiveDemand >= candidate.outputPerPattern;
+    }
+
+    private static long[] inactiveComponentStates(int keyCount) {
+        long[] states = new long[keyCount];
+        Arrays.fill(states, -1);
+        return states;
+    }
+
+    /** Returns the unsatisfied item count used as the component-state key. */
+    private static long componentDeficit(
+            long requestUnit, long requested, long available) {
+        long demand = multiply(requestUnit, requested);
+        if (demand < 0) {
+            return Long.MAX_VALUE;
+        }
+        return Math.max(0, demand - Math.min(demand, available));
     }
 
     private long extractTemplateMultipliers(Template[] templates,

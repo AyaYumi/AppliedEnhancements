@@ -28,12 +28,11 @@ final class OmniOrderedChoiceFallback {
      * explicit bound. A small root request can fan out into millions of local
      * choices, and AE2 still pays that full per-item cost.
      */
-    static Decision afterCompiledFailure(OmniMaxFastMode mode,
+    static Decision afterCompiledFailure(
             long nodeAmount, long requestMultipliers,
             long rootRequestedAmount,
             long maxLinearNativeItems) {
-        if (mode != OmniMaxFastMode.AGGRESSIVE
-                || nodeAmount <= 0
+        if (nodeAmount <= 0
                 || requestMultipliers <= 0
                 || rootRequestedAmount <= 0) {
             return Decision.NATIVE;

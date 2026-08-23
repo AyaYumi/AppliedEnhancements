@@ -3,12 +3,16 @@ package com.appliedenhancements.mixin;
 import appeng.api.networking.IGrid;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.crafting.CalculationStrategy;
+import appeng.api.networking.crafting.ICraftingCPU;
 import appeng.api.networking.crafting.ICraftingPlan;
+import appeng.api.networking.crafting.ICraftingRequester;
 import appeng.api.networking.crafting.ICraftingService;
 import appeng.api.networking.crafting.ICraftingSimulationRequester;
+import appeng.api.networking.crafting.ICraftingSubmitResult;
 import appeng.api.networking.security.IActionHost;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
+import appeng.crafting.CraftingPlan;
 import appeng.me.helpers.PlayerSource;
 import appeng.menu.MenuOpener;
 import appeng.menu.me.crafting.CraftAmountMenu;
@@ -20,6 +24,7 @@ import com.appliedenhancements.Config;
 import com.appliedenhancements.runtime.CraftingProgressSnapshotOrder;
 import com.appliedenhancements.runtime.CraftingProgressTaskBinding;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
+import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.appliedenhancements.runtime.TerminalAwareFuture;
 import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
 import com.github.appliedenhancements.crafting.maxfast.OmniOrderedChoicePlanningRejectedException;
@@ -37,7 +42,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
-import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -47,7 +51,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
@@ -93,6 +96,16 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
     @Unique
     private long appliedenhancements$requestedAmount;
+
+    @Unique
+    private CalculationStrategy appliedenhancements$calculationStrategy =
+            CalculationStrategy.REPORT_MISSING_ITEMS;
+
+    @Unique
+    private ManualCraftingInventoryLock.Reservation appliedenhancements$inventoryReservation;
+
+    @Unique
+    private ICraftingPlan appliedenhancements$reservedPlan;
 
     @Override
     public OmniCalculationPath molecularmanipulator$getCalculationPath() {
@@ -166,7 +179,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             CallbackInfoReturnable<Boolean> callback) {
         if (!((CraftConfirmMenu) (Object) this).isClientSide()) {
             appliedenhancements$requestedAmount = amount;
+            appliedenhancements$calculationStrategy = strategy;
             appliedenhancements$calculationPath = OmniCalculationPath.AE2_NATIVE;
+            appliedenhancements$releaseInventoryReservation();
             appliedenhancements$cancelProgress();
         }
     }
@@ -187,6 +202,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         }
 
         appliedenhancements$cancelProgress();
+        appliedenhancements$releaseInventoryReservation();
+        appliedenhancements$calculationStrategy = strategy;
         if (this.job != null) {
             this.job.cancel(true);
         }
@@ -263,6 +280,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Inject(method = "goBack", at = @At("HEAD"), cancellable = true)
     private void appliedenhancements$returnToLongAmountScreen(CallbackInfo callback) {
         var menu = (CraftConfirmMenu) (Object) this;
+        if (!menu.isClientSide()) {
+            appliedenhancements$releaseInventoryReservation();
+        }
         if (!(menu.getPlayer() instanceof ServerPlayer player)
                 || appliedenhancements$requestedAmount <= Integer.MAX_VALUE
                 || this.whatToCraft == null
@@ -327,8 +347,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                         return;
                     }
                     var progress = progressTask.progress();
-                    OmniCalculationPath path = appliedenhancements$resolveCalculationPath(
-                            plan, progress);
+                    OmniCalculationPath path = appliedenhancements$resolveCalculationPath(plan);
                     appliedenhancements$calculationPath = path;
                     if (progress != null) {
                         progress.complete(path);
@@ -391,21 +410,15 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     }
 
     @Unique
-    private OmniCalculationPath appliedenhancements$resolveCalculationPath(
-            ICraftingPlan plan, CraftingCalculationProgressHandle progress) {
+    private OmniCalculationPath appliedenhancements$resolveCalculationPath(ICraftingPlan plan) {
         OmniCalculationPath carriedPath = plan instanceof OmniCalculationPathCarrier carrier
                 ? carrier.molecularmanipulator$getCalculationPath()
                 : null;
         if (carriedPath != null && carriedPath != OmniCalculationPath.AE2_NATIVE) {
             return carriedPath;
         }
-        if (plan != null
-                && plan.getClass().getName().toLowerCase(Locale.ROOT).contains("ecoae")) {
-            return OmniCalculationPath.ECOAE;
-        }
-        if (progress != null && !progress.terminal()
-                && ModList.get().isLoaded("neoecoae")) {
-            return OmniCalculationPath.ECOAE;
+        if (plan != null && !(plan instanceof CraftingPlan)) {
+            return OmniCalculationPath.EXTERNAL;
         }
         return appliedenhancements$calculationPath;
     }
@@ -420,8 +433,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             return;
         }
 
-        var path = appliedenhancements$resolveCalculationPath(
-                this.result, appliedenhancements$progressBinding.currentProgress());
+        var path = appliedenhancements$resolveCalculationPath(this.result);
         PacketDistributor.sendToPlayer(
                 player,
                 new CraftingCalculationPathPayload(menu.containerId, path));
@@ -444,6 +456,117 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             return;
         }
         appliedenhancements$sendCalculationProgress(player, menu);
+    }
+
+    @Inject(method = "broadcastChanges", at = @At("RETURN"))
+    private void appliedenhancements$reserveCompletedPlanInventory(CallbackInfo callback) {
+        var menu = (CraftConfirmMenu) (Object) this;
+        if (menu.isClientSide()) {
+            return;
+        }
+        if (!ManualCraftingInventoryLock.enabled()) {
+            appliedenhancements$releaseInventoryReservation();
+            return;
+        }
+        // Auto-start can replace the menu before broadcastChanges returns.
+        if (menu.getPlayer().containerMenu != menu || this.result == null
+                || this.result == appliedenhancements$reservedPlan) {
+            return;
+        }
+        if (!appliedenhancements$tryReserveInventory(this.result)) {
+            appliedenhancements$restartAfterReservationConflict();
+        }
+    }
+
+    @WrapOperation(method = "startJob", at = @At(value = "INVOKE",
+            target = "Lappeng/api/networking/crafting/ICraftingService;submitJob(Lappeng/api/networking/crafting/ICraftingPlan;Lappeng/api/networking/crafting/ICraftingRequester;Lappeng/api/networking/crafting/ICraftingCPU;ZLappeng/api/networking/security/IActionSource;)Lappeng/api/networking/crafting/ICraftingSubmitResult;"))
+    private ICraftingSubmitResult appliedenhancements$submitWithReservedInventory(
+            ICraftingService craftingService,
+            ICraftingPlan plan,
+            ICraftingRequester requester,
+            ICraftingCPU target,
+            boolean prioritizePower,
+            IActionSource source,
+            Operation<ICraftingSubmitResult> original) {
+        if (!ManualCraftingInventoryLock.enabled()) {
+            appliedenhancements$releaseInventoryReservation();
+        }
+        var reservation = plan == appliedenhancements$reservedPlan
+                ? appliedenhancements$inventoryReservation
+                : null;
+        try {
+            ICraftingSubmitResult submitResult = reservation == null
+                    ? original.call(
+                            craftingService, plan, requester, target, prioritizePower, source)
+                    : reservation.submit(() -> original.call(
+                            craftingService, plan, requester, target, prioritizePower, source));
+            if (submitResult.successful()) {
+                appliedenhancements$releaseInventoryReservation();
+            }
+            return submitResult;
+        } catch (RuntimeException | Error failure) {
+            appliedenhancements$releaseInventoryReservation();
+            throw failure;
+        }
+    }
+
+    @Unique
+    private boolean appliedenhancements$tryReserveInventory(ICraftingPlan plan) {
+        appliedenhancements$releaseInventoryReservation();
+        IGrid grid = appliedenhancements$getCurrentGrid();
+        if (grid == null || plan == null) {
+            return false;
+        }
+        var menu = (CraftConfirmMenu) (Object) this;
+        var reservation = ManualCraftingInventoryLock.tryAcquire(
+                grid.getStorageService().getInventory(),
+                plan.usedItems(),
+                new PlayerSource(menu.getPlayer(), (IActionHost) menu.getTarget()));
+        if (reservation == null) {
+            return false;
+        }
+        appliedenhancements$inventoryReservation = reservation;
+        appliedenhancements$reservedPlan = plan;
+        return true;
+    }
+
+    @Unique
+    private void appliedenhancements$restartAfterReservationConflict() {
+        var menu = (CraftConfirmMenu) (Object) this;
+        this.result = null;
+        menu.setPlan(null);
+        boolean replanned = this.whatToCraft != null
+                && (appliedenhancements$requestedAmount > Integer.MAX_VALUE
+                        ? appliedenhancements$planLong(
+                                this.whatToCraft,
+                                appliedenhancements$requestedAmount,
+                                appliedenhancements$calculationStrategy)
+                        : menu.planJob(
+                                this.whatToCraft,
+                                (int) appliedenhancements$requestedAmount,
+                                appliedenhancements$calculationStrategy));
+        if (!replanned) {
+            menu.goBack();
+        }
+    }
+
+    @Unique
+    private IGrid appliedenhancements$getCurrentGrid() {
+        var menu = (CraftConfirmMenu) (Object) this;
+        if (!(menu.getTarget() instanceof IActionHost actionHost)) {
+            return null;
+        }
+        IGridNode node = actionHost.getActionableNode();
+        return node == null ? null : node.getGrid();
+    }
+
+    @Unique
+    private void appliedenhancements$releaseInventoryReservation() {
+        if (appliedenhancements$inventoryReservation != null) {
+            appliedenhancements$inventoryReservation.close();
+            appliedenhancements$inventoryReservation = null;
+        }
+        appliedenhancements$reservedPlan = null;
     }
 
     @Unique
@@ -473,6 +596,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             net.minecraft.world.entity.player.Player player,
             CallbackInfo callback) {
         if (!((CraftConfirmMenu) (Object) this).isClientSide()) {
+            appliedenhancements$releaseInventoryReservation();
             appliedenhancements$cancelProgress();
         }
     }

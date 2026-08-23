@@ -48,11 +48,11 @@ public class AppliedEnhancements {
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info(
-                "Applied Enhancements ready: patternCaching={}, longRangeCrafting={}, progressDisplay={}, maxFastMode={}",
+                "Applied Enhancements ready: patternCaching={}, longRangeCrafting={}, progressDisplay={}, automaticMaxFast={}",
                 Config.ENABLE_PATTERN_CACHING.get(),
                 AppliedEnhancementsConfig.COMMON.enableLongRangeCrafting.get(),
                 AppliedEnhancementsConfig.COMMON.enableProgressDisplay.get(),
-                AppliedEnhancementsConfig.COMMON.maxFastMode.get());
+                AppliedEnhancementsConfig.COMMON.enableAutomaticMaxFastPlanner.get());
     }
 
     public static net.minecraft.resources.ResourceLocation id(String path) {

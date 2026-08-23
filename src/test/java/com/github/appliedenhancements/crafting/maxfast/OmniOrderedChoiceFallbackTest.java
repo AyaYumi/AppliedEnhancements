@@ -85,13 +85,7 @@ class OmniOrderedChoiceFallbackTest {
     }
 
     @Test
-    void safeModeAndNonPositiveWorkPreserveNativeBehavior() {
-        assertEquals(
-                OmniOrderedChoiceFallback.Decision.NATIVE,
-                OmniOrderedChoiceFallback.afterCompiledFailure(
-                        OmniMaxFastMode.SAFE, 1, 10_000_000_000L,
-                        10_000_000_000L,
-                        NATIVE_ITEM_LIMIT));
+    void nonPositiveWorkPreservesNativeBehavior() {
         assertEquals(
                 OmniOrderedChoiceFallback.Decision.NATIVE,
                 decide(0, 10_000_000_000L));
@@ -111,7 +105,7 @@ class OmniOrderedChoiceFallbackTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> OmniOrderedChoiceFallback.afterCompiledFailure(
-                        OmniMaxFastMode.AGGRESSIVE, 1, 1, 1, -1));
+                        1, 1, 1, -1));
     }
 
     private static OmniOrderedChoiceFallback.Decision decide(
@@ -123,7 +117,6 @@ class OmniOrderedChoiceFallbackTest {
             long nodeAmount, long requestMultipliers,
             long rootRequestedAmount) {
         return OmniOrderedChoiceFallback.afterCompiledFailure(
-                OmniMaxFastMode.AGGRESSIVE,
                 nodeAmount,
                 requestMultipliers,
                 rootRequestedAmount,

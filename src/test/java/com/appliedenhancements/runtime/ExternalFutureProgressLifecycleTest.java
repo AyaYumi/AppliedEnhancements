@@ -20,7 +20,7 @@ class ExternalFutureProgressLifecycleTest {
         var delegate = new CompletableFuture<String>();
         var future = new TerminalAwareFuture<>(
                 delegate,
-                result -> handle.complete(OmniCalculationPath.ECOAE),
+                result -> handle.complete(OmniCalculationPath.EXTERNAL),
                 failure -> handle.fail(),
                 handle::cancel);
 
@@ -33,7 +33,7 @@ class ExternalFutureProgressLifecycleTest {
         assertTrue(handle.terminal());
         var snapshot = handle.snapshot(1);
         assertEquals(CraftingCalculationProgressPhase.COMPLETED, snapshot.phase());
-        assertEquals(OmniCalculationPath.ECOAE, snapshot.path());
+        assertEquals(OmniCalculationPath.EXTERNAL, snapshot.path());
     }
 
     @Test
@@ -42,7 +42,7 @@ class ExternalFutureProgressLifecycleTest {
         var failedDelegate = new CompletableFuture<String>();
         var failedFuture = new TerminalAwareFuture<>(
                 failedDelegate,
-                result -> failedHandle.complete(OmniCalculationPath.ECOAE),
+                result -> failedHandle.complete(OmniCalculationPath.EXTERNAL),
                 failure -> failedHandle.fail(),
                 failedHandle::cancel);
         failedDelegate.completeExceptionally(new IllegalStateException("external failure"));
@@ -54,7 +54,7 @@ class ExternalFutureProgressLifecycleTest {
         var cancelledDelegate = new CompletableFuture<String>();
         var cancelledFuture = new TerminalAwareFuture<>(
                 cancelledDelegate,
-                result -> cancelledHandle.complete(OmniCalculationPath.ECOAE),
+                result -> cancelledHandle.complete(OmniCalculationPath.EXTERNAL),
                 failure -> cancelledHandle.fail(),
                 cancelledHandle::cancel);
         cancelledDelegate.cancel(true);
@@ -68,7 +68,7 @@ class ExternalFutureProgressLifecycleTest {
         var binding = new CraftingProgressTaskBinding();
         var oldHandle = new CraftingCalculationProgressHandle(4);
         var oldTask = binding.begin(oldHandle);
-        oldHandle.complete(OmniCalculationPath.ECOAE);
+        oldHandle.complete(OmniCalculationPath.EXTERNAL);
 
         assertSame(oldHandle, binding.currentProgress());
         assertTrue(oldHandle.terminal());

@@ -1,31 +1,35 @@
 package com.appliedenhancements.mixin;
 
-import java.util.IdentityHashMap;
-import java.util.Map;
-
+import appeng.api.config.Actionable;
+import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
 import appeng.api.storage.cells.StorageCell;
 import appeng.me.storage.DriveWatcher;
 import appeng.me.storage.NetworkStorage;
-import com.appliedenhancements.runtime.NetworkStorageDetectionCache;
 import com.appliedenhancements.storage.InfiniteStorageAmounts;
-import com.appliedenhancements.storage.InfiniteStorageDetector;
+import com.appliedenhancements.storage.InfiniteStorageCellRegistry;
+import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
-/** Saturates network listings for cells that can supply more than they advertise. */
+/** Saturates network listings only for explicitly marked infinite cells. */
 @Mixin(value = NetworkStorage.class, remap = false)
 public abstract class NetworkStorageMixin {
-    @Unique
-    private final Map<MEStorage, NetworkStorageDetectionCache<AEKey>>
-            appliedenhancements$infiniteKeys = new IdentityHashMap<>();
+    @ModifyVariable(method = "extract", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+    private long appliedenhancements$protectReservedCraftingInventory(
+            long amount,
+            AEKey what,
+            long originalAmount,
+            Actionable mode,
+            IActionSource source) {
+        return ManualCraftingInventoryLock.limitExtraction(
+                (MEStorage) (Object) this, what, amount, mode, source);
+    }
 
     @WrapOperation(method = "getAvailableStacks", at = @At(value = "INVOKE",
             target = "Lappeng/api/storage/MEStorage;getAvailableStacks(Lappeng/api/stacks/KeyCounter;)V"))
@@ -46,41 +50,21 @@ public abstract class NetworkStorageMixin {
 
         var local = new KeyCounter();
         original.call(storage, local);
+        boolean infiniteStorage = InfiniteStorageCellRegistry.isInfinite(storageCell);
 
-        NetworkStorageDetectionCache<AEKey> detectedKeys =
-                appliedenhancements$infiniteKeys.computeIfAbsent(
-                        storage, ignored -> new NetworkStorageDetectionCache<>());
-        detectedKeys.beginRefresh();
-        try {
-            for (var entry : local) {
-                var key = entry.getKey();
-                long amount = entry.getLongValue();
+        for (var entry : local) {
+            var key = entry.getKey();
+            long amount = entry.getLongValue();
 
-                if (amount <= 0) {
-                    if (output.get(key) != InfiniteStorageAmounts.DISPLAY_AMOUNT) {
-                        output.add(key, amount);
-                    }
-                    continue;
+            if (amount <= 0) {
+                if (output.get(key) != InfiniteStorageAmounts.DISPLAY_AMOUNT) {
+                    output.add(key, amount);
                 }
-
-                boolean infinite = amount == InfiniteStorageAmounts.DISPLAY_AMOUNT;
-                if (!infinite) {
-                    infinite = detectedKeys.resolve(
-                            key,
-                            amount,
-                            () -> InfiniteStorageDetector.probeUnbounded(
-                                    storageCell, key, amount));
-                }
-                output.set(key, InfiniteStorageAmounts.mergeAvailable(
-                        output.get(key), amount, infinite));
+                continue;
             }
-        } finally {
-            detectedKeys.endRefresh();
-        }
-    }
 
-    @Inject(method = "unmount", at = @At("HEAD"))
-    private void appliedenhancements$forgetUnmountedStorage(MEStorage storage, CallbackInfo callback) {
-        appliedenhancements$infiniteKeys.remove(storage);
+            output.set(key, InfiniteStorageAmounts.mergeAvailable(
+                    output.get(key), amount, infiniteStorage));
+        }
     }
 }

@@ -6,11 +6,11 @@ import java.util.Optional;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.item.ItemStack;
 import appeng.api.stacks.GenericStack;
-import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.StorageCells;
 import appeng.items.storage.StorageCellTooltipComponent;
+import com.appliedenhancements.api.InfiniteStorageCells;
 import com.appliedenhancements.storage.InfiniteStorageAmounts;
-import com.appliedenhancements.storage.InfiniteStorageDetector;
+import com.appliedenhancements.storage.InfiniteStorageCellRegistry;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -34,18 +34,15 @@ public abstract class ItemStackStorageCellTooltipMixin {
                 return;
             }
 
-            var available = new KeyCounter();
-            storage.getAvailableStacks(available);
+            if (!InfiniteStorageCells.isMarked(stack)
+                    && !InfiniteStorageCellRegistry.isInfinite(storage)) {
+                return;
+            }
 
             boolean changed = false;
             var content = new ArrayList<GenericStack>(component.content().size());
             for (var entry : component.content()) {
-                long advertisedAmount = available.get(entry.what());
-                if (advertisedAmount <= 0) {
-                    advertisedAmount = entry.amount();
-                }
-
-                if (InfiniteStorageDetector.isUnbounded(storage, entry.what(), advertisedAmount)) {
+                if (entry.amount() != InfiniteStorageAmounts.DISPLAY_AMOUNT) {
                     content.add(new GenericStack(entry.what(), InfiniteStorageAmounts.DISPLAY_AMOUNT));
                     changed = true;
                 } else {
