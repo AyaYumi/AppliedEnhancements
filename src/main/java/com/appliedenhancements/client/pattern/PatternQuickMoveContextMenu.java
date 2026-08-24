@@ -1,5 +1,6 @@
 package com.appliedenhancements.client.pattern;
 
+import com.appliedenhancements.client.menu.ClientContextMenuState;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -8,14 +9,18 @@ import net.minecraft.network.chat.Component;
 /** Small AE-colored secondary menu used for cut/paste actions. */
 public final class PatternQuickMoveContextMenu {
     private static final int WIDTH = 68;
-    private static final int ROW_HEIGHT = 16;
+    private static final int ROW_HEIGHT = 14;
 
     private int x;
     private int y;
     private List<Entry> entries = List.of();
 
     public void open(int mouseX, int mouseY, int screenWidth, int screenHeight, List<Entry> entries) {
+        close();
         this.entries = List.copyOf(entries);
+        if (!this.entries.isEmpty()) {
+            ClientContextMenuState.setOpen(this, true);
+        }
         int height = this.entries.size() * ROW_HEIGHT + 4;
         this.x = Math.max(2, Math.min(mouseX, screenWidth - WIDTH - 2));
         this.y = Math.max(2, Math.min(mouseY, screenHeight - height - 2));
@@ -51,7 +56,7 @@ public final class PatternQuickMoveContextMenu {
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 500);
         try {
-            graphics.fill(x, y, x + WIDTH, y + height, 0xF0AEB2C4);
+            graphics.fill(x, y, x + WIDTH, y + height, 0xFFAEB2C4);
             graphics.fill(x, y, x + WIDTH, y + 1, 0xFFF4F6FF);
             graphics.fill(x, y + height - 1, x + WIDTH, y + height, 0xFF4D5060);
             graphics.fill(x, y, x + 1, y + height, 0xFFF4F6FF);
@@ -64,7 +69,8 @@ public final class PatternQuickMoveContextMenu {
                         && mouseY >= rowY && mouseY < rowY + ROW_HEIGHT) {
                     graphics.fill(x + 1, rowY, x + WIDTH - 1, rowY + ROW_HEIGHT, 0x8055AAFF);
                 }
-                graphics.drawString(font, entries.get(row).label, x + 7, rowY + 4,
+                int textY = rowY + Math.max(1, (ROW_HEIGHT - font.lineHeight) / 2);
+                graphics.drawString(font, entries.get(row).label, x + 7, textY,
                         0xFF303342, false);
             }
         } finally {
@@ -73,6 +79,7 @@ public final class PatternQuickMoveContextMenu {
     }
 
     public void close() {
+        ClientContextMenuState.setOpen(this, false);
         entries = List.of();
     }
 

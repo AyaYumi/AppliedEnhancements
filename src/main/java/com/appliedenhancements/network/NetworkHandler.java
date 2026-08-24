@@ -20,5 +20,10 @@ public final class NetworkHandler {
                 PatternBatchMovePayload.STREAM_CODEC,
                 PatternBatchMovePayload::handle
         );
+        registrar.playToServer(
+                NetworkItemExtractPayload.TYPE,
+                NetworkItemExtractPayload.STREAM_CODEC,
+                NetworkItemExtractPayload::handle
+        );
     }
 }

@@ -2,7 +2,7 @@
 
 [中文文档](API_INTEGRATION_ZH.md)
 
-This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.0`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.1`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 ## Compatibility baseline
 
@@ -12,7 +12,7 @@ This guide is intended for NeoForge mod authors integrating with Applied Enhance
 | Java | `21` | Compilation and runtime target |
 | NeoForge | `21.1.220` | Matches the current release |
 | Applied Energistics 2 | `19.2.17` | Public signatures directly reference AE2 types |
-| Applied Enhancements | `1.0.0` | Version covered by this guide |
+| Applied Enhancements | `1.0.1` | Version covered by this guide |
 
 Only the following packages are part of the stable integration surface:
 
@@ -41,10 +41,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly files("libs/appliedenhancements-1.0.0.jar")
+    compileOnly files("libs/appliedenhancements-1.0.1.jar")
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly files("libs/appliedenhancements-1.0.0.jar")
+    runtimeOnly files("libs/appliedenhancements-1.0.1.jar")
 }
 ```
 
@@ -54,7 +54,7 @@ If your integration unconditionally loads Applied Enhancements API classes, decl
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.0,)"
+versionRange="[1.0.1,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -65,7 +65,7 @@ If all API references are isolated behind an optional compatibility layer, decla
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.0,)"
+versionRange="[1.0.1,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -92,6 +92,7 @@ A runtime Mod ID check is not sufficient when a main mod class, field, method si
 | `PatternTerminalIntegrationApi` | Client | Register during Client Setup | Adds support to a compatible pattern-terminal screen |
 | `PatternBatchMoveApi` | Client and server | Register server handlers during Common Setup | Performs atomic pattern batch movement |
 | `PatternQuickMoveSession` | Client only | Create once per open screen | Manages selection, cut buffers, and overlays |
+| `NetworkItemContextMenuApi` | Client only | Register during Client Setup | Extends the ME network-item context menu |
 | `PatternSlotRef` | Both | Current terminal session only | Identifies a machine container and pattern slot |
 | `MolecularBalancedBatchProvider` | Server | Implemented by the provider type | Receives paired CPU scheduling-batch callbacks |
 
@@ -420,7 +421,29 @@ Typical input lifecycle:
 
 Disabling the session clears selection and the cut buffer. A box selection replaces the previous selection, while individual pattern clicks can toggle one slot.
 
-## 7. Provider scheduling-batch callbacks
+## 7. Network-item context-menu extensions
+
+Register entry providers during Client Setup:
+
+```java
+event.enqueueWork(() -> NetworkItemContextMenuApi.register(
+        ResourceLocation.fromNamespaceAndPath("examplemod", "inspect_item"),
+        100,
+        context -> {
+            if (!context.key().getId().getNamespace().equals("examplemod")) {
+                return List.of();
+            }
+            return List.of(new NetworkItemContextMenuApi.Entry(
+                    Component.literal("Copy and inspect"),
+                    NetworkItemContextMenuApi.Context::copyId));
+        }));
+```
+
+Providers are evaluated whenever the menu opens and may inspect `key()`, `storedAmount()`, `requestableAmount()`, and `craftable()`. Higher priorities run first, ties are ordered by registration ID, duplicate IDs are rejected, and a failing provider is logged and skipped.
+
+`Context` exposes `extractOne()`, `extractStack()`, `extractAmount(long)`, `requestCraft()`, `copyName()`, `copyId()`, `searchSameMod()`, and `shareToChat()`. A third-party action with its own server mutation must send a dedicated payload and revalidate the active menu, permissions, resource key, and amount; the client-side menu entry is never authoritative.
+
+## 8. Provider scheduling-batch callbacks
 
 Providers that need to observe an AE2 crafting CPU scheduling batch can implement the interface on the actual provider instance:
 
@@ -466,6 +489,7 @@ KubeJS is supported only for adding item IDs to the infinite-storage-cell tag. T
 - MAX_FAST planner sessions;
 - encoded-pattern Java resolver registration;
 - pattern-terminal screen registration;
+- network-item context-menu registration;
 - atomic batch movement handlers;
 - provider scheduling-batch callbacks.
 
@@ -482,5 +506,6 @@ These features require AE2 Java types, client UI integration, or server-authorit
 - [ ] Batch movement revalidates every client-supplied field on the server.
 - [ ] Batch movement restores every source and target after failure.
 - [ ] `PatternQuickMoveSession` is cleared when its screen closes.
+- [ ] Custom network-item menu server actions revalidate every client-supplied field.
 - [ ] Infinite markers are applied only to storage implementations that are already infinite.
 - [ ] The integration has been tested with AE2 `19.2.17` and the target modpack on both client and server.

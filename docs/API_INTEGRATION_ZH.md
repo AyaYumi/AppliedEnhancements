@@ -2,7 +2,7 @@
 
 [English documentation](API_INTEGRATION.md)
 
-本文面向希望接入 Applied Enhancements `1.0.0` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+本文面向希望接入 Applied Enhancements `1.0.1` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -12,7 +12,7 @@
 | Java | `21` | 编译与运行目标 |
 | NeoForge | `21.1.220` | 与当前发行版一致 |
 | Applied Energistics 2 | `19.2.17` | 公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.0.0` | 本文档对应版本 |
+| Applied Enhancements | `1.0.1` | 本文档对应版本 |
 
 稳定兼容范围仅包括以下包：
 
@@ -40,10 +40,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly files("libs/appliedenhancements-1.0.0.jar")
+    compileOnly files("libs/appliedenhancements-1.0.1.jar")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly files("libs/appliedenhancements-1.0.0.jar")
+    runtimeOnly files("libs/appliedenhancements-1.0.1.jar")
 }
 ```
 
@@ -53,7 +53,7 @@ dependencies {
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.0,)"
+versionRange="[1.0.1,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -64,7 +64,7 @@ side="BOTH"
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.0,)"
+versionRange="[1.0.1,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -91,6 +91,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | `PatternTerminalIntegrationApi` | 客户端 | Client Setup 注册 | 接入兼容的样板终端界面 |
 | `PatternBatchMoveApi` | 客户端与服务端 | Common Setup 注册服务端处理器 | 原子批量移动样板 |
 | `PatternQuickMoveSession` | 仅客户端 | 每个打开的界面创建 | 管理框选、剪切缓存和覆盖层 |
+| `NetworkItemContextMenuApi` | 仅客户端 | Client Setup 注册 | 扩展 ME 网络物品右键菜单 |
 | `PatternSlotRef` | 双端 | 当前终端会话内 | 稳定标识机器容器和样板槽 |
 | `MolecularBalancedBatchProvider` | 服务端 | Provider 类型实现 | 接收一次 CPU 调度批次的开始/结束回调 |
 
@@ -398,7 +399,29 @@ public void onClose() {
 
 `PatternQuickMoveSession` 不直接修改服务端库存。界面层仍需正确维护“显示槽位到真实来源槽位”的 `Map<PatternSlotRef, PatternSlotRef>`。
 
-## 7. Provider 调度批次回调
+## 7. 网络物品右键菜单扩展
+
+在 Client Setup 中注册菜单项提供器：
+
+```java
+event.enqueueWork(() -> NetworkItemContextMenuApi.register(
+        ResourceLocation.fromNamespaceAndPath("examplemod", "inspect_item"),
+        100,
+        context -> {
+            if (!context.key().getId().getNamespace().equals("examplemod")) {
+                return List.of();
+            }
+            return List.of(new NetworkItemContextMenuApi.Entry(
+                    Component.literal("复制并检查"),
+                    NetworkItemContextMenuApi.Context::copyId));
+        }));
+```
+
+提供器每次打开菜单时执行，可以根据 `key()`、`storedAmount()`、`requestableAmount()` 与 `craftable()` 决定是否返回条目。优先级高的注册先执行，优先级相同时按注册 ID 排序；重复 ID 会被拒绝，提供器运行时异常会记录后跳过。
+
+`Context` 提供 `extractOne()`、`extractStack()`、`extractAmount(long)`、`requestCraft()`、`copyName()`、`copyId()`、`searchSameMod()` 和 `shareToChat()`。第三方自定义服务端动作仍必须使用自己的网络载荷，并重新验证玩家当前菜单、权限、资源键和数量，不能信任注册在客户端的菜单项。
+
+## 8. Provider 调度批次回调
 
 需要感知 AE2 合成 CPU 调度批次的 Provider，可以在实际 Provider 实例上实现：
 
@@ -440,6 +463,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 - MAX_FAST 会话调用；
 - 编码样板 Java 解析器注册；
 - 样板终端界面注册；
+- 网络物品右键菜单项注册；
 - 原子批量移动处理器；
 - Provider 批次回调。
 
@@ -456,4 +480,5 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 - [ ] 批量移动处理器在服务端重新验证所有客户端字段。
 - [ ] 批量移动失败能恢复所有来源和目标槽。
 - [ ] `PatternQuickMoveSession` 在关闭界面时清除。
+- [ ] 网络物品菜单的自定义服务端动作重新验证所有客户端字段。
 - [ ] 已在 AE2 `19.2.17` 和目标整合包中完成客户端与服务端验证。

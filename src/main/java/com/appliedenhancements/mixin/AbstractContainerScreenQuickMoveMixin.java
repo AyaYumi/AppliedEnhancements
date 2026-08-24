@@ -1,6 +1,7 @@
 package com.appliedenhancements.mixin;
 
 import com.appliedenhancements.integration.ae2.PatternQuickMoveScreenBridge;
+import com.appliedenhancements.integration.ae2.NetworkItemContextMenuScreenBridge;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,6 +18,12 @@ public abstract class AbstractContainerScreenQuickMoveMixin {
             double mouseY,
             int button,
             CallbackInfoReturnable<Boolean> callback) {
+        if ((Object) this instanceof NetworkItemContextMenuScreenBridge bridge
+                && bridge.appliedenhancements$networkItemMenuMouseClicked(
+                        mouseX, mouseY, button)) {
+            callback.setReturnValue(true);
+            return;
+        }
         if ((Object) this instanceof PatternQuickMoveScreenBridge bridge
                 && bridge.appliedenhancements$quickMoveMouseClicked(
                         mouseX, mouseY, button)) {
@@ -61,6 +68,10 @@ public abstract class AbstractContainerScreenQuickMoveMixin {
             CallbackInfo callback) {
         if ((Object) this instanceof PatternQuickMoveScreenBridge bridge) {
             bridge.appliedenhancements$renderQuickMoveOverlay(
+                    graphics, mouseX, mouseY, partialTick);
+        }
+        if ((Object) this instanceof NetworkItemContextMenuScreenBridge bridge) {
+            bridge.appliedenhancements$renderNetworkItemMenu(
                     graphics, mouseX, mouseY, partialTick);
         }
     }

@@ -45,6 +45,13 @@ repositories {
             includeGroup 'mezz.jei'
         }
     }
+    maven {
+        name = 'BlameJared (JEI)'
+        url = 'https://maven.blamejared.com/'
+        content {
+            includeGroup 'mezz.jei'
+        }
+    }
 }
 
 base {
@@ -127,6 +134,14 @@ dependencies {
     // Public extension APIs expose AE2 types such as KeyCounter and IPatternDetails.
     api "org.appliedenergistics:appliedenergistics2:${ae2_version}"
 
+    // JEI is optional at runtime. The full compile artifact is used by the
+    // isolated client integration so cheat actions follow JEI's own mode,
+    // permission synchronization and give behavior.
+    compileOnly "mezz.jei:jei-1.21.1-neoforge:${jei_version}"
+    if (!project.hasProperty('withoutJei')) {
+        localRuntime "mezz.jei:jei-1.21.1-neoforge:${jei_version}"
+    }
+
     // MixinExtras for advanced mixin features
     implementation 'io.github.llamalad7:mixinextras-neoforge:0.5.0'
     annotationProcessor 'io.github.llamalad7:mixinextras-common:0.5.0'
@@ -159,7 +174,8 @@ tasks.withType(ProcessResources).configureEach {
             ae2_version            : ae2_version,
             ae2_version_range      : ae2_version_range,
             extendedae_version_range: extendedae_version_range,
-            ae2wtlib_version_range : ae2wtlib_version_range
+            ae2wtlib_version_range : ae2wtlib_version_range,
+            jei_version_range      : jei_version_range
     ]
     inputs.properties replaceProperties
 

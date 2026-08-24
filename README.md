@@ -10,7 +10,7 @@ Applied Enhancements is a NeoForge quality-of-life and performance addon for App
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.0`
+> Current version: `1.0.1`
 >
 > Target: Minecraft `1.21.1` / NeoForge / Java `21`
 
@@ -26,6 +26,7 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 | Manual-plan inventory lock | When automatic MAX_FAST is enabled, open confirmation screens reserve the ME items and fluids used by their plans. |
 | Duplicate-output patterns | Supported pattern terminals can show only encoded patterns whose primary output occurs more than once, ignoring output quantity. |
 | Quick pattern movement | Select patterns by clicking or dragging, then atomically cut and paste them between compatible machines. |
+| Item context menus | Right-click ME entries to extract, craft, or copy IDs; right-click JEI entries to view recipes, copy names/IDs, and use JEI-authorized cheat actions. |
 | Infinite-cell markers | AE2 creative cells, supported ExtendedAE infinite cells, tagged items, and Java marker implementations use the compact `9.2E` display. |
 | Pattern caching | Bounded per-pattern caches reduce repeated input validation and container-item work. |
 | Provider batch API | Third-party crafting providers can receive paired scheduling-batch start and end callbacks. |
@@ -41,6 +42,7 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 | Applied Energistics 2 | `19.2.17` or newer | Required |
 | ExtendedAE | `1.21-2.2.32-neoforge` or newer | Optional integration |
 | AE2WTLib | `19.5.1` or newer | Optional integration |
+| Just Enough Items | `19.27.0` or newer | Optional JEI ingredient-list and bookmark context menus |
 
 The minimum NeoForge, AE2, and ExtendedAE versions are aligned with OmniSequence: Transfinite 2.0.0. This release is compiled and verified against AE2 `19.2.17`. New AE2 major versions still require validation because several features use AE2 internal classes and Mixin injection points.
 
@@ -49,10 +51,10 @@ The minimum NeoForge, AE2, and ExtendedAE versions are aligned with OmniSequence
 Install the same Applied Enhancements version on both the client and server, together with compatible NeoForge and AE2 versions.
 
 ```text
-mods/appliedenhancements-1.0.0.jar
+mods/appliedenhancements-1.0.1.jar
 ```
 
-ExtendedAE and AE2WTLib are optional and only required for their corresponding integrations.
+ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
 
 ## Long-range crafting
 
@@ -126,6 +128,16 @@ The following terminals are supported:
 
 Paste requests are revalidated and committed atomically by the server. Invalid sources, invalid targets, insufficient capacity, or execution failures leave no partial movement.
 
+## Network-item context menu
+
+Right-click a network item with an empty cursor in an AE2 storage screen or compatible subclass to open the action menu. It can extract one item to the cursor, move one stack to the player, extract a custom exact amount into available player-inventory space, start an available autocraft, or copy the resource ID.
+
+Holding an item or container preserves AE2's original right-click storage and container-filling behavior. The menu can also copy the localized name, search the terminal for the same mod, and open an editable chat draft containing the name and ID. Custom extraction is revalidated by the server against the active menu, synchronized entry serial, connection, power, current storage, and player inventory capacity. Third-party client integrations can contribute entries through `NetworkItemContextMenuApi`.
+
+With JEI `19.27.0` or newer installed, right-clicking an ingredient-list or bookmark entry can show its recipes or uses, copy its localized name or registry ID, search JEI for the same mod, or open a chat draft. While an AE2 storage terminal is open, an exactly matching synchronized network entry also enables ME extraction, ME autocrafting, and terminal search. If JEI cheat mode is active and JEI can provide a cheat stack for the ingredient, the menu also offers Give One and Give Stack. These actions reuse JEI's own synchronized permission and give behavior; Applied Enhancements does not bypass JEI or server permissions.
+
+The trigger is configurable under Options → Controls → Key Binds → Applied Enhancements → Open Item Context Menu. It defaults to the right mouse button, can be rebound to another mouse or keyboard key, and controls JEI, bookmarks, AE2 network entries, and pattern Quick Move cut/paste menus. It is active only in GUIs.
+
 ## Configuration
 
 Two COMMON configuration files are generated on first launch.
@@ -191,6 +203,7 @@ The API includes:
 - compatible pattern-terminal registration;
 - atomic pattern movement requests and custom server menu handlers;
 - per-screen client Quick Move sessions;
+- extensible ME terminal network-item context-menu entries;
 - infinite storage-cell tags and runtime markers;
 - balanced crafting-provider scheduling callbacks.
 
@@ -211,7 +224,7 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
 Build output:
 
 ```text
-build/libs/appliedenhancements-1.0.0.jar
+build/libs/appliedenhancements-1.0.1.jar
 ```
 
 ## Known limitations

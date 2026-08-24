@@ -3,6 +3,9 @@ package com.appliedenhancements.integration.ae2;
 import net.minecraft.client.gui.GuiGraphics;
 
 public interface PatternQuickMoveScreenBridge {
+    boolean appliedenhancements$openQuickMoveContextMenu(
+            double mouseX, double mouseY);
+
     boolean appliedenhancements$quickMoveMouseClicked(double mouseX, double mouseY, int button);
 
     boolean appliedenhancements$quickMoveMouseDragged(

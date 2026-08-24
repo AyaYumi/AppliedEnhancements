@@ -19,6 +19,7 @@ import com.appliedenhancements.client.pattern.PatternHeaderActionButton.Hit;
 import com.appliedenhancements.client.pattern.PatternQuickMoveContextMenu;
 import com.appliedenhancements.client.pattern.PatternQuickMoveContextMenu.Entry;
 import com.appliedenhancements.client.pattern.PatternTerminalRowFactory;
+import com.appliedenhancements.client.menu.ItemContextMenuKeyMapping;
 import com.appliedenhancements.client.pattern.QuickPatternMoveToggleButton;
 import com.appliedenhancements.integration.ae2.PatternQuickMoveScreenBridge;
 import com.appliedenhancements.integration.ae2.PatternTerminalGroupHeaderBridge;
@@ -346,45 +347,12 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
             }
         }
 
-        PatternSlot hovered = appliedenhancements$findPatternSlot(mouseX, mouseY);
-        if (button == 1 && hovered != null) {
-            var entries = new ArrayList<Entry>();
-            if (!hovered.getItem().isEmpty()
-                    && appliedenhancements$quickMove.isSelected(
-                            hovered, appliedenhancements$displayToSource)) {
-                entries.add(new Entry(
-                        Component.translatable(
-                                "gui.appliedenhancements.pattern_quick_move.cut"),
-                        () -> {
-                            appliedenhancements$quickMove.cutSelectedPattern(
-                                    hovered, appliedenhancements$displayToSource);
-                            appliedenhancements$showQuickMoveMessage(
-                                    "message.appliedenhancements.pattern_quick_move.cut",
-                                    appliedenhancements$quickMove.cutCount());
-                            appliedenhancements$updateQuickMoveButton();
-                        }));
-            }
-            if (hovered.getItem().isEmpty()
-                    && appliedenhancements$quickMove.hasCutBuffer()) {
-                entries.add(new Entry(
-                        Component.translatable(
-                                "gui.appliedenhancements.pattern_quick_move.paste"),
-                        () -> {
-                            appliedenhancements$quickMove.paste(
-                                    screen.getMenu().containerId,
-                                    List.of(hovered.getMachineInv().getServerId()),
-                                    hovered.getContainerSlot());
-                            appliedenhancements$updateQuickMoveButton();
-                        }));
-            }
-            if (!entries.isEmpty()) {
-                appliedenhancements$contextMenu.open(
-                        (int) mouseX, (int) mouseY, screen.width, screen.height, entries);
-            }
+        if (ItemContextMenuKeyMapping.matchesMouse(button)
+                && appliedenhancements$openQuickMoveContextMenu(mouseX, mouseY)) {
             return true;
         }
 
-        if (button == 1
+        if (ItemContextMenuKeyMapping.matchesMouse(button)
                 && mouseX >= screen.getGuiLeft() + 8
                 && mouseX < screen.getGuiLeft() + 170
                 && mouseY >= screen.getGuiTop() + 30
@@ -400,6 +368,56 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
                 screen.getGuiLeft() + 170,
                 screen.getGuiTop() + 30 + visibleRows * 18,
                 false);
+    }
+
+    @Override
+    public boolean appliedenhancements$openQuickMoveContextMenu(
+            double mouseX, double mouseY) {
+        appliedenhancements$ensureQuickMoveState();
+        if (!appliedenhancements$isSupportedScreen()
+                || !appliedenhancements$quickMove.enabled()) {
+            return false;
+        }
+        PatternSlot hovered = appliedenhancements$findPatternSlot(mouseX, mouseY);
+        if (hovered == null) {
+            return false;
+        }
+        var screen = (AbstractContainerScreen<?>) (Object) this;
+        var entries = new ArrayList<Entry>();
+        if (!hovered.getItem().isEmpty()
+                && appliedenhancements$quickMove.isSelected(
+                        hovered, appliedenhancements$displayToSource)) {
+            entries.add(new Entry(
+                    Component.translatable(
+                            "gui.appliedenhancements.pattern_quick_move.cut"),
+                    () -> {
+                        appliedenhancements$quickMove.cutSelectedPattern(
+                                hovered, appliedenhancements$displayToSource);
+                        appliedenhancements$showQuickMoveMessage(
+                                "message.appliedenhancements.pattern_quick_move.cut",
+                                appliedenhancements$quickMove.cutCount());
+                        appliedenhancements$updateQuickMoveButton();
+                    }));
+        }
+        if (hovered.getItem().isEmpty()
+                && appliedenhancements$quickMove.hasCutBuffer()) {
+            entries.add(new Entry(
+                    Component.translatable(
+                            "gui.appliedenhancements.pattern_quick_move.paste"),
+                    () -> {
+                        appliedenhancements$quickMove.paste(
+                                screen.getMenu().containerId,
+                                List.of(hovered.getMachineInv().getServerId()),
+                                hovered.getContainerSlot());
+                        appliedenhancements$updateQuickMoveButton();
+                    }));
+        }
+        if (!entries.isEmpty()) {
+            appliedenhancements$contextMenu.open(
+                    (int) mouseX, (int) mouseY,
+                    screen.width, screen.height, entries);
+        }
+        return true;
     }
 
     @Override
