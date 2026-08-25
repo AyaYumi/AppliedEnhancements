@@ -71,6 +71,8 @@
   "gui.appliedenhancements.jei_item_menu.search_in_me": "Search in ME",
   "gui.appliedenhancements.item_menu.search_same_mod": "Search Same Mod",
   "gui.appliedenhancements.item_menu.share_to_chat": "Share to Chat…",
+  "message.appliedenhancements.item_chat_link.jei_unavailable": "Cannot search: JEI is not installed or has not loaded.",
+  "message.appliedenhancements.item_chat_link.search_applied": "JEI search: %s",
   "message.appliedenhancements.crafting_amount_too_large": "Crafting amount exceeds the server limit of %s.",
   "message.appliedenhancements.crafting_amount_unsafe": "Crafting request %s was rejected because this recipe would overflow AE2's native 64-bit planner.",
   "message.appliedenhancements.ordered_choice_native_too_large": "Crafting request %s requires AE2's per-item ordered recipe planner and exceeds the safe native limit of %s. Reduce the amount or simplify this item's recipe choices.",

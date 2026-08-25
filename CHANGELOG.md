@@ -10,6 +10,7 @@
   - Copy the localized name or registry ID.
   - Search the terminal for items from the same mod.
   - Open an editable chat draft containing the item name and ID.
+  - Turn sent `[name] namespace:path` item shares into clickable client-side JEI searches.
 - Added context-menu support for JEI's ingredient list and bookmark list.
   - Show recipes or uses, copy the localized name, and copy the registry ID.
   - Search JEI for items from the same mod.
@@ -46,6 +47,7 @@
   - 复制本地化名称或注册 ID。
   - 在终端中搜索同模组物品。
   - 打开包含物品名称和 ID 的可编辑聊天草稿。
+  - 将发送后的 `[名称] namespace:path` 物品分享转换为可点击的客户端 JEI 搜索链接。
 - 为 JEI 物品列表和书签栏加入右键菜单。
   - 查看合成表或用途、复制本地化名称和复制注册 ID。
   - 在 JEI 中搜索同模组物品。
