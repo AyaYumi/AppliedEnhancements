@@ -101,8 +101,6 @@ public final class NetworkItemContextMenuApi {
         void copyId();
 
         void searchSameMod();
-
-        void shareToChat();
     }
 
     @FunctionalInterface

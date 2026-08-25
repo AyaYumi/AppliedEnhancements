@@ -2,7 +2,6 @@ package com.appliedenhancements.client.menu;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.resources.ResourceLocation;
 
 /**
  * JEI-free dispatch point installed by the optional JEI plugin at runtime.
@@ -71,9 +70,5 @@ public final class OptionalJeiItemContextMenu {
         default void close() {
         }
 
-        /** Applies a JEI ingredient-list search without exposing JEI types. */
-        default boolean search(ResourceLocation id) {
-            return false;
-        }
     }
 }

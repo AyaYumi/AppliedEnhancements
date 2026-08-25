@@ -441,7 +441,7 @@ event.enqueueWork(() -> NetworkItemContextMenuApi.register(
 
 Providers are evaluated whenever the menu opens and may inspect `key()`, `storedAmount()`, `requestableAmount()`, and `craftable()`. Higher priorities run first, ties are ordered by registration ID, duplicate IDs are rejected, and a failing provider is logged and skipped.
 
-`Context` exposes `extractOne()`, `extractStack()`, `extractAmount(long)`, `requestCraft()`, `copyName()`, `copyId()`, `searchSameMod()`, and `shareToChat()`. `shareToChat()` opens the built-in editable `[name] namespace:path` draft; when sent, Applied Enhancements clients turn the item fragment into a client-only JEI search link. A third-party action with its own server mutation must send a dedicated payload and revalidate the active menu, permissions, resource key, and amount; the client-side menu entry is never authoritative.
+`Context` exposes `extractOne()`, `extractStack()`, `extractAmount(long)`, `requestCraft()`, `copyName()`, `copyId()`, and `searchSameMod()`. A third-party action with its own server mutation must send a dedicated payload and revalidate the active menu, permissions, resource key, and amount; the client-side menu entry is never authoritative.
 
 ## 8. Provider scheduling-batch callbacks
 

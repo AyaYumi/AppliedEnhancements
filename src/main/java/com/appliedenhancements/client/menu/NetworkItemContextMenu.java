@@ -73,9 +73,6 @@ public final class NetworkItemContextMenu {
                     "gui.appliedenhancements.item_menu.search_same_mod"),
                     context::searchSameMod));
         }
-        built.add(new ActionEntry(Component.translatable(
-                "gui.appliedenhancements.item_menu.share_to_chat"),
-                context::shareToChat));
         for (Entry entry : NetworkItemContextMenuApi.entries(context)) {
             built.add(new ActionEntry(
                     entry.label(), () -> entry.activate(context)));

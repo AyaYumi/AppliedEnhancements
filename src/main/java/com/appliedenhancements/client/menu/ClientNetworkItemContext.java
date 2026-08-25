@@ -97,12 +97,6 @@ public final class ClientNetworkItemContext
         }
     }
 
-    @Override
-    public void shareToChat() {
-        ClientItemMenuActions.openShareDraft(
-                key().getDisplayName(), key().getId().toString());
-    }
-
     private static void copyToClipboard(String value, String messageKey) {
         var minecraft = Minecraft.getInstance();
         minecraft.keyboardHandler.setClipboard(value);

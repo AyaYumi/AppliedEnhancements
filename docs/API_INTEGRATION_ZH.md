@@ -419,7 +419,7 @@ event.enqueueWork(() -> NetworkItemContextMenuApi.register(
 
 提供器每次打开菜单时执行，可以根据 `key()`、`storedAmount()`、`requestableAmount()` 与 `craftable()` 决定是否返回条目。优先级高的注册先执行，优先级相同时按注册 ID 排序；重复 ID 会被拒绝，提供器运行时异常会记录后跳过。
 
-`Context` 提供 `extractOne()`、`extractStack()`、`extractAmount(long)`、`requestCraft()`、`copyName()`、`copyId()`、`searchSameMod()` 和 `shareToChat()`。`shareToChat()` 会打开内置的可编辑 `[名称] namespace:path` 草稿；发送后，安装了 Applied Enhancements 的客户端会把物品片段转换为纯客户端 JEI 搜索链接。第三方自定义服务端动作仍必须使用自己的网络载荷，并重新验证玩家当前菜单、权限、资源键和数量，不能信任注册在客户端的菜单项。
+`Context` 提供 `extractOne()`、`extractStack()`、`extractAmount(long)`、`requestCraft()`、`copyName()`、`copyId()` 和 `searchSameMod()`。第三方自定义服务端动作仍必须使用自己的网络载荷，并重新验证玩家当前菜单、权限、资源键和数量，不能信任注册在客户端的菜单项。
 
 ## 8. Provider 调度批次回调
 

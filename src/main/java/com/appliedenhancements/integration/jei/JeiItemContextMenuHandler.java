@@ -4,7 +4,6 @@ import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.client.menu.NetworkItemContextMenu;
 import com.appliedenhancements.client.menu.NetworkItemContextMenu.ActionEntry;
 import com.appliedenhancements.client.menu.OptionalJeiItemContextMenu;
-import com.appliedenhancements.client.menu.ClientItemMenuActions;
 import com.appliedenhancements.client.menu.ItemContextMenuKeyMapping;
 import com.appliedenhancements.integration.ae2.NetworkItemContextMenuScreenBridge;
 import appeng.api.stacks.AEItemKey;
@@ -14,20 +13,17 @@ import appeng.menu.me.common.GridInventoryEntry;
 import appeng.menu.me.common.MEStorageMenu;
 import java.util.ArrayList;
 import java.util.Optional;
-import mezz.jei.api.ingredients.IIngredientType;
 import mezz.jei.api.ingredients.IIngredientHelper;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.runtime.IJeiRuntime;
 import mezz.jei.common.Internal;
-import mezz.jei.core.search.SearchMode;
 import mezz.jei.gui.util.CommandUtil;
 import mezz.jei.gui.util.GiveAmount;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
 /** JEI ingredient-list adapter for the shared item context menu. */
@@ -111,43 +107,6 @@ final class JeiItemContextMenuHandler
         menu.close();
     }
 
-    @Override
-    public boolean search(ResourceLocation id) {
-        java.util.Objects.requireNonNull(id, "id");
-        menu.close();
-        SearchMode resourceSearch = Internal.getJeiClientConfigs()
-                .getIngredientFilterConfig()
-                .getResourceLocationSearchMode();
-        String query = resourceSearch == SearchMode.DISABLED
-                ? findDisplayName(id).orElseGet(() ->
-                        id.getPath().replace('_', ' '))
-                : "&" + id;
-        runtime.getIngredientFilter().setFilterText(query);
-        return true;
-    }
-
-    private Optional<String> findDisplayName(ResourceLocation id) {
-        var manager = runtime.getIngredientManager();
-        for (IIngredientType<?> type : manager.getRegisteredIngredientTypes()) {
-            Optional<String> result = findDisplayName(type, id);
-            if (result.isPresent()) {
-                return result;
-            }
-        }
-        return Optional.empty();
-    }
-
-    private <T> Optional<String> findDisplayName(
-            IIngredientType<T> type, ResourceLocation id) {
-        var manager = runtime.getIngredientManager();
-        IIngredientHelper<T> helper = manager.getIngredientHelper(type);
-        return manager.getAllIngredients(type).stream()
-                .filter(ingredient -> id.equals(
-                        helper.getResourceLocation(ingredient)))
-                .map(helper::getDisplayName)
-                .findFirst();
-    }
-
     private <T> void openCaptured(
             Screen screen,
             double mouseX,
@@ -218,11 +177,6 @@ final class JeiItemContextMenuHandler
                 () -> copyToClipboard(
                         id,
                         "message.appliedenhancements.network_item_menu.copied_id")));
-        entries.add(new ActionEntry(Component.translatable(
-                        "gui.appliedenhancements.item_menu.share_to_chat"),
-                () -> ClientItemMenuActions.openShareDraft(
-                        Component.literal(name), id)));
-
         if (Internal.getClientToggleState().isCheatItemsEnabled()
                 && !cheatStack.isEmpty()) {
             entries.add(new ActionEntry(Component.translatable(
