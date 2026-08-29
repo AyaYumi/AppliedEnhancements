@@ -37,3 +37,7 @@ desktop.ini
 *.log.gz
 *.tmp
 *~
+
+# local release notes
+/CHANGELOG.md
+/CHANGELOG_*.md
