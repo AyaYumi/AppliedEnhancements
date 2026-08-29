@@ -44,7 +44,10 @@ displayURL="https://github.com/AyaYumi/AppliedEnhancements" #optional
 authors="${mod_authors}" #optional
 
 # The description text for the mod (multi line!) (#mandatory)
-description='''${mod_description}'''
+description='''${mod_description}
+
+Applied Enhancements - 通用 AE2 系统增强模组。
+提供超大数量合成、样板缓存、无限容量显示，以及面向 AE2 与其附属模组的兼容性修复。'''
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
 [[mixins]]

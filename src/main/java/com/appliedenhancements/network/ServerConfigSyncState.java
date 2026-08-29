@@ -1,7 +1,6 @@
 package com.appliedenhancements.network;
 
 import com.appliedenhancements.Config;
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
 import org.jetbrains.annotations.ApiStatus;
 
 /** Client view of server-authoritative settings used by client-side menus. */
@@ -24,12 +23,17 @@ public final class ServerConfigSyncState {
         return current().progressDisplayEnabled();
     }
 
+    public static boolean isInfiniteStorageLimitBypassEnabled() {
+        return current().infiniteStorageLimitBypassEnabled();
+    }
+
     static void accept(long maxCraftingOrderAmount, boolean longRangeCraftingEnabled,
-            boolean progressDisplayEnabled) {
+            boolean progressDisplayEnabled, boolean infiniteStorageLimitBypassEnabled) {
         synchronizedValues = new Values(
                 maxCraftingOrderAmount,
                 longRangeCraftingEnabled,
-                progressDisplayEnabled);
+                progressDisplayEnabled,
+                infiniteStorageLimitBypassEnabled);
     }
 
     static void reset() {
@@ -48,12 +52,13 @@ public final class ServerConfigSyncState {
         }
         return new Values(
                 Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
-                AppliedEnhancementsConfig.COMMON.enableLongRangeCrafting.get(),
-                AppliedEnhancementsConfig.COMMON.enableProgressDisplay.get());
+                Config.ENABLE_LONG_RANGE_CRAFTING.get(),
+                Config.ENABLE_PROGRESS_DISPLAY.get(),
+                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get());
     }
 
     record Values(long maxCraftingOrderAmount, boolean longRangeCraftingEnabled,
-            boolean progressDisplayEnabled) {
+            boolean progressDisplayEnabled, boolean infiniteStorageLimitBypassEnabled) {
         Values {
             if (maxCraftingOrderAmount <= 0) {
                 throw new IllegalArgumentException("Maximum crafting order amount must be positive");

@@ -3,6 +3,7 @@ package com.appliedenhancements.mixin;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.AmountFormat;
 import com.appliedenhancements.storage.InfiniteStorageAmounts;
+import com.appliedenhancements.network.ServerConfigSyncState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -16,7 +17,9 @@ public abstract class AEKeyAmountMixin {
             long amount,
             AmountFormat format,
             CallbackInfoReturnable<String> callback) {
-        if (amount == InfiniteStorageAmounts.DISPLAY_AMOUNT && format != AmountFormat.FULL) {
+        if (ServerConfigSyncState.isInfiniteStorageLimitBypassEnabled()
+                && amount == InfiniteStorageAmounts.DISPLAY_AMOUNT
+                && format != AmountFormat.FULL) {
             callback.setReturnValue(InfiniteStorageAmounts.DISPLAY_TEXT);
         }
     }

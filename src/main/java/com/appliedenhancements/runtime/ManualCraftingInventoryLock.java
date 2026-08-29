@@ -5,7 +5,7 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
+import com.appliedenhancements.Config;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -25,7 +25,7 @@ public final class ManualCraftingInventoryLock {
 
     /** The lock deliberately follows the automatic planner's existing switch. */
     public static boolean enabled() {
-        return AppliedEnhancementsConfig.COMMON.enableAutomaticMaxFastPlanner.get();
+        return Config.ENABLE_AUTOMATIC_MAX_FAST_PLANNER.get();
     }
 
     public static Reservation tryAcquire(

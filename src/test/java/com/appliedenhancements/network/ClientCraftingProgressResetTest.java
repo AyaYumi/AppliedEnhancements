@@ -41,8 +41,8 @@ class ClientCraftingProgressResetTest {
     void connectionChangeResetsDistinctPlayerAndScreenMenusAndServerSnapshot() {
         var playerMenu = new FakeProgressMenu(activeProgress(30, 1));
         var screenMenu = new FakeProgressMenu(activeProgress(31, 1));
-        var fallback = new ServerConfigSyncState.Values(128, false, true);
-        ServerConfigSyncState.accept(Long.MAX_VALUE, true, false);
+        var fallback = new ServerConfigSyncState.Values(128, false, true, false);
+        ServerConfigSyncState.accept(Long.MAX_VALUE, true, false, true);
 
         assertEquals(2, ClientCraftingProgressReset.resetForConnectionChange(
                 playerMenu, screenMenu, playerMenu, null, new Object()));

@@ -19,6 +19,8 @@
     "CraftingSimulationStateLongSafetyMixin",
     "CraftingTreeNodeLongSafetyMixin",
     "CraftingTreeProcessLongSafetyMixin",
+    "ExternalStorageFacadeItemHandlerMixin",
+    "ItemHandlerStrategyMixin",
     "MEStorageMenuContextMixin",
     "NetworkStorageMixin",
     "NetworkCraftingSimulationStateInventoryLockMixin",
@@ -27,10 +29,13 @@
     "OmniCraftingTreeProcessAccessor",
     "PatternAccessTermMenuBatchMoveMixin",
     "PatternContainerTrackerAccessor",
+    "StackImportFacadeMixin",
+    "StorageImportStrategyMixin",
     "StorageCellsMixin"
   ],
   "client": [
     "AEKeyAmountMixin",
+    "AbstractContainerScreenPatternSourceTooltipMixin",
     "AbstractContainerScreenQuickMoveMixin",
     "CraftAmountScreenMixin",
     "NumberEntryWidgetAccessor",

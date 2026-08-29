@@ -6,7 +6,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 MAX_FAST 合成规划器。
 
-> 当前版本：`1.0.1`
+> 当前版本：`1.0.3`
 >
 > 目标平台：Minecraft `1.21.1` / NeoForge / Java `21`
 
@@ -14,15 +14,18 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 | 功能 | 当前行为 |
 |---|---|
-| Long 范围合成 | 合成订单、网络载荷和规划过程使用 `long` 数量；默认单次上限为 1 万亿，可配置到 `Long.MAX_VALUE` |
+| Long 范围合成 | 合成订单、网络载荷和规划过程使用 `long` 数量；默认单次上限为 `Integer.MAX_VALUE`（2147483647），可配置到 `Long.MAX_VALUE` |
 | 精确数量校验 | 客户端与服务端共同校验输入，拒绝溢出、非法小数、负数以及会导致 AE2 原生规划器计数溢出的请求 |
 | 计算进度显示 | 合成确认界面显示等待、准备、编译、执行、原生计算、计划整理、完成或失败等阶段 |
 | 规划路径标识 | 计算结果可区分 `MAX_FAST`、`AE2 回退`、`AE2` 和通用的`外部规划器`路径 |
 | 重复产物样板筛选 | 在指定样板管理终端提供 AE2 风格按钮，按主产物筛选重复样板，并支持现有搜索框二次搜索 |
+| 失效样板查找 | 在指定样板管理终端单独筛出无法再解析的编码样板，并显示来源机器与原槽位 |
 | 快速移动样板 | 在样板管理终端中框选、剪切并事务粘贴样板，机器标题提供整组一键剪切/粘贴 |
 | 物品右键菜单 | 空手右击 ME 网络物品可取出、合成和复制 ID；右击 JEI 物品可查看配方、复制名称/ID，并在作弊模式下获取物品 |
 | MAX_FAST 规划器 | 默认不自动介入；第三方 Mod 可通过公共 API 主动调用，或由管理员通过配置显式启用 |
 | 手动计划库存锁 | 仅在自动 MAX_FAST 规划器开启时，预留合成确认界面计划使用的 ME 库存，避免提交前被其他任务抢占 |
+| 存储总线槽位索引 | 在 AE2 原有外部库存轮询中建立物品到候选槽位的倒排索引；抽取时验证候选槽，结果不足则回退原版完整扫描 |
+| 输入输出总线槽位路由 | 输入总线优先从刚枚举的槽位抽取，输出总线复用模拟插入发现的目标槽位；结果不足时均回退原版扫描 |
 | 样板缓存 | 缓存 AE2 样板输入有效性和容器物品结果，使用有界实例缓存控制内存占用 |
 | 材料汇总修正 | 使用饱和算术处理超大合成计划，避免存储、合成和缺失数量在预览中溢出 |
 | 无限容量显示 | 仅对 AE2 创造存储元件、ExtendedAE 无限元件或显式标记的磁盘使用 `9.2E`，不再探测任意存储实现 |
@@ -48,7 +51,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
 
 ```text
-build/libs/appliedenhancements-1.0.1.jar
+build/libs/appliedenhancements-1.0.3.jar
 ```
 
 同时需要安装匹配版本的 NeoForge 与 AE2。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
@@ -85,9 +88,9 @@ build/libs/appliedenhancements-1.0.1.jar
 
 MAX_FAST 会在单次合成计算会话中分析配方树，并尝试把可证明安全的节点聚合执行。存在容器物品、复杂候选、可复用输入或其他兼容边界时，规划器会保留局部原生语义，或把整次尝试交回 AE2。
 
-规划器只保留一套固定的 `AGGRESSIVE` 执行策略，不再提供 `OFF` / `SAFE` / `AGGRESSIVE` 模式选择。自动接入 AE2 原生规划的功能默认关闭；需要自动接入时，必须在服务端配置中显式启用 `enableAutomaticMaxFastPlanner`。
+规划器只保留一套固定的 `AGGRESSIVE` 执行策略，不再提供 `OFF` / `SAFE` / `AGGRESSIVE` 模式选择。自动接入 AE2 原生规划的功能默认关闭；需要自动接入时，必须在服务端配置中显式启用 `crafting.max_fast.enable_automatic_planner`。
 
-第三方 Mod 可以通过 `MaxFastCraftingPlanner` 公共接口主动创建会话并调用 MAX_FAST。API 调用不受 `enableAutomaticMaxFastPlanner` 开关影响，因此接入方可以自行决定何时使用 MAX_FAST、何时使用自己的规划器或回退 AE2。
+第三方 Mod 可以通过 `MaxFastCraftingPlanner` 公共接口主动创建会话并调用 MAX_FAST。API 调用不受 `crafting.max_fast.enable_automatic_planner` 开关影响，因此接入方可以自行决定何时使用 MAX_FAST、何时使用自己的规划器或回退 AE2。
 
 MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成计算会话内复用，不会建立跨世界或跨 Grid 的持久全局缓存。
 
@@ -99,7 +102,7 @@ MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成�
 
 ### 手动合成计划库存锁
 
-库存锁严格跟随 `enableAutomaticMaxFastPlanner`，没有独立开关。自动规划器关闭时不会创建预留，现有确认界面持有的预留也会停止限制提取并在下次菜单更新时释放；第三方通过 `MaxFastCraftingPlanner` API 主动调用规划器不会隐式开启库存锁。
+库存锁严格跟随 `crafting.max_fast.enable_automatic_planner`，没有独立开关。自动规划器关闭时不会创建预留，现有确认界面持有的预留也会停止限制提取并在下次菜单更新时释放；第三方通过 `MaxFastCraftingPlanner` API 主动调用规划器不会隐式开启库存锁。
 
 规划完成并仍停留在 AE2 合成确认界面时，服务端会全量预留 `ICraftingPlan.usedItems()` 中的物品和流体。任意材料无法完整预留时不保留部分结果，而是根据扣除了其他确认菜单预留量的库存重新计算。实际提取和模拟提取都会保护其他计划的份额；订单提交期间只允许当前计划使用自己持有的份额。
 
@@ -107,18 +110,22 @@ MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成�
 
 ## 重复产物样板筛选
 
-以下终端的搜索框旁会显示一个 AE2 风格的重复筛选按钮：
+以下终端会显示一个 AE2 风格的重复筛选按钮；普通 AE2 系列终端将管理按钮集中在标题与搜索栏下方的第二行工具栏中：
 
 - AE2 样板管理终端；
 - AE2WTLib 无线样板管理终端；
 - ExtendedAE 扩展样板管理终端；
 - ExtendedAE 无线扩展样板管理终端。
 
-启用后，只保留主产物在当前终端中出现至少两次的样板，并按主产物自动聚类排序；相同产物的样板会连续排列并显示浅蓝色槽位背景。重复判断使用完整的 `AEKey`，忽略产出数量；同一产物即使每次产出数量不同，也会被视为重复。搜索框会继续在重复结果内筛选，关闭按钮后恢复终端原有列表。排序只改变客户端显示，点击操作仍映射到原供应器和原槽位。
+启用后，只保留主产物在当前终端中出现至少两次的样板，并按主产物自动聚类排序；相同产物的样板会连续排列并显示浅蓝色槽位背景。每张样板右上角会显示来源机器的小图标，悬停样板可查看机器名称、同名机器序号和原机器槽位；悬停产物分组标题还能查看该组的来源机器汇总。重复判断使用完整的 `AEKey`，忽略产出数量；同一产物即使每次产出数量不同，也会被视为重复。搜索框会继续在重复结果内筛选，关闭按钮后恢复终端原有列表。排序只改变客户端显示，点击操作仍映射到原供应器和原槽位。
+
+## 查找失效样板
+
+上述四类样板管理终端还会提供独立的“失效”按钮。普通 AE2 系列终端的第二行工具栏依次排列“重复 / 失效 / 移动”，避免按钮遮挡本地化标题；ExtendedAE 系列保留原有顶部布局。启用失效筛选后，只显示 AE2 与已注册第三方解析器均无法再解析的编码样板，并按机器类型聚组、使用红色槽位底色。每张结果仍会显示来源机器角标，悬停可查看原机器与原槽位；原搜索框可继续按机器名或样板物品名二次过滤。“重复”“失效”和“移动”三种模式互斥。
 
 ## 快速移动样板
 
-上述四类样板管理终端的搜索栏旁提供独立的“移动”按钮：
+上述四类样板管理终端提供独立的“移动”按钮：
 
 - 开启后按住左键拖动可框选当前可见样板，每次框选都会替换上一次选择；
 - 左键单击样板可切换其选中状态；
@@ -127,7 +134,7 @@ MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成�
 - 每个机器组标题前提供“剪”和“贴”按钮，用于整组一键剪切和粘贴；
 - 关闭快速移动模式或退出当前终端会清除选择与剪切缓存。
 
-粘贴由服务端重新验证来源、目标与容量。只有全部样板都能放入时才提交；任意目标无效、空间不足或执行异常都会取消操作并恢复库存。
+粘贴由服务端重新验证来源、目标与容量。无法再解析的编码样板会被跳过并留在原槽位，其余有效样板仍按全有或全无的事务一次性移动；来源已变化、目标无效、空间不足或执行异常都会取消有效样板的移动并恢复库存。
 
 ## 网络物品右键菜单
 
@@ -161,33 +168,31 @@ MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成�
 
 项目不根据特定 Mod ID、类名或约定优先级协调第三方规划器。第三方实现返回非 AE2 原生的 `ICraftingPlan` 时，结果界面会统一标记为`外部规划器`；该标记只用于展示，不代表已经解决多个规划器同时修改 AE2 流程时的执行顺序冲突。
 
-默认配置下 MAX_FAST 不会自动修改规划结果。未接入公共 API 的整合包只有在明确需要本模组接管 AE2 原生规划时，才应将 `enableAutomaticMaxFastPlanner` 设为 `true`。旧版的 `enableMaxFastPlanner` 配置键已失效，不会在升级后意外开启自动规划。
+默认配置下 MAX_FAST 不会自动修改规划结果。未接入公共 API 的整合包只有在明确需要本模组接管 AE2 原生规划时，才应将 `crafting.max_fast.enable_automatic_planner` 设为 `true`。旧版的 `enableMaxFastPlanner` 配置键已失效，不会在升级后意外开启自动规划。
 
 ## 配置
 
-首次启动后会生成两个 COMMON 配置文件。
-
-### `config/appliedenhancements-common.toml`
+首次启动后只生成一个 COMMON 配置文件：`config/appliedenhancements-common.toml`。
 
 | 配置键 | 默认值 | 有效范围 | 说明 |
 |---|---:|---:|---|
-| `crafting.max_crafting_order_amount` | `1000000000000` | `1` ～ `Long.MAX_VALUE` | 单次 AE2 自动合成订单的最大数量 |
-| `caching.enable_pattern_caching` | `true` | 布尔值 | 启用样板输入验证与容器物品缓存 |
-| `caching.pattern_cache_size` | `32` | `8` ～ `256` | 每个样板的多键缓存最大条目数 |
-| `crafting_plan.enable_enhanced_material_calculation` | `true` | 布尔值 | 启用增强的存储、合成和缺失材料统计 |
+| `crafting.enable_long_range_crafting` | `true` | 布尔值 | 启用超过 `Integer.MAX_VALUE` 的合成订单 |
+| `crafting.max_crafting_order_amount` | `2147483647` | `1` ～ `Long.MAX_VALUE` | 单次 AE2 自动合成订单的最大数量 |
+| `crafting.enable_progress_display` | `false` | 布尔值 | 启用合成计算进度和路径显示 |
+| `crafting.enable_enhanced_material_calculation` | `false` | 布尔值 | 启用增强的存储、合成和缺失材料统计 |
+| `crafting.max_fast.enable_automatic_planner` | `false` | 布尔值 | 允许自动接入 AE2 原生规划，并启用手动计划库存锁 |
+| `crafting.max_fast.max_nodes` | `100000` | `1000` ～ `1000000` | 单次分析允许的最大节点数 |
+| `crafting.max_fast.compile_budget_ms` | `2000` | `100` ～ `30000` | 单次配方树分析的时间预算，单位为毫秒 |
+| `crafting.max_fast.enable_diagnostics` | `false` | 布尔值 | 输出详细的编译、执行与回退诊断日志 |
+| `performance.pattern_cache.enabled` | `true` | 布尔值 | 启用样板输入与容器返还物缓存 |
+| `performance.pattern_cache.max_entries_per_pattern` | `32` | `8` ～ `256` | 每张样板保留的多键缓存最大条目数 |
+| `performance.storage_bus.enable_slot_index` | `true` | 布尔值 | 为物品存储总线启用候选槽位索引 |
+| `performance.io_bus.enable_slot_routing` | `true` | 布尔值 | 为输入与输出总线启用经过验证的槽位提示 |
+| `storage.infinite.enable_listing_limit_bypass` | `false` | 布尔值 | 将无限磁盘网络数量提升到 `Long.MAX_VALUE` 并显示为 `9.2E` |
 
-### `config/appliedenhancements-maxfast.toml`
+旧版拆分的 `appliedenhancements-common.toml` 与 `appliedenhancements-maxfast.toml` 会自动迁移。原 common 文件会以 `.pre-unified.bak` 后缀备份，旧 MAX_FAST 文件会改名为 `.migrated.bak`，已有自定义值会被保留。
 
-| 配置键 | 默认值 | 有效范围 | 说明 |
-|---|---:|---:|---|
-| `features.enableLongRangeCrafting` | `true` | 布尔值 | 启用超过 `Integer.MAX_VALUE` 的合成订单 |
-| `features.enableProgressDisplay` | `true` | 布尔值 | 启用合成计算进度和路径显示 |
-| `maxfast.enableAutomaticMaxFastPlanner` | `false` | 布尔值 | 允许本模组自动接入 AE2 原生规划，并启用手动计划库存锁；不影响第三方 API 调用 |
-| `maxfast.maxFastMaxNodes` | `100000` | `1000` ～ `1000000` | 单次分析允许的最大节点数 |
-| `maxfast.maxFastCompileBudgetMs` | `2000` | `100` ～ `30000` | 单次配方树分析的时间预算，单位为毫秒 |
-| `debug.maxFastDiagnostics` | `false` | 布尔值 | 输出详细的编译、执行与回退诊断日志 |
-
-`maxFastDiagnostics` 会产生大量日志，只应在定位回退原因或兼容问题时临时启用。
+`crafting.max_fast.enable_diagnostics` 会产生大量日志，只应在定位回退原因或兼容问题时临时启用。
 
 ## 无限存储磁盘标记
 
@@ -200,7 +205,7 @@ MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成�
 | 其他 Mod / 数据包 | 物品标签 `#appliedenhancements:infinite_storage_cells` |
 | Java 接入 | 运行时 `StorageCell` 实现 `InfiniteStorageCellMarker` |
 
-被识别的磁盘会在物品内容提示和 ME 网络数量中使用 `Long.MAX_VALUE` 哨兵，并紧凑显示为 `9.2E`。标记只声明磁盘本身已经提供无限内容，不会把普通有限磁盘变成真正的无限物品来源。
+启用 `storage.infinite.enable_listing_limit_bypass` 时，被识别的磁盘会在物品内容提示和 ME 网络数量中使用 `Long.MAX_VALUE` 哨兵，并紧凑显示为 `9.2E`；关闭后保留磁盘原实现报告的数量。标记只声明磁盘本身已经提供无限内容，不会把普通有限磁盘变成真正的无限物品来源。
 
 KubeJS 可以直接向公共物品标签添加磁盘：
 
@@ -230,7 +235,7 @@ ServerEvents.tags('item', event => {
 构建产物位于：
 
 ```text
-build/libs/appliedenhancements-1.0.1.jar
+build/libs/appliedenhancements-1.0.3.jar
 ```
 
 ## 验证范围
@@ -259,7 +264,7 @@ build/libs/appliedenhancements-1.0.1.jar
 | `MaxFastCraftingPlanner` | 为其他 Mod 提供 MAX_FAST 会话创建、进度回调、执行结果和失败状态自动回滚接口 |
 | `InfiniteStorageCellMarker` | 由第三方运行时 `StorageCell` 实现，声明其内容应使用无限哨兵显示 |
 | `InfiniteStorageCells.ITEM_TAG` | 公共物品标签 `#appliedenhancements:infinite_storage_cells`，供数据包和 KubeJS 标记磁盘 |
-| `PatternDuplicateApi` | 解析样板产物、按忽略数量的产物键查找重复样板，并注册第三方样板解析器 |
+| `PatternDuplicateApi` | 解析样板产物、查找重复或失效样板，并注册第三方样板解析器 |
 | `PatternOutputResolver` | 让第三方编码样板向重复筛选功能提供有序产物键 |
 | `PatternBatchMoveApi` | 发起快速移动请求，并为自定义服务端菜单注册原子移动处理器 |
 | `PatternTerminalIntegrationApi` | 注册兼容 AE2 或 ExtendedAE 行布局的第三方样板终端界面 |
@@ -269,7 +274,7 @@ build/libs/appliedenhancements-1.0.1.jar
 
 公共接口直接引用 AE2 类型，因此开发者依赖至少需要 AE2 `19.2.17`，并应在相同的 AE2 主版本内完成兼容验证。
 
-`MaxFastCraftingPlanner.createConfigured(...)` 使用服务端配置的节点数与编译预算，但不会检查 `enableAutomaticMaxFastPlanner`。每个 AE2 合成计算应创建一个会话，并在该计算的实际尝试和模拟尝试之间复用；当结果的 `shouldFallback()` 为 `true` 时，API 已恢复缺失物品计数与候选状态，调用方可以安全地继续自己的规划器或 AE2 原生流程。
+`MaxFastCraftingPlanner.createConfigured(...)` 使用服务端配置的节点数与编译预算，但不会检查 `crafting.max_fast.enable_automatic_planner`。每个 AE2 合成计算应创建一个会话，并在该计算的实际尝试和模拟尝试之间复用；当结果的 `shouldFallback()` 为 `true` 时，API 已恢复缺失物品计数与候选状态，调用方可以安全地继续自己的规划器或 AE2 原生流程。
 
 ```java
 var planner = MaxFastCraftingPlanner.createConfigured(
@@ -288,7 +293,7 @@ if (result.shouldFallback()) {
 
 如果 Applied Enhancements 是可选依赖，接入 Mod 应把上述调用放在仅当本模组已加载时才会加载的兼容类中。
 
-### 重复样板与快速移动 API
+### 样板筛选与快速移动 API
 
 第三方编码样板如果不能被 AE2 的 `PatternDetailsHelper` 解码，可以注册产物解析器。返回列表的第一个 `AEKey` 是重复分组使用的主产物；数量不属于分组键。返回空列表表示当前解析器不处理该物品，API 会继续尝试低优先级解析器，最后回退 AE2 原生解码。
 
@@ -304,7 +309,7 @@ PatternDuplicateApi.registerOutputResolver(
         });
 ```
 
-兼容现有行模型的终端可以在客户端初始化阶段注册其精确界面类名。本模组随后会自动添加“重复”“移动”“剪”“贴”、框选和右键菜单。注册为 `AE2_PATTERN_ACCESS` 的界面必须继承 AE2 样板管理终端并保持其行布局；注册为 `EXTENDEDAE_PATTERN_ACCESS` 的界面必须继承 ExtendedAE 扩展样板终端并保持对应布局。
+兼容现有行模型的终端可以在客户端初始化阶段注册其精确界面类名。本模组随后会自动添加“重复”“失效”“移动”“剪”“贴”、框选和右键菜单。注册为 `AE2_PATTERN_ACCESS` 的界面必须继承 AE2 样板管理终端并保持其行布局；注册为 `EXTENDEDAE_PATTERN_ACCESS` 的界面必须继承 ExtendedAE 扩展样板终端并保持对应布局。
 
 ```java
 PatternTerminalIntegrationApi.register(

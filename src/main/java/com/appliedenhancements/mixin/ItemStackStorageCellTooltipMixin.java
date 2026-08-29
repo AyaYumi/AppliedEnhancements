@@ -9,6 +9,7 @@ import appeng.api.stacks.GenericStack;
 import appeng.api.storage.StorageCells;
 import appeng.items.storage.StorageCellTooltipComponent;
 import com.appliedenhancements.api.InfiniteStorageCells;
+import com.appliedenhancements.network.ServerConfigSyncState;
 import com.appliedenhancements.storage.InfiniteStorageAmounts;
 import com.appliedenhancements.storage.InfiniteStorageCellRegistry;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,6 +23,10 @@ public abstract class ItemStackStorageCellTooltipMixin {
     @Inject(method = "getTooltipImage", at = @At("RETURN"), cancellable = true)
     private void appliedenhancements$markInfiniteCellContents(
             CallbackInfoReturnable<Optional<TooltipComponent>> callback) {
+        if (!ServerConfigSyncState.isInfiniteStorageLimitBypassEnabled()) {
+            return;
+        }
+
         var original = callback.getReturnValue();
         if (original.isEmpty() || !(original.get() instanceof StorageCellTooltipComponent component)) {
             return;

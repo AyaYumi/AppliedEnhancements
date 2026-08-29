@@ -14,7 +14,6 @@ import appeng.menu.slot.AppEngSlot;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
 import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import org.spongepowered.asm.mixin.Final;
@@ -51,7 +50,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
             return;
         }
 
-        if (!AppliedEnhancementsConfig.COMMON.enableLongRangeCrafting.get()) {
+        if (!Config.ENABLE_LONG_RANGE_CRAFTING.get()) {
             if (amount <= Integer.MAX_VALUE) {
                 menu.confirm((int) amount, craftMissingAmount, autoStart);
             } else {

@@ -87,7 +87,7 @@ A runtime Mod ID check is not sufficient when a main mod class, field, method si
 | `MaxFastCraftingPlanner` | Server | Once per AE2 crafting calculation | Invokes the MAX_FAST planner explicitly |
 | `InfiniteStorageCellMarker` | Both | Implemented by a runtime storage type | Marks a runtime infinite-storage implementation |
 | `InfiniteStorageCells` | Both | Data pack or runtime query | Exposes the public infinite-cell item tag |
-| `PatternDuplicateApi` | Both | Register during Common Setup | Resolves outputs and finds duplicate patterns |
+| `PatternDuplicateApi` | Both | Register during Common Setup | Resolves outputs and finds duplicate or invalid patterns |
 | `PatternOutputResolver` | Both | Register during Common Setup | Decodes outputs from third-party encoded patterns |
 | `PatternTerminalIntegrationApi` | Client | Register during Client Setup | Adds support to a compatible pattern-terminal screen |
 | `PatternBatchMoveApi` | Client and server | Register server handlers during Common Setup | Performs atomic pattern batch movement |
@@ -100,7 +100,7 @@ A runtime Mod ID check is not sufficient when a main mod class, field, method si
 
 ### Core rules
 
-- Applied Enhancements' automatic planner integration is disabled by default, but public API calls are independent of `enableAutomaticMaxFastPlanner`.
+- Applied Enhancements' automatic planner integration is disabled by default, but public API calls are independent of `crafting.max_fast.enable_automatic_planner`.
 - Create one `MaxFastCraftingPlanner` instance for each AE2 crafting calculation.
 - The same instance may be reused for the real and simulated attempts of that calculation.
 - Planner instances are not thread-safe and must not be shared across calculation roots or parallel threads.
@@ -237,7 +237,7 @@ public final class ExampleInfiniteInventory
 
 The marker tells Applied Enhancements that the implementation already provides infinite contents and should use the infinite quantity sentinel and compact `9.2E` display. It does not turn a finite cell into an actual infinite source.
 
-## 3. Third-party encoded patterns and duplicate outputs
+## 3. Third-party encoded patterns and pattern filters
 
 ### Registering an output resolver
 
@@ -264,7 +264,7 @@ Resolver behavior:
 - Output quantities are deliberately absent, so duplicate comparison ignores produced amount.
 - Resolver exceptions are logged and skipped before the API continues with another resolver or AE2's native decoder.
 
-### Using duplicate detection directly
+### Using duplicate and invalid-pattern detection directly
 
 ```java
 List<PatternDuplicateApi.PatternEntry> entries = collectEntries();
@@ -274,6 +274,9 @@ Map<PatternSlotRef, AEKey> outputs =
 
 Set<PatternSlotRef> duplicateSlots =
         PatternDuplicateApi.findDuplicateSlots(outputs);
+
+Set<PatternSlotRef> invalidSlots =
+        PatternDuplicateApi.findInvalidSlots(entries, level);
 ```
 
 Integrations with their own stable grouping key can use the generic overload:
@@ -285,7 +288,7 @@ Set<PatternSlotRef> duplicates =
 
 `PatternSlotRef.containerId()` is the server ID AE2 assigns to the machine container, not a menu slot index. A reference is valid only while the current terminal remains open.
 
-`PatternDuplicateApi.outputMatchesSearch(...)` checks the localized display names of all resolved output keys against a lowercase filter.
+`PatternDuplicateApi.isInvalidPattern(...)` reports encoded patterns that neither AE2 nor a registered custom output resolver can resolve. `outputMatchesSearch(...)` checks the localized display names of all resolved output keys against a lowercase filter.
 
 ## 4. Compatible pattern-terminal registration
 
@@ -305,7 +308,9 @@ Available layout families:
 | `AE2_PATTERN_ACCESS` | The screen must extend the AE2 Pattern Access Terminal and preserve its slot-row and machine-header layout |
 | `EXTENDEDAE_PATTERN_ACCESS` | The screen must extend the ExtendedAE terminal and preserve its corresponding layout |
 
-A compatible registered terminal receives duplicate filtering, Quick Move, box selection, the right-click context menu, and machine-group Cut/Paste controls. Duplicate mode and Quick Move mode are mutually exclusive.
+A compatible registered terminal receives duplicate and invalid-pattern filtering, Quick Move, box selection, the right-click context menu, and machine-group Cut/Paste controls. Duplicate, invalid-pattern, and Quick Move modes are mutually exclusive.
+
+AE2-family screens inherit the dedicated second toolbar row used by the built-in Pattern Access Terminal, keeping the localized title and search field unobstructed. ExtendedAE-family screens retain their existing top-row control layout.
 
 Built-in registrations already cover:
 
@@ -386,6 +391,8 @@ Fields and limits:
 | `preferredTargetSlot` | Preferred destination slot; use `-1` for automatic placement |
 
 Client data is untrusted. The server handler must revalidate the menu ID, player access, source contents, target capacity, and same-source targets, then guarantee all-or-nothing behavior.
+
+The built-in `PatternAccessTermMenu` handler uses `PatternDuplicateApi.isInvalidPattern(...)` to skip unresolvable encoded patterns before planning the transaction. Those patterns remain in their original slots, while every remaining valid source is still committed atomically. Custom handlers can adopt the same policy when they need matching behavior.
 
 `PatternBatchMoveApi` catches handler runtime exceptions and returns `APPLY_FAILED`, but a custom handler remains responsible for restoring any inventory state it modified before throwing.
 

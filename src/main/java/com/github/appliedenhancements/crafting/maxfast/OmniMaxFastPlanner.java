@@ -16,7 +16,7 @@ import appeng.crafting.pattern.AEProcessingPattern;
 import appeng.crafting.pattern.AESmithingTablePattern;
 import appeng.crafting.pattern.AEStonecuttingPattern;
 import com.appliedenhancements.AppliedEnhancements;
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
+import com.appliedenhancements.Config;
 import com.github.appliedenhancements.crafting.MolecularReusableInputAdapters;
 import com.github.appliedenhancements.integration.ae2.OmniCraftingTreeNodeBridge;
 import com.github.appliedenhancements.integration.ae2.OmniCraftingTreeProcessBridge;
@@ -141,7 +141,7 @@ public final class OmniMaxFastPlanner {
                                 structuralFailure = contextSplitKeys.size() >= splitLimit
                                         ? "context_split_limit"
                                         : "context_split_unstable:" + split.reason;
-                            } else if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+                            } else if (Config.MAX_FAST_DIAGNOSTICS.get()) {
                                 AppliedEnhancements.LOGGER.info(
                                         "Omni MAX_FAST context split retry: key={}, reason={}, splitKeys={}",
                                         split.triggerKey, split.reason,
@@ -627,7 +627,7 @@ public final class OmniMaxFastPlanner {
                     stagedMissing, attemptMissing,
                     "quantity_feedback_missing_overflow");
         } catch (Fallback fallback) {
-            if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+            if (Config.MAX_FAST_DIAGNOSTICS.get()) {
                 AppliedEnhancements.LOGGER.info(
                         "Omni MAX_FAST runtime quantity batch delegated to native: key={}, amount={}, aggregatedRequest={}, reason={}",
                         node.key, node.amount, requestMultipliers, fallback.reason);
@@ -637,7 +637,7 @@ public final class OmniMaxFastPlanner {
 
         attemptInventory.applyDiff(parent);
         stagedMissing.addAll(attemptMissing);
-        if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()
+        if (Config.MAX_FAST_DIAGNOSTICS.get()
                 || requestMultipliers >= 1_000_000) {
             AppliedEnhancements.LOGGER.info(
                     "Omni MAX_FAST runtime inventory-isolated quantity batch: key={}, amount={}, aggregatedRequest={}, patterns={}, stockedInputKeys={}",
@@ -787,7 +787,7 @@ public final class OmniMaxFastPlanner {
         Node node = graph.nodes.get(nodeIndex);
         node.orderedFallbackReason = null;
         node.orderedFallbackDetail = null;
-        boolean diagnostics = AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get();
+        boolean diagnostics = Config.MAX_FAST_DIAGNOSTICS.get();
         boolean certifiedPrefixProbe =
                 OmniFirstCandidatePrefixProbeScope.active();
         boolean deterministicCandidates = !certifiedPrefixProbe
@@ -3466,7 +3466,7 @@ public final class OmniMaxFastPlanner {
                     node.barrierReason, MAX_LINEAR_NATIVE_BOUNDARY_ITEMS);
             throw new Fallback("native_boundary_work_limit:" + node.barrierReason);
         }
-        boolean diagnostics = AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get();
+        boolean diagnostics = Config.MAX_FAST_DIAGNOSTICS.get();
         long startedAt = System.nanoTime();
         boolean completed = false;
         try {
@@ -3743,7 +3743,7 @@ public final class OmniMaxFastPlanner {
             return rejectReusableBoundary(node, details, "produced_output_mismatch", null);
         }
         attempt.applyDiff(parent);
-        if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+        if (Config.MAX_FAST_DIAGNOSTICS.get()) {
             AppliedEnhancements.LOGGER.info(
                     "Omni MAX_FAST reusable boundary applied: key={}, amount={}, requests={}, patterns={}, barrier={}, pattern={}",
                     node.key, node.amount, requestedAmount, patternTimes,
@@ -3790,7 +3790,7 @@ public final class OmniMaxFastPlanner {
 
     private static boolean rejectReusableBoundary(Node node, IPatternDetails details,
             String reason, RuntimeException exception) {
-        if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+        if (Config.MAX_FAST_DIAGNOSTICS.get()) {
             String pattern = describePattern(details);
             if (exception == null) {
                 AppliedEnhancements.LOGGER.info(
@@ -3981,7 +3981,7 @@ public final class OmniMaxFastPlanner {
                     child.molecularmanipulator$getWhat(), 1, logicalUses);
         }
 
-        if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get() && toolPool.size() > 1) {
+        if (Config.MAX_FAST_DIAGNOSTICS.get() && toolPool.size() > 1) {
             AppliedEnhancements.LOGGER.info(
                     "Omni MAX_FAST multi-tool pool batch: patterns={}, tools={}, totalCapacity={}",
                     patternTimes, toolPool.size(), totalCapacity);
@@ -4248,7 +4248,7 @@ public final class OmniMaxFastPlanner {
             return requestedMultipliers - extractedMultipliers;
         }
 
-        long startedAt = AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()
+        long startedAt = Config.MAX_FAST_DIAGNOSTICS.get()
                 ? System.nanoTime()
                 : 0;
         long remaining = requestedMultipliers;
@@ -4275,7 +4275,7 @@ public final class OmniMaxFastPlanner {
             }
         }
 
-        if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+        if (Config.MAX_FAST_DIAGNOSTICS.get()) {
             AppliedEnhancements.LOGGER.info(
                     "Omni MAX_FAST substitute input batch: key={}, amount={}, requested={}, extracted={}, remaining={}, templates={}, selectMs={}",
                     node.key, node.amount, requestedMultipliers,
@@ -4436,7 +4436,7 @@ public final class OmniMaxFastPlanner {
                     node.barrierReason = barrier.reason;
                     node.inspectedOccurrences = node.occurrences.size();
                     if (requiresImmediateFallback(barrier.reason)) {
-                        if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+                        if (Config.MAX_FAST_DIAGNOSTICS.get()) {
                             AppliedEnhancements.LOGGER.info(
                                     "Omni MAX_FAST compile-time fallback: key={}, amount={}, barrier={}, pattern={}",
                                     node.key, node.amount, node.barrierReason,
@@ -4543,7 +4543,7 @@ public final class OmniMaxFastPlanner {
                     node.executionMode = ExecutionMode.HYBRID_BARRIER;
                     node.barrierReason = fallbackReason;
 
-                    if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+                    if (Config.MAX_FAST_DIAGNOSTICS.get()) {
                         AppliedEnhancements.LOGGER.info(
                                 "Omni MAX_FAST hybrid barrier marked: key={}, amount={}, reason={}",
                                 node.key, node.amount, fallbackReason);
@@ -4649,7 +4649,7 @@ public final class OmniMaxFastPlanner {
                     owner.barrierReason = "quantity_feedback_descendant_unsafe";
                     owner.executionMode = ExecutionMode.HYBRID_BARRIER;
                     owner.deterministicCandidateSubgraph = null;
-                    if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+                    if (Config.MAX_FAST_DIAGNOSTICS.get()) {
                         AppliedEnhancements.LOGGER.info(
                                 "Omni MAX_FAST quantity feedback kept native: key={}, amount={}, reason=descendant_feedback_isolation",
                                 owner.key, owner.amount);
@@ -4882,7 +4882,7 @@ public final class OmniMaxFastPlanner {
                         node.allCandidatesCompiled = false;
                         node.candidateCompileFailures.put(
                                 candidateIndex, barrier.reason);
-                        if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+                        if (Config.MAX_FAST_DIAGNOSTICS.get()) {
                             AppliedEnhancements.LOGGER.info(
                                     "Omni MAX_FAST candidate compile skipped: key={}, candidate={}, candidates={}, reason={}",
                                     node.key, candidateIndex, processes.size(), barrier.reason);
@@ -5433,7 +5433,7 @@ public final class OmniMaxFastPlanner {
                 return;
             }
             if (crossAmountContextSensitiveKeys.add(node.key)
-                    && AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+                    && Config.MAX_FAST_DIAGNOSTICS.get()) {
                 AppliedEnhancements.LOGGER.info(
                         "Omni MAX_FAST cross-amount context sensitivity: key={}, canonicalAmount={}, conflictingAmount={}, canonicalPath={}, conflictingPath={}",
                         node.key, existing.amount, node.amount,
@@ -5485,7 +5485,7 @@ public final class OmniMaxFastPlanner {
          */
         private void logContextualTerminalConflict(Node node, RecipeContext context,
                 List<CraftingTreeProcess> occurrenceProcesses) {
-            if (!AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+            if (!Config.MAX_FAST_DIAGNOSTICS.get()) {
                 return;
             }
 

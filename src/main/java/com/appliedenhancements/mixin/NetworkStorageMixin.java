@@ -11,6 +11,7 @@ import appeng.me.storage.NetworkStorage;
 import com.appliedenhancements.storage.InfiniteStorageAmounts;
 import com.appliedenhancements.storage.InfiniteStorageCellRegistry;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
+import com.appliedenhancements.Config;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.Mixin;
@@ -37,6 +38,11 @@ public abstract class NetworkStorageMixin {
             MEStorage storage,
             KeyCounter output,
             Operation<Void> original) {
+        if (!Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get()) {
+            original.call(storage, output);
+            return;
+        }
+
         StorageCell storageCell;
         if (storage instanceof StorageCell directCell) {
             storageCell = directCell;

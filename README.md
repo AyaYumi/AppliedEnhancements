@@ -10,7 +10,7 @@ Applied Enhancements is a NeoForge quality-of-life and performance addon for App
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.1`
+> Current version: `1.0.3`
 >
 > Target: Minecraft `1.21.1` / NeoForge / Java `21`
 
@@ -18,13 +18,16 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 
 | Feature | Behavior |
 |---|---|
-| Long-range crafting | Crafting requests, payloads, summaries, and execution support `long` quantities. The default per-order limit is one trillion and can be configured up to `Long.MAX_VALUE`. |
+| Long-range crafting | Crafting requests, payloads, summaries, and execution support `long` quantities. The default per-order limit is `Integer.MAX_VALUE` and can be configured up to `Long.MAX_VALUE`. |
 | Exact validation | Client and server reject overflow, decimals, negative values, and requests that would cross proven native-planner safety boundaries. |
 | Calculation progress | The confirmation screen shows queueing, preparation, compilation, execution, native calculation, plan building, completion, and failure states. |
 | Planning-path display | Completed results distinguish `MAX_FAST`, `AE2 fallback`, native `AE2`, and generic `external planner` paths. |
 | MAX_FAST planner | Provides one AGGRESSIVE planning policy. Automatic integration is disabled by default, while other Java mods may call the public planner API directly. |
 | Manual-plan inventory lock | When automatic MAX_FAST is enabled, open confirmation screens reserve the ME items and fluids used by their plans. |
+| Storage-bus slot index | Builds an item-to-slot candidate index during AE2's normal external-inventory polling; cached extraction validates every candidate and falls back to AE2's full scan when needed. |
+| Import/export bus slot routing | Import buses try the slot they just enumerated, while export buses reuse target slots learned during simulated insertion; incomplete transfers fall back to AE2's scan. |
 | Duplicate-output patterns | Supported pattern terminals can show only encoded patterns whose primary output occurs more than once, ignoring output quantity. |
+| Invalid-pattern finder | Supported pattern terminals can isolate encoded patterns that can no longer be resolved and show their source machine and slot. |
 | Quick pattern movement | Select patterns by clicking or dragging, then atomically cut and paste them between compatible machines. |
 | Item context menus | Right-click ME entries to extract, craft, or copy IDs; right-click JEI entries to view recipes, copy names/IDs, and use JEI-authorized cheat actions. |
 | Infinite-cell markers | AE2 creative cells, supported ExtendedAE infinite cells, tagged items, and Java marker implementations use the compact `9.2E` display. |
@@ -51,7 +54,7 @@ The minimum NeoForge, AE2, and ExtendedAE versions are aligned with OmniSequence
 Install the same Applied Enhancements version on both the client and server, together with compatible NeoForge and AE2 versions.
 
 ```text
-mods/appliedenhancements-1.0.1.jar
+mods/appliedenhancements-1.0.3.jar
 ```
 
 ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
@@ -83,8 +86,8 @@ The planner exposes one fixed `AGGRESSIVE` policy. It no longer has OFF/SAFE/AGG
 Automatic interception of AE2's native planner is disabled by default:
 
 ```toml
-[maxfast]
-enableAutomaticMaxFastPlanner = false
+[crafting.max_fast]
+enable_automatic_planner = false
 ```
 
 Third-party Java mods can invoke `MaxFastCraftingPlanner` regardless of this switch. The automatic switch only controls Applied Enhancements' built-in interception and the manual-plan inventory lock.
@@ -108,13 +111,23 @@ The following terminals are supported:
 - ExtendedAE Extended Pattern Access Terminal;
 - ExtendedAE Wireless Extended Pattern Access Terminal.
 
+AE2-family terminals place Duplicate, Invalid, and Quick Move controls together on a second toolbar row below the title and search field, preventing localized titles from being covered. ExtendedAE-family terminals retain their existing top-row layout.
+
 ### Duplicate-output mode
 
 - Shows only patterns whose primary output occurs at least twice.
 - Ignores output quantity when comparing primary outputs.
 - Groups equal outputs together and highlights them with a light-blue slot background.
+- Shows a source-machine badge on every result; hovering a pattern reveals its machine name, same-name machine ordinal, and original machine slot.
+- Summarizes all source machines in the output-group header tooltip.
 - Keeps the terminal's normal search field available inside the duplicate result set.
 - Changes client display order only; interactions still map to the original provider and slot.
+
+### Invalid-pattern mode
+
+- Shows only encoded patterns that AE2 and registered output resolvers can no longer resolve.
+- Groups invalid patterns by machine type, highlights them in red, and preserves source-machine and original-slot tooltips.
+- Keeps the terminal search field available for filtering by source machine or pattern item name.
 
 ### Quick Move mode
 
@@ -124,9 +137,9 @@ The following terminals are supported:
 - Right-click empty pattern slots to open the Paste menu without extracting a pattern.
 - Use per-machine Cut and Paste controls for whole groups.
 - Clear selection and cut buffers when the mode or terminal closes.
-- Duplicate-output mode and Quick Move mode are mutually exclusive.
+- Duplicate-output, invalid-pattern, and Quick Move modes are mutually exclusive.
 
-Paste requests are revalidated and committed atomically by the server. Invalid sources, invalid targets, insufficient capacity, or execution failures leave no partial movement.
+Paste requests are revalidated and committed atomically by the server. Encoded patterns that can no longer be resolved are skipped and remain in their source slots, while every valid selected pattern is moved together. Stale sources, invalid targets, insufficient capacity, or execution failures leave no partial movement.
 
 ## Network-item context menu
 
@@ -140,29 +153,27 @@ The trigger is configurable under Options → Controls → Key Binds → Applied
 
 ## Configuration
 
-Two COMMON configuration files are generated on first launch.
-
-### `config/appliedenhancements-common.toml`
+One COMMON configuration file is generated on first launch: `config/appliedenhancements-common.toml`.
 
 | Key | Default | Description |
 |---|---:|---|
-| `crafting.max_crafting_order_amount` | `1000000000000` | Maximum amount in one AE2 crafting order |
-| `caching.enable_pattern_caching` | `true` | Enables pattern-input and container-item caching |
-| `caching.pattern_cache_size` | `32` | Maximum multi-key cache entries per pattern instance |
-| `crafting_plan.enable_enhanced_material_calculation` | `true` | Enables enhanced stored, craftable, and missing material statistics |
+| `crafting.enable_long_range_crafting` | `true` | Enables orders above `Integer.MAX_VALUE` |
+| `crafting.max_crafting_order_amount` | `2147483647` | Maximum amount in one AE2 crafting order |
+| `crafting.enable_progress_display` | `false` | Enables calculation progress and path display |
+| `crafting.enable_enhanced_material_calculation` | `false` | Enables enhanced stored, craftable, and missing material statistics |
+| `crafting.max_fast.enable_automatic_planner` | `false` | Enables automatic MAX_FAST interception and manual-plan inventory locking |
+| `crafting.max_fast.max_nodes` | `100000` | Maximum nodes analyzed per attempt |
+| `crafting.max_fast.compile_budget_ms` | `2000` | Compilation budget per attempt in milliseconds |
+| `crafting.max_fast.enable_diagnostics` | `false` | Emits detailed planner diagnostics |
+| `performance.pattern_cache.enabled` | `true` | Enables pattern-input and container-return caching |
+| `performance.pattern_cache.max_entries_per_pattern` | `32` | Maximum multi-key cache entries retained per pattern |
+| `performance.storage_bus.enable_slot_index` | `true` | Enables candidate-slot indexing for item storage buses |
+| `performance.io_bus.enable_slot_routing` | `true` | Enables validated source/target slot hints for import and export buses |
+| `storage.infinite.enable_listing_limit_bypass` | `false` | Raises explicitly marked infinite-cell listings to `Long.MAX_VALUE` and displays them as `9.2E` |
 
-### `config/appliedenhancements-maxfast.toml`
+The former split `appliedenhancements-common.toml` and `appliedenhancements-maxfast.toml` layouts are migrated automatically. The original common file is backed up with a `.pre-unified.bak` suffix, and the old MAX_FAST file is renamed with a `.migrated.bak` suffix. Customized values are preserved.
 
-| Key | Default | Description |
-|---|---:|---|
-| `features.enableLongRangeCrafting` | `true` | Enables orders above `Integer.MAX_VALUE` |
-| `features.enableProgressDisplay` | `true` | Enables calculation progress and path display |
-| `maxfast.enableAutomaticMaxFastPlanner` | `false` | Enables automatic MAX_FAST interception and manual-plan inventory locking |
-| `maxfast.maxFastMaxNodes` | `100000` | Maximum nodes analyzed per attempt |
-| `maxfast.maxFastCompileBudgetMs` | `2000` | Compilation budget per attempt in milliseconds |
-| `debug.maxFastDiagnostics` | `false` | Emits detailed planner diagnostics |
-
-`maxFastDiagnostics` can produce large logs and should only be enabled temporarily while diagnosing a compatibility problem.
+`crafting.max_fast.enable_diagnostics` can produce large logs and should only be enabled temporarily while diagnosing a compatibility problem.
 
 ## Infinite storage-cell integration
 
@@ -175,7 +186,7 @@ Applied Enhancements recognizes these infinite storage sources:
 | Data packs / KubeJS | `#appliedenhancements:infinite_storage_cells` item tag |
 | Java mods | Runtime `StorageCell` implementation of `InfiniteStorageCellMarker` |
 
-The marker changes recognition and display only. It does not turn a finite storage cell into an infinite source.
+When `storage.infinite.enable_listing_limit_bypass` is enabled, recognized cells are listed as `Long.MAX_VALUE` and displayed as `9.2E`. Disabling it preserves the amounts reported by each cell's original implementation. The marker does not turn a finite storage cell into an infinite source.
 
 KubeJS example:
 
@@ -224,7 +235,7 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
 Build output:
 
 ```text
-build/libs/appliedenhancements-1.0.1.jar
+build/libs/appliedenhancements-1.0.3.jar
 ```
 
 ## Known limitations

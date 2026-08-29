@@ -20,7 +20,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-/** Public duplicate-output pattern detection and resolver registry. */
+/** Public duplicate-output/invalid pattern detection and resolver registry. */
 public final class PatternDuplicateApi {
     private static final ConcurrentHashMap<ResourceLocation, ResolverRegistration>
             RESOLVERS_BY_ID = new ConcurrentHashMap<>();
@@ -95,6 +95,36 @@ public final class PatternDuplicateApi {
     public static Optional<AEKey> primaryOutput(ItemStack patternStack, Level level) {
         List<AEKey> outputs = resolveOutputs(patternStack, level);
         return outputs.isEmpty() ? Optional.empty() : Optional.of(outputs.getFirst());
+    }
+
+    /**
+     * Returns whether a stack is an encoded pattern that can no longer be
+     * resolved. Custom output resolvers count as a successful resolution, so
+     * integrations registered through this API are not reported as invalid.
+     */
+    public static boolean isInvalidPattern(ItemStack patternStack, Level level) {
+        if (patternStack == null || patternStack.isEmpty() || level == null) {
+            return false;
+        }
+        try {
+            return PatternDetailsHelper.isEncodedPattern(patternStack)
+                    && resolveOutputs(patternStack, level).isEmpty();
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    /** Finds encoded-pattern slots that can no longer be resolved. */
+    public static Set<PatternSlotRef> findInvalidSlots(
+            Collection<PatternEntry> patterns, Level level) {
+        Objects.requireNonNull(patterns, "patterns");
+        var invalid = new LinkedHashSet<PatternSlotRef>();
+        for (PatternEntry pattern : patterns) {
+            if (pattern != null && isInvalidPattern(pattern.stack(), level)) {
+                invalid.add(pattern.slot());
+            }
+        }
+        return Set.copyOf(invalid);
     }
 
     /** Tests the display names of every resolved output against a lowercase filter. */

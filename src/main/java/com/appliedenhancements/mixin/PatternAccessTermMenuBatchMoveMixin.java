@@ -4,13 +4,14 @@ import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.inventories.InternalInventory;
 import appeng.menu.implementations.PatternAccessTermMenu;
 import com.appliedenhancements.api.PatternBatchMoveApi;
+import com.appliedenhancements.api.PatternDuplicateApi;
 import com.appliedenhancements.api.PatternSlotRef;
 import com.appliedenhancements.integration.ae2.PatternContainerTrackerBridge;
 import com.appliedenhancements.pattern.PatternMovePlacement;
+import com.appliedenhancements.pattern.PatternMoveSlotIndex;
 import com.appliedenhancements.pattern.PatternMoveTargetSlot;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -55,9 +56,6 @@ public abstract class PatternAccessTermMenuBatchMoveMixin
 
         var sourceStacks = new LinkedHashMap<PatternSlotRef, ItemStack>();
         for (PatternSlotRef source : sources) {
-            if (targetIds.contains(source.containerId())) {
-                return PatternBatchMoveApi.Result.failure(PatternBatchMoveApi.Failure.SAME_TARGET);
-            }
             Object tracker = byId.get(source.containerId());
             if (!(tracker instanceof PatternContainerTrackerBridge bridge)) {
                 return PatternBatchMoveApi.Result.failure(
@@ -73,25 +71,31 @@ public abstract class PatternAccessTermMenuBatchMoveMixin
                 return PatternBatchMoveApi.Result.failure(
                         PatternBatchMoveApi.Failure.INVALID_SOURCE);
             }
+            if (PatternDuplicateApi.isInvalidPattern(stack, player.level())) {
+                continue;
+            }
+            if (targetIds.contains(source.containerId())) {
+                return PatternBatchMoveApi.Result.failure(PatternBatchMoveApi.Failure.SAME_TARGET);
+            }
             sourceStacks.put(source, stack.copy());
         }
 
-        var reserved = new HashSet<PatternMoveTargetSlot>();
+        var emptySlots = new PatternMoveSlotIndex<>(
+                targetInventories,
+                InternalInventory::size,
+                (inventory, slot) -> inventory.getStackInSlot(slot).isEmpty());
         var placements = new ArrayList<PatternMovePlacement>(sourceStacks.size());
         for (var sourceEntry : sourceStacks.entrySet()) {
             PatternMovePlacement placement = findPlacement(
                     sourceEntry.getKey(),
                     sourceEntry.getValue(),
-                    targetInventories,
-                    preferredTargetSlot,
-                    reserved);
+                    emptySlots,
+                    preferredTargetSlot);
             if (placement == null) {
                 return PatternBatchMoveApi.Result.failure(
                         PatternBatchMoveApi.Failure.NOT_ENOUGH_SPACE);
             }
             placements.add(placement);
-            reserved.add(new PatternMoveTargetSlot(
-                    placement.targetId(), placement.targetSlot()));
             preferredTargetSlot = -1;
         }
 
@@ -141,39 +145,20 @@ public abstract class PatternAccessTermMenuBatchMoveMixin
     private static PatternMovePlacement findPlacement(
             PatternSlotRef source,
             ItemStack stack,
-            LinkedHashMap<Long, InternalInventory> targets,
-            int preferredSlot,
-            HashSet<PatternMoveTargetSlot> reserved) {
-        if (preferredSlot >= 0 && targets.size() == 1) {
-            var targetEntry = targets.entrySet().iterator().next();
-            if (canPlace(targetEntry.getKey(), targetEntry.getValue(), preferredSlot, stack, reserved)) {
-                return new PatternMovePlacement(
-                        source, targetEntry.getKey(), targetEntry.getValue(), preferredSlot, stack);
-            }
-        }
-        for (var targetEntry : targets.entrySet()) {
-            InternalInventory inventory = targetEntry.getValue();
-            for (int slot = 0; slot < inventory.size(); slot++) {
-                if (canPlace(targetEntry.getKey(), inventory, slot, stack, reserved)) {
-                    return new PatternMovePlacement(
-                            source, targetEntry.getKey(), inventory, slot, stack);
-                }
-            }
-        }
-        return null;
-    }
-
-    private static boolean canPlace(
-            long targetId,
-            InternalInventory inventory,
-            int slot,
-            ItemStack stack,
-            HashSet<PatternMoveTargetSlot> reserved) {
-        return slot >= 0
-                && slot < inventory.size()
-                && !reserved.contains(new PatternMoveTargetSlot(targetId, slot))
-                && inventory.getStackInSlot(slot).isEmpty()
-                && inventory.insertItem(slot, stack, true).isEmpty();
+            PatternMoveSlotIndex<InternalInventory> emptySlots,
+            int preferredSlot) {
+        var candidate = emptySlots.findAndReserve(
+                stack,
+                preferredSlot,
+                (inventory, slot, candidateStack) ->
+                        inventory.getStackInSlot(slot).isEmpty()
+                                && inventory.insertItem(slot, candidateStack, true).isEmpty());
+        return candidate == null ? null : new PatternMovePlacement(
+                source,
+                candidate.targetId(),
+                candidate.target(),
+                candidate.slot(),
+                stack);
     }
 
 }

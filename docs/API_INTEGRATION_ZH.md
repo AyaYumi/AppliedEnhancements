@@ -86,7 +86,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | `MaxFastCraftingPlanner` | 服务端 | 每次 AE2 合成计算 | 主动调用 MAX_FAST 规划器 |
 | `InfiniteStorageCellMarker` | 双端 | 运行时类型实现 | 标记运行时无限存储实现 |
 | `InfiniteStorageCells` | 双端 | 数据包或运行时查询 | 公共无限磁盘物品标签 |
-| `PatternDuplicateApi` | 双端可用 | Common Setup 注册 | 解析产物并查找重复样板 |
+| `PatternDuplicateApi` | 双端可用 | Common Setup 注册 | 解析产物并查找重复或失效样板 |
 | `PatternOutputResolver` | 双端可用 | Common Setup 注册 | 解析第三方编码样板产物 |
 | `PatternTerminalIntegrationApi` | 客户端 | Client Setup 注册 | 接入兼容的样板终端界面 |
 | `PatternBatchMoveApi` | 客户端与服务端 | Common Setup 注册服务端处理器 | 原子批量移动样板 |
@@ -99,7 +99,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 
 ### 基本规则
 
-- 本模组的自动规划接入默认关闭，但其他 Mod 调用公共 API 不受 `enableAutomaticMaxFastPlanner` 影响。
+- 本模组的自动规划接入默认关闭，但其他 Mod 调用公共 API 不受 `crafting.max_fast.enable_automatic_planner` 影响。
 - 每次 AE2 合成计算创建一个 `MaxFastCraftingPlanner` 实例。
 - 同一计算的真实尝试与模拟尝试可以复用该实例。
 - 实例不是线程安全的，不得跨计算根节点或并行线程共享。
@@ -229,7 +229,7 @@ public final class ExampleInfiniteInventory
 
 标记只告诉 Applied Enhancements：这个实现本身已经提供无限内容，应使用无限数量哨兵和 `9.2E` 显示。它不会把有限磁盘改造成真正的无限来源。
 
-## 3. 第三方编码样板与重复产物
+## 3. 第三方编码样板与样板筛选
 
 ### 注册产物解析器
 
@@ -256,7 +256,7 @@ event.enqueueWork(() -> PatternDuplicateApi.registerOutputResolver(
 - 返回值不包含数量；重复判断故意忽略最终产量。
 - 解析器异常会被记录并跳过，随后继续其他解析器或 AE2 原生解码。
 
-### 直接使用重复检测
+### 直接使用重复与失效检测
 
 ```java
 List<PatternDuplicateApi.PatternEntry> entries = collectEntries();
@@ -266,6 +266,9 @@ Map<PatternSlotRef, AEKey> outputs =
 
 Set<PatternSlotRef> duplicateSlots =
         PatternDuplicateApi.findDuplicateSlots(outputs);
+
+Set<PatternSlotRef> invalidSlots =
+        PatternDuplicateApi.findInvalidSlots(entries, level);
 ```
 
 也可以使用任意稳定键调用泛型重载：
@@ -276,6 +279,8 @@ Set<PatternSlotRef> duplicates =
 ```
 
 `PatternSlotRef.containerId()` 是 AE2 为机器容器分配的服务端 ID，不是菜单槽位索引。该引用只应在当前终端保持打开期间使用。
+
+`PatternDuplicateApi.isInvalidPattern(...)` 用于判断 AE2 与已注册第三方产物解析器均无法解析的编码样板；`findInvalidSlots(...)` 可批量返回对应槽位。
 
 ## 4. 兼容样板终端注册
 
@@ -295,7 +300,9 @@ event.enqueueWork(() -> PatternTerminalIntegrationApi.register(
 | `AE2_PATTERN_ACCESS` | 必须继承 AE2 样板管理终端并保留其槽位行与机器标题布局 |
 | `EXTENDEDAE_PATTERN_ACCESS` | 必须继承 ExtendedAE 扩展样板终端并保留其对应布局 |
 
-注册成功的兼容终端会获得重复筛选、快速移动、框选、右键菜单和机器组剪切/粘贴控件。重复模式与移动模式互斥。
+注册成功的兼容终端会获得重复筛选、失效样板筛选、快速移动、框选、右键菜单和机器组剪切/粘贴控件。“重复”“失效”和“移动”三种模式互斥。
+
+AE2 系列界面会继承内置样板管理终端的独立第二行工具栏，避免遮挡本地化标题与搜索框；ExtendedAE 系列界面保留原有顶部控件布局。
 
 内置注册已经覆盖：
 
@@ -371,6 +378,8 @@ PatternBatchMoveApi.requestMove(
 | `preferredTargetSlot` | 首选目标槽；`-1` 表示自动选择 |
 
 客户端数据不可信。服务端处理器必须重新验证菜单 ID、玩家权限、来源内容、目标容量和同源目标，并保证全有或全无。`PatternBatchMoveApi` 会捕获处理器运行时异常并返回 `APPLY_FAILED`，但自定义处理器自己的库存回滚仍由接入方负责。
+
+内置 `PatternAccessTermMenu` 处理器会在规划事务前通过 `PatternDuplicateApi.isInvalidPattern(...)` 跳过失效编码样板：这些样板留在原槽位，其余有效来源仍按事务一次性提交。自定义处理器如需一致行为，也应采用同样策略。
 
 ## 6. 自定义客户端快速移动会话
 

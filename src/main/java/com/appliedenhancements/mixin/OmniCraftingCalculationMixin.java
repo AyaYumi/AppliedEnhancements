@@ -13,7 +13,7 @@ import appeng.crafting.CraftingPlan;
 import appeng.crafting.CraftingTreeNode;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.appliedenhancements.api.MaxFastCraftingPlanner;
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
+import com.appliedenhancements.Config;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressCarrier;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressHandle;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressRequester;
@@ -106,7 +106,7 @@ public abstract class OmniCraftingCalculationMixin
 
     @Unique
     private static boolean molecularmanipulator$shouldEnableMaxFast() {
-        return AppliedEnhancementsConfig.COMMON.enableAutomaticMaxFastPlanner.get();
+        return Config.ENABLE_AUTOMATIC_MAX_FAST_PLANNER.get();
     }
 
     @WrapMethod(method = "run")
@@ -281,7 +281,7 @@ public abstract class OmniCraftingCalculationMixin
                 molecularmanipulator$maxFastNodeCount = Math.min(
                         result.logicalNodeCount(), Long.MAX_VALUE / 8);
             }
-            if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+            if (Config.MAX_FAST_DIAGNOSTICS.get()) {
                 com.appliedenhancements.AppliedEnhancements.LOGGER.info(
                         "Omni MAX_FAST applied: key={}, amount={}, simulation={}, uniqueNodes={}, mergedOccurrences={}, barriers={}, logicalNodes={}, compileMs={}, executeMs={}",
                         requestedKey, requestedAmount, isSimulation(),
@@ -297,7 +297,7 @@ public abstract class OmniCraftingCalculationMixin
             com.appliedenhancements.AppliedEnhancements.LOGGER.warn(
                     "Omni MAX_FAST encountered an internal compatibility error and fell back to AE2",
                     result.error());
-        } else if (AppliedEnhancementsConfig.COMMON.maxFastDiagnostics.get()) {
+        } else if (Config.MAX_FAST_DIAGNOSTICS.get()) {
             com.appliedenhancements.AppliedEnhancements.LOGGER.info(
                     "Omni MAX_FAST fallback: key={}, amount={}, simulation={}, reason={}, uniqueNodes={}, mergedOccurrences={}, barriers={}, compileMs={}, executeMs={}",
                     requestedKey, requestedAmount, isSimulation(),

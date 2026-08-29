@@ -5,7 +5,7 @@ import appeng.crafting.CraftBranchFailure;
 import appeng.crafting.CraftingTreeNode;
 import appeng.crafting.CraftingTreeProcess;
 import appeng.crafting.inv.CraftingSimulationState;
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
+import com.appliedenhancements.Config;
 import com.github.appliedenhancements.crafting.maxfast.OmniMaxFastPlanner;
 import com.github.appliedenhancements.integration.ae2.OmniCraftingTreeNodeBridge;
 import com.github.appliedenhancements.integration.ae2.OmniCraftingTreeProcessBridge;
@@ -19,7 +19,7 @@ import java.util.function.Consumer;
  * Applied Enhancements' MAX_FAST planner.
  *
  * <p>The built-in AE2 integration is disabled by default. Other mods may call
- * this API regardless of {@code enableAutomaticMaxFastPlanner}; that
+ * this API regardless of {@code crafting.max_fast.enable_automatic_planner}; that
  * configuration only controls whether Applied Enhancements automatically
  * intercepts AE2's native calculation.</p>
  *
@@ -39,8 +39,8 @@ public interface MaxFastCraftingPlanner {
     static MaxFastCraftingPlanner createConfigured(
             PauseCheckpoint pauseCheckpoint, ProgressListener progressListener) {
         return create(
-                AppliedEnhancementsConfig.COMMON.maxFastMaxNodes.get(),
-                AppliedEnhancementsConfig.COMMON.maxFastCompileBudgetMs.get(),
+                Config.MAX_FAST_MAX_NODES.get(),
+                Config.MAX_FAST_COMPILE_BUDGET_MS.get(),
                 pauseCheckpoint,
                 progressListener);
     }

@@ -26,7 +26,6 @@ import com.appliedenhancements.runtime.CraftingProgressTaskBinding;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.appliedenhancements.runtime.TerminalAwareFuture;
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
 import com.github.appliedenhancements.crafting.maxfast.OmniOrderedChoicePlanningRejectedException;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressHandle;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
@@ -191,7 +190,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             AEKey what, long requestedAmount, CalculationStrategy strategy) {
         var menu = (CraftConfirmMenu) (Object) this;
         if (menu.isClientSide() || what == null || requestedAmount <= 0 || strategy == null
-                || !AppliedEnhancementsConfig.COMMON.enableLongRangeCrafting.get()) {
+                || !Config.ENABLE_LONG_RANGE_CRAFTING.get()) {
             return false;
         }
         long maximumAmount = Config.MAX_CRAFTING_ORDER_AMOUNT.get();
@@ -239,7 +238,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         };
 
         var progressTask = appliedenhancements$startProgressTask(
-                AppliedEnhancementsConfig.COMMON.enableProgressDisplay.get());
+                Config.ENABLE_PROGRESS_DISPLAY.get());
         var progress = progressTask.progress();
         ICraftingSimulationRequester effectiveRequester = requester;
         if (progress != null) {
@@ -312,7 +311,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             CalculationStrategy strategy,
             Operation<Future<ICraftingPlan>> original) {
         var progressTask = appliedenhancements$startProgressTask(
-                AppliedEnhancementsConfig.COMMON.enableProgressDisplay.get());
+                Config.ENABLE_PROGRESS_DISPLAY.get());
         var progress = progressTask.progress();
         ICraftingSimulationRequester effectiveRequester = requester;
         if (progress != null) {
@@ -445,7 +444,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     private void appliedenhancements$syncCalculationProgress(CallbackInfo callback) {
         var menu = (CraftConfirmMenu) (Object) this;
         var progress = appliedenhancements$progressBinding.currentProgress();
-        if (!AppliedEnhancementsConfig.COMMON.enableProgressDisplay.get()
+        if (!Config.ENABLE_PROGRESS_DISPLAY.get()
                 || menu.isClientSide()
                 || progress == null
                 || !(menu.getPlayer() instanceof ServerPlayer player)) {
@@ -573,7 +572,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     private void appliedenhancements$sendCalculationProgress(
             ServerPlayer player, CraftConfirmMenu menu) {
         var progress = appliedenhancements$progressBinding.currentProgress();
-        if (!AppliedEnhancementsConfig.COMMON.enableProgressDisplay.get()
+        if (!Config.ENABLE_PROGRESS_DISPLAY.get()
                 || progress == null
                 || progress.terminal()
                 && appliedenhancements$terminalProgressSentGeneration

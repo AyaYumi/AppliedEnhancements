@@ -15,7 +15,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-/** Redirects clicks on compact duplicate rows back to their original server slots. */
+/** Redirects clicks on compact filtered rows back to their original server slots. */
 public final class DuplicatePatternInteraction {
     private DuplicatePatternInteraction() {
     }

@@ -12,7 +12,11 @@ import com.appliedenhancements.api.client.PatternQuickMoveSession;
 import com.appliedenhancements.client.pattern.DuplicatePatternIndex;
 import com.appliedenhancements.client.pattern.DuplicatePatternInteraction;
 import com.appliedenhancements.client.pattern.DuplicatePatternRows;
+import com.appliedenhancements.client.pattern.DuplicatePatternRows.InvalidSourcePattern;
+import com.appliedenhancements.client.pattern.DuplicatePatternRows.PatternSource;
+import com.appliedenhancements.client.pattern.DuplicatePatternSourceDisplay;
 import com.appliedenhancements.client.pattern.DuplicatePatternToggleButton;
+import com.appliedenhancements.client.pattern.InvalidPatternToggleButton;
 import com.appliedenhancements.client.pattern.PatternHeaderActionButton;
 import com.appliedenhancements.client.pattern.PatternHeaderActionButton.Action;
 import com.appliedenhancements.client.pattern.PatternHeaderActionButton.Hit;
@@ -22,6 +26,7 @@ import com.appliedenhancements.client.pattern.PatternTerminalRowFactory;
 import com.appliedenhancements.client.menu.ItemContextMenuKeyMapping;
 import com.appliedenhancements.client.pattern.QuickPatternMoveToggleButton;
 import com.appliedenhancements.integration.ae2.PatternQuickMoveScreenBridge;
+import com.appliedenhancements.integration.ae2.DuplicatePatternSourceScreenBridge;
 import com.appliedenhancements.integration.ae2.PatternTerminalGroupHeaderBridge;
 import com.appliedenhancements.integration.ae2.PatternTerminalSlotsRowBridge;
 import com.appliedenhancements.integration.ae2.ScreenWidgetBridge;
@@ -49,11 +54,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Duplicate-output filter for ExtendedAE's wired and wireless extended terminals. */
+/** Pattern filters and Quick Move for ExtendedAE's wired and wireless terminals. */
 @Pseudo
 @Mixin(targets = "com.glodblock.github.extendedae.client.gui.GuiExPatternTerminal", remap = false)
 public abstract class WirelessExtendedPatternAccessDuplicateMixin
-        implements PatternQuickMoveScreenBridge {
+        implements PatternQuickMoveScreenBridge, DuplicatePatternSourceScreenBridge {
     @Unique
     private static final String appliedenhancements$WIRED_SCREEN =
             "com.glodblock.github.extendedae.client.gui.GuiExPatternTerminal";
@@ -95,9 +100,15 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
     @Unique
     private boolean appliedenhancements$duplicatesOnly;
     @Unique
+    private boolean appliedenhancements$invalidOnly;
+    @Unique
     private Map<PatternSlotRef, PatternSlotRef> appliedenhancements$displayToSource = Map.of();
     @Unique
+    private Map<PatternSlotRef, PatternSource> appliedenhancements$displaySources = Map.of();
+    @Unique
     private DuplicatePatternToggleButton appliedenhancements$duplicateButton;
+    @Unique
+    private InvalidPatternToggleButton appliedenhancements$invalidButton;
     @Unique
     private PatternTerminalRowFactory appliedenhancements$rowFactory;
     @Unique
@@ -129,6 +140,10 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
                     appliedenhancements$contextMenu.close();
                     appliedenhancements$updateQuickMoveButton();
                 }
+                if (selected && appliedenhancements$invalidOnly) {
+                    appliedenhancements$invalidOnly = false;
+                    appliedenhancements$invalidButton.setSelected(false);
+                }
                 appliedenhancements$duplicatesOnly = selected;
                 appliedenhancements$refreshList();
             });
@@ -140,11 +155,35 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
                 appliedenhancements$duplicateButton);
 
-        if (appliedenhancements$quickMoveButton == null) {
-            appliedenhancements$quickMoveButton = new QuickPatternMoveToggleButton(enabled -> {
-                if (enabled && appliedenhancements$duplicatesOnly) {
+        if (appliedenhancements$invalidButton == null) {
+            appliedenhancements$invalidButton = new InvalidPatternToggleButton(selected -> {
+                if (selected && appliedenhancements$quickMove.enabled()) {
+                    appliedenhancements$quickMove.setEnabled(false);
+                    appliedenhancements$contextMenu.close();
+                    appliedenhancements$updateQuickMoveButton();
+                }
+                if (selected && appliedenhancements$duplicatesOnly) {
                     appliedenhancements$duplicatesOnly = false;
                     appliedenhancements$duplicateButton.setSelected(false);
+                }
+                appliedenhancements$invalidOnly = selected;
+                appliedenhancements$refreshList();
+            });
+        }
+        appliedenhancements$invalidButton.setSelected(appliedenhancements$invalidOnly);
+        appliedenhancements$invalidButton.setPosition(
+                screen.getGuiLeft() + 111,
+                screen.getGuiTop() + 17);
+        ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
+                appliedenhancements$invalidButton);
+
+        if (appliedenhancements$quickMoveButton == null) {
+            appliedenhancements$quickMoveButton = new QuickPatternMoveToggleButton(enabled -> {
+                if (enabled && appliedenhancements$isFilterActive()) {
+                    appliedenhancements$duplicatesOnly = false;
+                    appliedenhancements$invalidOnly = false;
+                    appliedenhancements$duplicateButton.setSelected(false);
+                    appliedenhancements$invalidButton.setSelected(false);
                     appliedenhancements$refreshList();
                 }
                 appliedenhancements$quickMove.setEnabled(enabled);
@@ -156,7 +195,7 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         }
         appliedenhancements$quickMoveButton.setSelected(appliedenhancements$quickMove.enabled());
         appliedenhancements$quickMoveButton.setPosition(
-                screen.getGuiLeft() + 111,
+                screen.getGuiLeft() + 135,
                 screen.getGuiTop() + 17);
         ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
                 appliedenhancements$quickMoveButton);
@@ -164,8 +203,9 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
 
     @Inject(method = "refreshList", at = @At("RETURN"))
     private void appliedenhancements$filterDuplicateRows(CallbackInfo callback) {
-        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$duplicatesOnly) {
+        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$isFilterActive()) {
             appliedenhancements$displayToSource = Map.of();
+            appliedenhancements$displaySources = Map.of();
             return;
         }
 
@@ -176,14 +216,26 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
                     "com.glodblock.github.extendedae.client.gui.GuiExPatternTerminal");
         }
 
-        var result = DuplicatePatternRows.build(
-                byId.values(),
-                level,
-                source -> emptySearch
-                        || matchedProvider.contains(source.container())
-                        || matchedStack.contains(source.container().getInventory()
-                                .getStackInSlot(source.slot().slot())),
-                appliedenhancements$rowFactory);
+        DuplicatePatternRows.BuildResult result;
+        if (appliedenhancements$invalidOnly) {
+            result = DuplicatePatternRows.buildInvalid(
+                    byId.values(),
+                    level,
+                    (InvalidSourcePattern source) -> emptySearch
+                            || matchedProvider.contains(source.container())
+                            || matchedStack.contains(source.container().getInventory()
+                                    .getStackInSlot(source.slot().slot())),
+                    appliedenhancements$rowFactory);
+        } else {
+            result = DuplicatePatternRows.build(
+                    byId.values(),
+                    level,
+                    source -> emptySearch
+                            || matchedProvider.contains(source.container())
+                            || matchedStack.contains(source.container().getInventory()
+                                    .getStackInSlot(source.slot().slot())),
+                    appliedenhancements$rowFactory);
+        }
         var screenBridge = (ScreenWidgetBridge) this;
         for (Object button : highlightBtns.values()) {
             if (button instanceof GuiEventListener widget) {
@@ -194,6 +246,7 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         rows.clear();
         rows.addAll(result.rows());
         appliedenhancements$displayToSource = result.displayToSource();
+        appliedenhancements$displaySources = result.displaySources();
         appliedenhancements$resetScrollbar();
     }
 
@@ -202,7 +255,7 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
             long inventoryId,
             Int2ObjectMap<ItemStack> slots,
             CallbackInfo callback) {
-        if (appliedenhancements$isSupportedScreen() && appliedenhancements$duplicatesOnly) {
+        if (appliedenhancements$isSupportedScreen() && appliedenhancements$isFilterActive()) {
             appliedenhancements$refreshList();
         }
     }
@@ -216,7 +269,7 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
             int mouseY,
             float partialTicks,
             CallbackInfo callback) {
-        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$duplicatesOnly) {
+        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$isFilterActive()) {
             return;
         }
         int scroll = scrollbar.getCurrentScroll();
@@ -230,7 +283,9 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
                         column < slotsRow.appliedenhancements$getSlotCount(); column++) {
                     int x = offsetX + 8 + column * 18;
                     int y = offsetY + (rowIndex + 1) * 18 + 13;
-                    graphics.fill(x, y, x + 16, y + 16, 0x553FA9F5);
+                    graphics.fill(
+                            x, y, x + 16, y + 16,
+                            appliedenhancements$invalidOnly ? 0x55D94B4B : 0x553FA9F5);
                 }
             }
         }
@@ -243,7 +298,7 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
             int mouseButton,
             ClickType clickType,
             CallbackInfo callback) {
-        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$duplicatesOnly) {
+        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$isFilterActive()) {
             return;
         }
         var screen = (AbstractContainerScreen<?>) (Object) this;
@@ -268,7 +323,18 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
             int mouseY,
             CallbackInfo callback) {
         appliedenhancements$ensureQuickMoveState();
-        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$quickMove.enabled()) {
+        if (!appliedenhancements$isSupportedScreen()) {
+            appliedenhancements$headerHits = List.of();
+            return;
+        }
+        if (appliedenhancements$isFilterActive()) {
+            var screen = (AbstractContainerScreen<?>) (Object) this;
+            DuplicatePatternSourceDisplay.renderBadges(
+                    graphics,
+                    screen.getMenu().slots,
+                    appliedenhancements$displaySources);
+        }
+        if (!appliedenhancements$quickMove.enabled()) {
             appliedenhancements$headerHits = List.of();
             return;
         }
@@ -277,7 +343,7 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
                 graphics, screen.getMenu().slots, appliedenhancements$displayToSource);
         appliedenhancements$updateQuickMoveButton();
 
-        if (appliedenhancements$duplicatesOnly) {
+        if (appliedenhancements$isFilterActive()) {
             appliedenhancements$headerHits = List.of();
             return;
         }
@@ -506,6 +572,17 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         return null;
     }
 
+    @Override
+    public List<Component> appliedenhancements$getPatternSourceTooltip(PatternSlot slot) {
+        if (!appliedenhancements$isFilterActive()) {
+            return List.of();
+        }
+        PatternSource source = appliedenhancements$displaySources.get(new PatternSlotRef(
+                slot.getMachineInv().getServerId(),
+                slot.getContainerSlot()));
+        return source == null ? List.of() : source.tooltip();
+    }
+
     @Unique
     private List<PatternContainerRecord> appliedenhancements$getGroupContainers(
             appeng.api.implementations.blockentities.PatternContainerGroup group) {
@@ -557,6 +634,9 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         if (appliedenhancements$displayToSource == null) {
             appliedenhancements$displayToSource = Map.of();
         }
+        if (appliedenhancements$displaySources == null) {
+            appliedenhancements$displaySources = Map.of();
+        }
         if (appliedenhancements$headerHits == null) {
             appliedenhancements$headerHits = List.of();
         }
@@ -569,5 +649,10 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
     private boolean appliedenhancements$isSupportedScreen() {
         return PatternTerminalIntegrationApi.supports(
                 this, Family.EXTENDEDAE_PATTERN_ACCESS);
+    }
+
+    @Unique
+    private boolean appliedenhancements$isFilterActive() {
+        return appliedenhancements$duplicatesOnly || appliedenhancements$invalidOnly;
     }
 }

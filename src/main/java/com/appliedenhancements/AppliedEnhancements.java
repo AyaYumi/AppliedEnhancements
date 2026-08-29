@@ -2,7 +2,7 @@ package com.appliedenhancements;
 
 import org.slf4j.Logger;
 
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
+import com.appliedenhancements.config.ConfigFileMigration;
 import com.github.appliedenhancements.network.CraftingCalculationProgressPayload;
 import com.github.appliedenhancements.network.CraftingCalculationPathPayload;
 import com.appliedenhancements.network.NetworkHandler;
@@ -15,6 +15,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
@@ -39,20 +40,22 @@ public class AppliedEnhancements {
         modEventBus.addListener(this::registerPayloads);
         ServerConfigSyncEvents.register(modEventBus);
 
-        // Register configurations
+        ConfigFileMigration.migrate(FMLPaths.CONFIGDIR.get());
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "appliedenhancements-common.toml");
-        modContainer.registerConfig(ModConfig.Type.COMMON, AppliedEnhancementsConfig.COMMON_SPEC, "appliedenhancements-maxfast.toml");
 
         LOGGER.info("Applied Enhancements initializing...");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info(
-                "Applied Enhancements ready: patternCaching={}, longRangeCrafting={}, progressDisplay={}, automaticMaxFast={}",
+                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, longRangeCrafting={}, progressDisplay={}, automaticMaxFast={}",
                 Config.ENABLE_PATTERN_CACHING.get(),
-                AppliedEnhancementsConfig.COMMON.enableLongRangeCrafting.get(),
-                AppliedEnhancementsConfig.COMMON.enableProgressDisplay.get(),
-                AppliedEnhancementsConfig.COMMON.enableAutomaticMaxFastPlanner.get());
+                Config.ENABLE_STORAGE_BUS_SLOT_INDEX.get(),
+                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
+                Config.ENABLE_IO_BUS_OPTIMIZATION.get(),
+                Config.ENABLE_LONG_RANGE_CRAFTING.get(),
+                Config.ENABLE_PROGRESS_DISPLAY.get(),
+                Config.ENABLE_AUTOMATIC_MAX_FAST_PLANNER.get());
     }
 
     public static net.minecraft.resources.ResourceLocation id(String path) {

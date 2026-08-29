@@ -2,7 +2,6 @@ package com.appliedenhancements.network;
 
 import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
-import com.github.appliedenhancements.config.AppliedEnhancementsConfig;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -16,7 +15,8 @@ import org.jetbrains.annotations.ApiStatus;
 public record ServerConfigSyncPayload(
         long maxCraftingOrderAmount,
         boolean longRangeCraftingEnabled,
-        boolean progressDisplayEnabled) implements CustomPacketPayload {
+        boolean progressDisplayEnabled,
+        boolean infiniteStorageLimitBypassEnabled) implements CustomPacketPayload {
     public static final Type<ServerConfigSyncPayload> TYPE =
             new Type<>(AppliedEnhancements.id("server_config"));
 
@@ -25,6 +25,7 @@ public record ServerConfigSyncPayload(
                     ByteBufCodecs.VAR_LONG, ServerConfigSyncPayload::maxCraftingOrderAmount,
                     ByteBufCodecs.BOOL, ServerConfigSyncPayload::longRangeCraftingEnabled,
                     ByteBufCodecs.BOOL, ServerConfigSyncPayload::progressDisplayEnabled,
+                    ByteBufCodecs.BOOL, ServerConfigSyncPayload::infiniteStorageLimitBypassEnabled,
                     ServerConfigSyncPayload::new);
 
     public ServerConfigSyncPayload {
@@ -36,8 +37,9 @@ public record ServerConfigSyncPayload(
     public static ServerConfigSyncPayload currentServerValues() {
         return new ServerConfigSyncPayload(
                 Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
-                AppliedEnhancementsConfig.COMMON.enableLongRangeCrafting.get(),
-                AppliedEnhancementsConfig.COMMON.enableProgressDisplay.get());
+                Config.ENABLE_LONG_RANGE_CRAFTING.get(),
+                Config.ENABLE_PROGRESS_DISPLAY.get(),
+                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get());
     }
 
     public static void register(PayloadRegistrar registrar) {
@@ -49,7 +51,8 @@ public record ServerConfigSyncPayload(
             ServerConfigSyncState.accept(
                     payload.maxCraftingOrderAmount,
                     payload.longRangeCraftingEnabled,
-                    payload.progressDisplayEnabled);
+                    payload.progressDisplayEnabled,
+                    payload.infiniteStorageLimitBypassEnabled);
             ClientCraftingProgressReset.resetIfDisabled(
                     payload.progressDisplayEnabled,
                     context.player().containerMenu);

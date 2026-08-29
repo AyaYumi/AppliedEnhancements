@@ -1,5 +1,6 @@
 package com.appliedenhancements.mixin;
 
+import appeng.client.Point;
 import appeng.client.gui.me.patternaccess.PatternAccessTermScreen;
 import appeng.client.gui.me.patternaccess.PatternContainerRecord;
 import appeng.client.gui.me.patternaccess.PatternSlot;
@@ -13,7 +14,11 @@ import com.appliedenhancements.api.client.PatternQuickMoveSession;
 import com.appliedenhancements.client.pattern.DuplicatePatternIndex;
 import com.appliedenhancements.client.pattern.DuplicatePatternInteraction;
 import com.appliedenhancements.client.pattern.DuplicatePatternRows;
+import com.appliedenhancements.client.pattern.DuplicatePatternRows.InvalidSourcePattern;
+import com.appliedenhancements.client.pattern.DuplicatePatternRows.PatternSource;
+import com.appliedenhancements.client.pattern.DuplicatePatternSourceDisplay;
 import com.appliedenhancements.client.pattern.DuplicatePatternToggleButton;
+import com.appliedenhancements.client.pattern.InvalidPatternToggleButton;
 import com.appliedenhancements.client.pattern.PatternHeaderActionButton;
 import com.appliedenhancements.client.pattern.PatternHeaderActionButton.Action;
 import com.appliedenhancements.client.pattern.PatternHeaderActionButton.Hit;
@@ -23,6 +28,7 @@ import com.appliedenhancements.client.pattern.PatternTerminalRowFactory;
 import com.appliedenhancements.client.menu.ItemContextMenuKeyMapping;
 import com.appliedenhancements.client.pattern.QuickPatternMoveToggleButton;
 import com.appliedenhancements.integration.ae2.PatternQuickMoveScreenBridge;
+import com.appliedenhancements.integration.ae2.DuplicatePatternSourceScreenBridge;
 import com.appliedenhancements.integration.ae2.PatternTerminalGroupHeaderBridge;
 import com.appliedenhancements.integration.ae2.PatternTerminalSlotsRowBridge;
 import com.appliedenhancements.integration.ae2.ScreenWidgetBridge;
@@ -35,6 +41,7 @@ import java.util.Map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -44,19 +51,35 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Duplicate-output filter for AE2's wired terminal and AE2WTLib's wireless terminal. */
+/** Pattern filters and Quick Move for AE2's wired and AE2WTLib wireless terminals. */
 @Mixin(value = PatternAccessTermScreen.class, remap = false)
 public abstract class PatternAccessTermScreenDuplicateMixin
-        implements PatternQuickMoveScreenBridge {
+        implements PatternQuickMoveScreenBridge, DuplicatePatternSourceScreenBridge {
     @Unique
     private static final String appliedenhancements$AE2_SCREEN =
             "appeng.client.gui.me.patternaccess.PatternAccessTermScreen";
     @Unique
     private static final String appliedenhancements$AE2WTLIB_SCREEN =
             "de.mari_023.ae2wtlib.wat.WATScreen";
+    @Unique
+    private static final int appliedenhancements$ORIGINAL_HEADER_HEIGHT = 17;
+    @Unique
+    private static final int appliedenhancements$TOOLBAR_ROW_HEIGHT = 18;
+    @Unique
+    private static final int appliedenhancements$EXPANDED_HEADER_HEIGHT = 35;
+    @Unique
+    private static final int appliedenhancements$HEADER_INTERIOR_SAMPLE_Y = 8;
+    @Unique
+    private static final ResourceLocation appliedenhancements$PATTERN_TERMINAL_TEXTURE =
+            ResourceLocation.fromNamespaceAndPath(
+                    "ae2", "textures/guis/patternaccessterminal.png");
 
     @Shadow
     @Final
@@ -80,9 +103,15 @@ public abstract class PatternAccessTermScreenDuplicateMixin
     @Unique
     private boolean appliedenhancements$duplicatesOnly;
     @Unique
+    private boolean appliedenhancements$invalidOnly;
+    @Unique
     private Map<PatternSlotRef, PatternSlotRef> appliedenhancements$displayToSource = Map.of();
     @Unique
+    private Map<PatternSlotRef, PatternSource> appliedenhancements$displaySources = Map.of();
+    @Unique
     private DuplicatePatternToggleButton appliedenhancements$duplicateButton;
+    @Unique
+    private InvalidPatternToggleButton appliedenhancements$invalidButton;
     @Unique
     private PatternTerminalRowFactory appliedenhancements$rowFactory;
     @Unique
@@ -100,6 +129,77 @@ public abstract class PatternAccessTermScreenDuplicateMixin
     @Invoker("resetScrollbar")
     protected abstract void appliedenhancements$resetScrollbar();
 
+    @ModifyConstant(method = "init", constant = @Constant(intValue = 17))
+    private int appliedenhancements$includeToolbarInAvailableHeight(int original) {
+        return appliedenhancements$isSupportedScreen()
+                ? appliedenhancements$EXPANDED_HEADER_HEIGHT
+                : original;
+    }
+
+    @ModifyConstant(method = "init", constant = @Constant(intValue = 116))
+    private int appliedenhancements$includeToolbarInImageHeight(int original) {
+        return appliedenhancements$isSupportedScreen()
+                ? original + appliedenhancements$TOOLBAR_ROW_HEIGHT
+                : original;
+    }
+
+    @ModifyConstant(method = "drawFG", constant = @Constant(intValue = 23))
+    private int appliedenhancements$shiftGroupHeaderContentDown(int original) {
+        return appliedenhancements$isSupportedScreen()
+                ? original + appliedenhancements$TOOLBAR_ROW_HEIGHT
+                : original;
+    }
+
+    @ModifyConstant(method = "renderLinkStatus", constant = @Constant(intValue = 17))
+    private int appliedenhancements$shiftLinkStatusDown(int original) {
+        return appliedenhancements$isSupportedScreen()
+                ? appliedenhancements$EXPANDED_HEADER_HEIGHT
+                : original;
+    }
+
+    @ModifyConstant(method = "drawBG", constant = @Constant(intValue = 17))
+    private int appliedenhancements$shiftRowsDown(int original) {
+        return appliedenhancements$isSupportedScreen()
+                ? appliedenhancements$EXPANDED_HEADER_HEIGHT
+                : original;
+    }
+
+    @ModifyArg(
+            method = "drawFG",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lappeng/client/gui/me/patternaccess/PatternSlot;<init>(Lappeng/client/gui/me/patternaccess/PatternContainerRecord;III)V"),
+            index = 3)
+    private int appliedenhancements$shiftPatternSlotDown(int originalY) {
+        return appliedenhancements$isSupportedScreen()
+                ? originalY + appliedenhancements$TOOLBAR_ROW_HEIGHT
+                : originalY;
+    }
+
+    @Inject(method = "getHoveredLineIndex", at = @At("HEAD"), cancellable = true)
+    private void appliedenhancements$useExpandedHeaderForRowHover(
+            int mouseX,
+            int mouseY,
+            CallbackInfoReturnable<Integer> callback) {
+        if (!appliedenhancements$isSupportedScreen()) {
+            return;
+        }
+        var screen = (PatternAccessTermScreen<?>) (Object) this;
+        int relativeX = mouseX - screen.getGuiLeft() - 8;
+        int relativeY = mouseY - screen.getGuiTop()
+                - 2 * appliedenhancements$TOOLBAR_ROW_HEIGHT;
+        if (relativeX < 0 || relativeY < 0
+                || relativeX >= 9 * 18
+                || relativeY >= visibleRows * 18) {
+            callback.setReturnValue(-1);
+            return;
+        }
+        int rowIndex = scrollbar.getCurrentScroll() + relativeY / 18;
+        callback.setReturnValue(rowIndex >= 0 && rowIndex < rows.size()
+                ? rowIndex
+                : -1);
+    }
+
     @Inject(method = "init", at = @At("RETURN"))
     private void appliedenhancements$addDuplicateButton(CallbackInfo callback) {
         if (!appliedenhancements$isSupportedScreen()) {
@@ -114,22 +214,50 @@ public abstract class PatternAccessTermScreenDuplicateMixin
                     appliedenhancements$contextMenu.close();
                     appliedenhancements$updateQuickMoveButton();
                 }
+                if (selected && appliedenhancements$invalidOnly) {
+                    appliedenhancements$invalidOnly = false;
+                    appliedenhancements$invalidButton.setSelected(false);
+                }
                 appliedenhancements$duplicatesOnly = selected;
                 appliedenhancements$refreshList();
             });
         }
         appliedenhancements$duplicateButton.setSelected(appliedenhancements$duplicatesOnly);
         appliedenhancements$duplicateButton.setPosition(
-                screen.getGuiLeft() + 80,
-                screen.getGuiTop() + 4);
+                screen.getGuiLeft() + 8,
+                screen.getGuiTop() + 21);
         ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
                 appliedenhancements$duplicateButton);
 
-        if (appliedenhancements$quickMoveButton == null) {
-            appliedenhancements$quickMoveButton = new QuickPatternMoveToggleButton(enabled -> {
-                if (enabled && appliedenhancements$duplicatesOnly) {
+        if (appliedenhancements$invalidButton == null) {
+            appliedenhancements$invalidButton = new InvalidPatternToggleButton(selected -> {
+                if (selected && appliedenhancements$quickMove.enabled()) {
+                    appliedenhancements$quickMove.setEnabled(false);
+                    appliedenhancements$contextMenu.close();
+                    appliedenhancements$updateQuickMoveButton();
+                }
+                if (selected && appliedenhancements$duplicatesOnly) {
                     appliedenhancements$duplicatesOnly = false;
                     appliedenhancements$duplicateButton.setSelected(false);
+                }
+                appliedenhancements$invalidOnly = selected;
+                appliedenhancements$refreshList();
+            });
+        }
+        appliedenhancements$invalidButton.setSelected(appliedenhancements$invalidOnly);
+        appliedenhancements$invalidButton.setPosition(
+                screen.getGuiLeft() + 32,
+                screen.getGuiTop() + 21);
+        ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
+                appliedenhancements$invalidButton);
+
+        if (appliedenhancements$quickMoveButton == null) {
+            appliedenhancements$quickMoveButton = new QuickPatternMoveToggleButton(enabled -> {
+                if (enabled && appliedenhancements$isFilterActive()) {
+                    appliedenhancements$duplicatesOnly = false;
+                    appliedenhancements$invalidOnly = false;
+                    appliedenhancements$duplicateButton.setSelected(false);
+                    appliedenhancements$invalidButton.setSelected(false);
                     appliedenhancements$refreshList();
                 }
                 appliedenhancements$quickMove.setEnabled(enabled);
@@ -141,16 +269,21 @@ public abstract class PatternAccessTermScreenDuplicateMixin
         }
         appliedenhancements$quickMoveButton.setSelected(appliedenhancements$quickMove.enabled());
         appliedenhancements$quickMoveButton.setPosition(
-                screen.getGuiLeft() + 171,
-                screen.getGuiTop() + 4);
+                screen.getGuiLeft() + 56,
+                screen.getGuiTop() + 21);
         ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
                 appliedenhancements$quickMoveButton);
+
+        scrollbar.setPosition(new Point(
+                screen.getGuiLeft() + 175,
+                screen.getGuiTop() + 36));
     }
 
     @Inject(method = "refreshList", at = @At("RETURN"))
     private void appliedenhancements$filterDuplicateRows(CallbackInfo callback) {
-        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$duplicatesOnly) {
+        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$isFilterActive()) {
             appliedenhancements$displayToSource = Map.of();
+            appliedenhancements$displaySources = Map.of();
             return;
         }
 
@@ -161,20 +294,34 @@ public abstract class PatternAccessTermScreenDuplicateMixin
                     "appeng.client.gui.me.patternaccess.PatternAccessTermScreen");
         }
 
-        var result = DuplicatePatternRows.build(
-                byId.values(),
-                level,
-                source -> filter.isEmpty()
-                        || source.container().getSearchName().contains(filter)
-                        || DuplicatePatternIndex.outputMatchesSearch(
-                                source.container().getInventory().getStackInSlot(
-                                        source.slot().slot()),
-                                level,
-                                filter),
-                appliedenhancements$rowFactory);
+        DuplicatePatternRows.BuildResult result;
+        if (appliedenhancements$invalidOnly) {
+            result = DuplicatePatternRows.buildInvalid(
+                    byId.values(),
+                    level,
+                    (InvalidSourcePattern source) -> filter.isEmpty()
+                            || source.container().getSearchName().contains(filter)
+                            || source.container().getInventory().getStackInSlot(
+                                    source.slot().slot()).getHoverName().getString()
+                                    .toLowerCase(Locale.ROOT).contains(filter),
+                    appliedenhancements$rowFactory);
+        } else {
+            result = DuplicatePatternRows.build(
+                    byId.values(),
+                    level,
+                    source -> filter.isEmpty()
+                            || source.container().getSearchName().contains(filter)
+                            || DuplicatePatternIndex.outputMatchesSearch(
+                                    source.container().getInventory().getStackInSlot(
+                                            source.slot().slot()),
+                                    level,
+                                    filter),
+                    appliedenhancements$rowFactory);
+        }
         rows.clear();
         rows.addAll(result.rows());
         appliedenhancements$displayToSource = result.displayToSource();
+        appliedenhancements$displaySources = result.displaySources();
         appliedenhancements$resetScrollbar();
     }
 
@@ -183,8 +330,34 @@ public abstract class PatternAccessTermScreenDuplicateMixin
             long inventoryId,
             Int2ObjectMap<ItemStack> slots,
             CallbackInfo callback) {
-        if (appliedenhancements$isSupportedScreen() && appliedenhancements$duplicatesOnly) {
+        if (appliedenhancements$isSupportedScreen() && appliedenhancements$isFilterActive()) {
             appliedenhancements$refreshList();
+        }
+    }
+
+    @Inject(method = "drawBG", at = @At("RETURN"))
+    private void appliedenhancements$drawSecondToolbarRow(
+            GuiGraphics graphics,
+            int offsetX,
+            int offsetY,
+            int mouseX,
+            int mouseY,
+            float partialTicks,
+            CallbackInfo callback) {
+        if (!appliedenhancements$isSupportedScreen()) {
+            return;
+        }
+        for (int y = appliedenhancements$ORIGINAL_HEADER_HEIGHT - 1;
+                y < appliedenhancements$EXPANDED_HEADER_HEIGHT;
+                y++) {
+            graphics.blit(
+                    appliedenhancements$PATTERN_TERMINAL_TEXTURE,
+                    offsetX,
+                    offsetY + y,
+                    0,
+                    appliedenhancements$HEADER_INTERIOR_SAMPLE_Y,
+                    195,
+                    1);
         }
     }
 
@@ -197,7 +370,7 @@ public abstract class PatternAccessTermScreenDuplicateMixin
             int mouseY,
             float partialTicks,
             CallbackInfo callback) {
-        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$duplicatesOnly) {
+        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$isFilterActive()) {
             return;
         }
         int scroll = scrollbar.getCurrentScroll();
@@ -210,8 +383,10 @@ public abstract class PatternAccessTermScreenDuplicateMixin
                 for (int column = 0;
                         column < slotsRow.appliedenhancements$getSlotCount(); column++) {
                     int x = offsetX + 8 + column * 18;
-                    int y = offsetY + (rowIndex + 1) * 18;
-                    graphics.fill(x, y, x + 16, y + 16, 0x553FA9F5);
+                    int y = offsetY + (rowIndex + 2) * 18;
+                    graphics.fill(
+                            x, y, x + 16, y + 16,
+                            appliedenhancements$invalidOnly ? 0x55D94B4B : 0x553FA9F5);
                 }
             }
         }
@@ -224,7 +399,7 @@ public abstract class PatternAccessTermScreenDuplicateMixin
             int mouseButton,
             ClickType clickType,
             CallbackInfo callback) {
-        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$duplicatesOnly) {
+        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$isFilterActive()) {
             return;
         }
         var screen = (PatternAccessTermScreen<?>) (Object) this;
@@ -249,7 +424,18 @@ public abstract class PatternAccessTermScreenDuplicateMixin
             int mouseY,
             CallbackInfo callback) {
         appliedenhancements$ensureQuickMoveState();
-        if (!appliedenhancements$isSupportedScreen() || !appliedenhancements$quickMove.enabled()) {
+        if (!appliedenhancements$isSupportedScreen()) {
+            appliedenhancements$headerHits = List.of();
+            return;
+        }
+        if (appliedenhancements$isFilterActive()) {
+            var screen = (PatternAccessTermScreen<?>) (Object) this;
+            DuplicatePatternSourceDisplay.renderBadges(
+                    graphics,
+                    screen.getMenu().slots,
+                    appliedenhancements$displaySources);
+        }
+        if (!appliedenhancements$quickMove.enabled()) {
             appliedenhancements$headerHits = List.of();
             return;
         }
@@ -258,7 +444,7 @@ public abstract class PatternAccessTermScreenDuplicateMixin
                 graphics, screen.getMenu().slots, appliedenhancements$displayToSource);
         appliedenhancements$updateQuickMoveButton();
 
-        if (appliedenhancements$duplicatesOnly) {
+        if (appliedenhancements$isFilterActive()) {
             appliedenhancements$headerHits = List.of();
             return;
         }
@@ -270,7 +456,7 @@ public abstract class PatternAccessTermScreenDuplicateMixin
                 break;
             }
             if (rows.get(modelIndex) instanceof PatternTerminalGroupHeaderBridge header) {
-                int rowTop = 17 + rowIndex * 18;
+                int rowTop = appliedenhancements$EXPANDED_HEADER_HEIGHT + rowIndex * 18;
                 var groupContainers = appliedenhancements$getGroupContainers(
                         header.appliedenhancements$getGroup());
                 int actionX = PatternHeaderActionButton.actionStartX(
@@ -336,8 +522,9 @@ public abstract class PatternAccessTermScreenDuplicateMixin
         if (ItemContextMenuKeyMapping.matchesMouse(button)
                 && mouseX >= screen.getGuiLeft() + 8
                 && mouseX < screen.getGuiLeft() + 170
-                && mouseY >= screen.getGuiTop() + 17
-                && mouseY < screen.getGuiTop() + 17 + visibleRows * 18) {
+                && mouseY >= screen.getGuiTop() + appliedenhancements$EXPANDED_HEADER_HEIGHT
+                && mouseY < screen.getGuiTop()
+                        + appliedenhancements$EXPANDED_HEADER_HEIGHT + visibleRows * 18) {
             return true;
         }
 
@@ -345,9 +532,10 @@ public abstract class PatternAccessTermScreenDuplicateMixin
                 mouseX,
                 mouseY,
                 screen.getGuiLeft() + 8,
-                screen.getGuiTop() + 17,
+                screen.getGuiTop() + appliedenhancements$EXPANDED_HEADER_HEIGHT,
                 screen.getGuiLeft() + 170,
-                screen.getGuiTop() + 17 + visibleRows * 18,
+                screen.getGuiTop()
+                        + appliedenhancements$EXPANDED_HEADER_HEIGHT + visibleRows * 18,
                 false);
     }
 
@@ -488,6 +676,17 @@ public abstract class PatternAccessTermScreenDuplicateMixin
         return null;
     }
 
+    @Override
+    public List<Component> appliedenhancements$getPatternSourceTooltip(PatternSlot slot) {
+        if (!appliedenhancements$isFilterActive()) {
+            return List.of();
+        }
+        PatternSource source = appliedenhancements$displaySources.get(new PatternSlotRef(
+                slot.getMachineInv().getServerId(),
+                slot.getContainerSlot()));
+        return source == null ? List.of() : source.tooltip();
+    }
+
     @Unique
     private List<PatternContainerRecord> appliedenhancements$getGroupContainers(
             appeng.api.implementations.blockentities.PatternContainerGroup group) {
@@ -539,6 +738,9 @@ public abstract class PatternAccessTermScreenDuplicateMixin
         if (appliedenhancements$displayToSource == null) {
             appliedenhancements$displayToSource = Map.of();
         }
+        if (appliedenhancements$displaySources == null) {
+            appliedenhancements$displaySources = Map.of();
+        }
         if (appliedenhancements$headerHits == null) {
             appliedenhancements$headerHits = List.of();
         }
@@ -551,5 +753,10 @@ public abstract class PatternAccessTermScreenDuplicateMixin
     private boolean appliedenhancements$isSupportedScreen() {
         return PatternTerminalIntegrationApi.supports(
                 this, Family.AE2_PATTERN_ACCESS);
+    }
+
+    @Unique
+    private boolean appliedenhancements$isFilterActive() {
+        return appliedenhancements$duplicatesOnly || appliedenhancements$invalidOnly;
     }
 }

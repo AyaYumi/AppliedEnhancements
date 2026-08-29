@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 class ServerConfigSyncPayloadTest {
     @Test
     void roundTripsTheFullLongRange() {
-        var expected = new ServerConfigSyncPayload(Long.MAX_VALUE, true, false);
+        var expected = new ServerConfigSyncPayload(Long.MAX_VALUE, true, false, true);
         var buffer = Unpooled.buffer();
         try {
             ServerConfigSyncPayload.STREAM_CODEC.encode(buffer, expected);
@@ -24,6 +24,6 @@ class ServerConfigSyncPayloadTest {
     void rejectsInvalidMaximums() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new ServerConfigSyncPayload(0, true, true));
+                () -> new ServerConfigSyncPayload(0, true, true, true));
     }
 }
