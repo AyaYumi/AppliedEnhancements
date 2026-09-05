@@ -35,8 +35,8 @@ class CraftingCalculationProgressSnapshotTest {
         return new CraftingCalculationProgressSnapshot(
                 1,
                 1,
-                CraftingCalculationProgressPhase.MAX_FAST_EXECUTING,
-                OmniCalculationPath.MAX_FAST,
+                CraftingCalculationProgressPhase.AELIS_EXECUTING,
+                AelisCalculationPath.AELIS,
                 0,
                 0,
                 completed,

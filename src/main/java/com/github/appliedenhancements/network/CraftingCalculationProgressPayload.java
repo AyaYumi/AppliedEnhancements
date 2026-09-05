@@ -4,7 +4,7 @@ import com.appliedenhancements.AppliedEnhancements;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
-import com.github.appliedenhancements.integration.ae2.OmniCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import io.netty.handler.codec.DecoderException;
 import java.util.Objects;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -17,7 +17,7 @@ public record CraftingCalculationProgressPayload(
         CraftingCalculationProgressSnapshot progress)
         implements CustomPacketPayload {
     public static final Type<CraftingCalculationProgressPayload> TYPE =
-            new Type<>(AppliedEnhancements.id("crafting_calculation_progress"));
+            new Type<>(AppliedEnhancements.id("aelis_calculation_progress"));
     public static final StreamCodec<RegistryFriendlyByteBuf, CraftingCalculationProgressPayload>
             STREAM_CODEC = StreamCodec.of(
                     CraftingCalculationProgressPayload::encode,
@@ -84,9 +84,9 @@ public record CraftingCalculationProgressPayload(
             throw new DecoderException("IDLE progress must not be sent over the network");
         }
 
-        OmniCalculationPath path;
+        AelisCalculationPath path;
         try {
-            path = OmniCalculationPath.fromNetworkId(pathId);
+            path = AelisCalculationPath.fromNetworkId(pathId);
         } catch (IllegalArgumentException exception) {
             throw new DecoderException(exception);
         }

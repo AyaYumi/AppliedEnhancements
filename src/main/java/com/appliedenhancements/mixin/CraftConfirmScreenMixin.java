@@ -1,12 +1,14 @@
 package com.appliedenhancements.mixin;
 
 import appeng.client.gui.me.crafting.CraftConfirmScreen;
+import com.appliedenhancements.client.CraftingPathPresentation;
+import com.appliedenhancements.client.CraftingStorageFormatter;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
 import com.appliedenhancements.network.ServerConfigSyncState;
-import com.github.appliedenhancements.integration.ae2.OmniCalculationPath;
-import com.github.appliedenhancements.integration.ae2.OmniCalculationPathMenuBridge;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPathMenuBridge;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
@@ -34,38 +36,36 @@ public abstract class CraftConfirmScreenMixin {
             }
         }
         if (plan == null
-                || !(screen.getMenu() instanceof OmniCalculationPathMenuBridge bridge)) {
+                || !(screen.getMenu() instanceof AelisCalculationPathMenuBridge bridge)) {
             return title;
         }
 
         var path = bridge.molecularmanipulator$getCalculationPath();
-        String translationKey;
-        ChatFormatting color;
-        switch (path) {
-            case MAX_FAST -> {
-                translationKey = "gui.appliedenhancements.calculation_result.path.max_fast";
-                color = ChatFormatting.GREEN;
-            }
-            case AE2_FALLBACK -> {
-                translationKey = "gui.appliedenhancements.calculation_result.path.ae2_fallback";
-                color = ChatFormatting.GOLD;
-            }
-            case EXTERNAL -> {
-                translationKey = "gui.appliedenhancements.calculation_result.path.external";
-                color = ChatFormatting.AQUA;
-            }
-            case AE2_NATIVE -> {
-                translationKey = "gui.appliedenhancements.calculation_result.path.ae2_native";
-                color = ChatFormatting.GRAY;
-            }
-            default -> throw new IllegalStateException("Unknown calculation path: " + path);
-        }
+        String translationKey = switch (path) {
+            case AELIS -> "gui.appliedenhancements.calculation_result.path.aelis";
+            case AE2_FALLBACK ->
+                    "gui.appliedenhancements.calculation_result.path.ae2_fallback";
+            case EXTERNAL -> "gui.appliedenhancements.calculation_result.path.external";
+            case AE2_NATIVE -> "gui.appliedenhancements.calculation_result.path.ae2_native";
+        };
 
-        Component pathLabel = Component.translatable(translationKey).withStyle(color);
+        Component pathLabel = Component.translatable(translationKey)
+                .withStyle(CraftingPathPresentation.titleStyle(path));
+        if (ServerConfigSyncState.isProgressDisplayEnabled()
+                && screen.getMenu() instanceof CraftingCalculationProgressMenuBridge progressBridge) {
+            var progress = progressBridge.molecularmanipulator$getCalculationProgress();
+            if (progress.phase() == CraftingCalculationProgressPhase.COMPLETED) {
+                return Component.translatable(
+                        "gui.appliedenhancements.calculation_result.title_timed",
+                        pathLabel,
+                        CraftingStorageFormatter.formatBytes(plan.getUsedBytes()),
+                        appliedenhancements$formatDuration(progress.elapsedMillis()));
+            }
+        }
         return Component.translatable(
                 "gui.appliedenhancements.calculation_result.title",
                 pathLabel,
-                appliedenhancements$formatCompact(plan.getUsedBytes()));
+                CraftingStorageFormatter.formatBytes(plan.getUsedBytes()));
     }
 
     @Inject(method = "drawFG", at = @At("TAIL"))
@@ -159,8 +159,8 @@ public abstract class CraftConfirmScreenMixin {
                     .withStyle(ChatFormatting.AQUA);
         }
         return switch (progress.path()) {
-            case MAX_FAST -> Component.translatable(
-                    "gui.appliedenhancements.calculation_progress.engine.max_fast")
+            case AELIS -> Component.translatable(
+                    "gui.appliedenhancements.calculation_progress.engine.aelis")
                     .withStyle(ChatFormatting.GREEN);
             case AE2_FALLBACK -> Component.translatable(
                     "gui.appliedenhancements.calculation_progress.engine.ae2_fallback")
@@ -181,8 +181,8 @@ public abstract class CraftConfirmScreenMixin {
             case QUEUED -> "queued";
             case WAITING_SLOT -> "waiting_slot";
             case PREPARING -> "preparing";
-            case MAX_FAST_COMPILING -> "max_fast_compiling";
-            case MAX_FAST_EXECUTING -> "max_fast_executing";
+            case AELIS_COMPILING -> "aelis_compiling";
+            case AELIS_EXECUTING -> "aelis_executing";
             case AE2_CALCULATING -> "ae2_calculating";
             case BUILDING_PLAN -> "building_plan";
             case COMPLETED -> "completed";
@@ -200,7 +200,7 @@ public abstract class CraftConfirmScreenMixin {
             return 0xFF777777;
         }
         return switch (progress.path()) {
-            case MAX_FAST -> 0xFF55FF55;
+            case AELIS -> 0xFF55FF55;
             case AE2_FALLBACK -> 0xFFFFAA00;
             case EXTERNAL -> 0xFF55FFFF;
             case AE2_NATIVE -> 0xFF55FFFF;

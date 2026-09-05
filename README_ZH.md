@@ -4,9 +4,9 @@
 
 Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 功能增强模组。
 
-项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 MAX_FAST 合成规划器。
+项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 AELIS 合成规划器。
 
-> 当前版本：`1.0.3`
+> 当前版本：`1.0.4`
 >
 > 目标平台：Minecraft `1.21.1` / NeoForge / Java `21`
 
@@ -17,20 +17,21 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 | Long 范围合成 | 合成订单、网络载荷和规划过程使用 `long` 数量；默认单次上限为 `Integer.MAX_VALUE`（2147483647），可配置到 `Long.MAX_VALUE` |
 | 精确数量校验 | 客户端与服务端共同校验输入，拒绝溢出、非法小数、负数以及会导致 AE2 原生规划器计数溢出的请求 |
 | 计算进度显示 | 合成确认界面显示等待、准备、编译、执行、原生计算、计划整理、完成或失败等阶段 |
-| 规划路径标识 | 计算结果可区分 `MAX_FAST`、`AE2 回退`、`AE2` 和通用的`外部规划器`路径 |
+| 规划路径标识 | 计算结果可区分 `AELIS`、`AE2 回退`、`AE2` 和通用的`外部规划器`路径 |
 | 重复产物样板筛选 | 在指定样板管理终端提供 AE2 风格按钮，按主产物筛选重复样板，并支持现有搜索框二次搜索 |
 | 失效样板查找 | 在指定样板管理终端单独筛出无法再解析的编码样板，并显示来源机器与原槽位 |
 | 快速移动样板 | 在样板管理终端中框选、剪切并事务粘贴样板，机器标题提供整组一键剪切/粘贴 |
 | 物品右键菜单 | 空手右击 ME 网络物品可取出、合成和复制 ID；右击 JEI 物品可查看配方、复制名称/ID，并在作弊模式下获取物品 |
-| MAX_FAST 规划器 | 默认不自动介入；第三方 Mod 可通过公共 API 主动调用，或由管理员通过配置显式启用 |
-| 手动计划库存锁 | 仅在自动 MAX_FAST 规划器开启时，预留合成确认界面计划使用的 ME 库存，避免提交前被其他任务抢占 |
+| AELIS 规划器 | 默认不自动介入；第三方 Mod 可通过公共 API 主动调用，或由管理员通过配置显式启用 |
+| 循环材料贡献 | AELIS 结果会在每个材料格及其提示中显示该材料由循环样板产出的数量 |
+| 手动计划库存锁 | 仅在自动 AELIS 规划器开启时，预留合成确认界面计划使用的 ME 库存，避免提交前被其他任务抢占 |
 | 存储总线槽位索引 | 在 AE2 原有外部库存轮询中建立物品到候选槽位的倒排索引；抽取时验证候选槽，结果不足则回退原版完整扫描 |
 | 输入输出总线槽位路由 | 输入总线优先从刚枚举的槽位抽取，输出总线复用模拟插入发现的目标槽位；结果不足时均回退原版扫描 |
 | 样板缓存 | 缓存 AE2 样板输入有效性和容器物品结果，使用有界实例缓存控制内存占用 |
 | 材料汇总修正 | 使用饱和算术处理超大合成计划，避免存储、合成和缺失数量在预览中溢出 |
 | 无限容量显示 | 仅对 AE2 创造存储元件、ExtendedAE 无限元件或显式标记的磁盘使用 `9.2E`，不再探测任意存储实现 |
 | AE2WTLib 兼容 | 通过可选 Mixin 修正无线合成终端对负数可用量的处理；未安装 AE2WTLib 时不会加载目标类 |
-| Provider 批次接口 | 为第三方合成 Provider 提供一次 CPU 调度周期内成对的批次开始/结束回调 |
+| Provider 批次接口 | 为第三方合成 Provider 提供一次 AE2 原生 CPU 调度周期内成对的批次开始/结束回调 |
 
 ## 版本与依赖
 
@@ -38,25 +39,27 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 |---|---:|---|
 | Minecraft | `1.21.1` | 必需，精确版本 |
 | Java | `21` | 开发与运行目标 |
-| NeoForge | `21.1.220` 及以上 | 必需；与 OmniSequence: Transfinite 2.0.0 对齐 |
-| Applied Energistics 2 | `19.2.17` 及以上 | 必需；与 OmniSequence: Transfinite 2.0.0 对齐 |
+| NeoForge | `21.1.220` 及以上 | 必需 |
+| Applied Energistics 2 | `19.2.17` 及以上 | 必需 |
 | ExtendedAE | `1.21-2.2.32-neoforge` 及以上 | 可选；提供无限元件识别 |
 | AE2WTLib | `19.5.1` 及以上 | 可选兼容依赖；按测试整合包版本声明 |
 | Just Enough Items | `19.27.0` 及以上 | 可选；提供 JEI 侧栏与书签栏物品右键菜单 |
 
-核心依赖最低版本与 OmniSequence: Transfinite 2.0.0 对齐。当前构建以 AE2 `19.2.17` 编译并验证；由于核心功能使用 AE2 内部类和 Mixin 注入点，升级到新的 AE2 大版本前仍应重新检查客户端、服务端和实际合成流程。
+上表对应声明的依赖范围。当前构建使用 NeoForge `21.1.220` 与 AE2 `19.2.17` 编译和验证；由于核心功能使用 AE2 内部类和 Mixin 注入点，升级到新的 AE2 大版本前仍应重新检查客户端、服务端和实际合成流程。
+
+量子 CPU、智能倍增和订单包裹接入分别使用可选的 AdvancedAE、Useless Mod/OmniSequence、Data Energistics。发行验证使用了 AdvancedAE `1.6.12` 与 Data Energistics `3.2.0`；这些是验证版本，不代表承诺兼容所有后续版本。
 
 ## 安装
 
 目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
 
 ```text
-build/libs/appliedenhancements-1.0.3.jar
+build/libs/appliedenhancements-1.0.4.jar
 ```
 
 同时需要安装匹配版本的 NeoForge 与 AE2。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
 
-本模组包含服务端配置同步和客户端界面 Mixin，联机环境建议客户端与服务端同时安装相同版本。
+本模组包含服务端配置同步和客户端界面 Mixin，联机环境应在客户端与服务端安装同一发行构建。
 
 ## Long 范围合成
 
@@ -65,7 +68,7 @@ build/libs/appliedenhancements-1.0.3.jar
 默认最大订单量：
 
 ```text
-1,000,000,000,000
+2,147,483,647
 ```
 
 配置允许的理论最大值：
@@ -84,25 +87,39 @@ build/libs/appliedenhancements-1.0.3.jar
 
 即使输入处于 `long` 范围内，如果某个配方分支的乘法、输出聚合或 AE2 原生逐件尝试会越过安全边界，请求仍可能被拒绝。超大订单能否实际完成还取决于配方图规模、网络库存、内存和执行时间。
 
-## MAX_FAST 规划器
+## AELIS 规划器
 
-MAX_FAST 会在单次合成计算会话中分析配方树，并尝试把可证明安全的节点聚合执行。存在容器物品、复杂候选、可复用输入或其他兼容边界时，规划器会保留局部原生语义，或把整次尝试交回 AE2。
+AELIS（Applied Enhancements Lattice Integer Solver）会在单次合成计算会话中分析配方树，并尝试把可证明安全的节点聚合执行。存在容器物品、复杂候选、可复用输入或其他兼容边界时，规划器会保留局部原生语义，或把整次尝试交回 AE2。
 
-规划器只保留一套固定的 `AGGRESSIVE` 执行策略，不再提供 `OFF` / `SAFE` / `AGGRESSIVE` 模式选择。自动接入 AE2 原生规划的功能默认关闭；需要自动接入时，必须在服务端配置中显式启用 `crafting.max_fast.enable_automatic_planner`。
+当 AELIS 实际采用循环 SCC 或数量反馈求解时，合成确认界面的对应材料格会增加“循环合成数量”。该数值按循环样板的实际执行次数乘以样板产量统计，是普通“合成数量”的子集，只随当前确认菜单同步。
 
-第三方 Mod 可以通过 `MaxFastCraftingPlanner` 公共接口主动创建会话并调用 MAX_FAST。API 调用不受 `crafting.max_fast.enable_automatic_planner` 开关影响，因此接入方可以自行决定何时使用 MAX_FAST、何时使用自己的规划器或回退 AE2。
+循环计划还会携带压缩后的已证明执行顺序。AE2 原生合成 CPU 和 AdvancedAE 量子 CPU 优先执行循环及其必要的普通前置，等循环任务派发完且产物返回后再放行其他普通任务。返回的循环产物会继续投入后续循环；即使它同时是订单最终产物，也会按剩余循环输入需求暂存，避免只留下初始种子。默认 `PRESERVE_MINIMUM` 策略会额外规划足够的产量，在完整交付下单数量后留下已证明的最小启动种子向量；订单完成时 AE2 会把这部分余料送回 ME 库存。`MAX_THROUGHPUT` 则关闭跨订单保种。执行进度和待返回产物随 CPU NBT 保存。独立 CPU 必须实现 `AelisCycleAwareCpu` 及完整执行协议，不能只实现标记；不支持的 CPU 会拒绝循环计划。
 
-MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成计算会话内复用，不会建立跨世界或跨 Grid 的持久全局缓存。
+同时安装 Useless Mod 和 OmniSequence 时，支持智能倍增的提供器可以按当前完整输入库存、当前步骤剩余次数和安全倍率动态扩大循环批量。桥接会提交真实的倍增样板，产物返回后重新计算批量，不增加订单总工作量。动态组件样板、替代输入及带容器返还的样板保留原派发方式。
+
+Data Energistics 的已标记订单包裹支持在原生与量子 CPU 上自动完成，完成计数与实际批量对齐：样板成功派发并登记实际产量后，CPU 按数据能源的“无实体输出”语义结算包裹；循环产物和保留种子未返回时，订单会继续等待。量子 CPU 的完成记录随原订单编号保存，不会生成额外实体包裹，玩家手动取消仍立即生效。普通订单和规划器 API 创建的订单均适用，包括自动 AELIS 关闭的情况。
+
+Useless Mod 的智能倍增只改写循环计划中的普通样板，循环样板在计划构建、API 包装和 CPU 提交时都会还原原始定义与执行次数，循环元数据随计划保留。已保存循环状态的订单也会校正剩余样板，不重置执行进度。读取旧量子 CPU 订单时，如果没有在途产物，会尝试还原被倍增的循环样板；只有重新求解的全部剩余执行次数与旧订单完全一致且不缺料时才恢复，库存和订单链接保持不变。无法证明安全的旧订单会保留原样并记录提示。
+
+具有净正增长且输入精确的循环会被缩点成独立求解的 SCC 区域。因此粉尘、种子与水晶之间的循环可以单独批量计算，同一张大型配方图中的无关原生或混合边界不会再否决该循环。
+
+如果 AE2 的递归过滤器隐藏了闭合该区域所需的候选，内置接入只会通过 AE2 现有合成索引按需查询当前树中实际到达的终端键。它不会遍历全部样板提供者，也不会持久保存整张网络样板副本；恢复的候选只在本次计算会话内存在，并在执行前重新验证。
+
+规划器只保留一套固定的 `AGGRESSIVE` 执行策略，不再提供 `OFF` / `SAFE` / `AGGRESSIVE` 模式选择。自动接入 AE2 原生规划的功能默认关闭；需要自动接入时，必须在服务端配置中显式启用 `crafting.aelis.enable_automatic_planner`。
+
+第三方 Mod 可以通过 `AelisCraftingPlanner` 公共接口主动创建会话并调用 AELIS。API 调用不受 `crafting.aelis.enable_automatic_planner` 开关影响，因此接入方可以自行决定何时使用 AELIS、何时使用自己的规划器或回退 AE2。关闭自动规划不会删除已有订单或 API 订单携带的循环执行元数据。
+
+AELIS 受节点数和编译时间预算约束。编译图仅在当前合成计算会话内复用，不会建立跨世界或跨 Grid 的持久全局缓存。
 
 确定性耐久工具可以按剩余耐久容量批量规划，包括 AE2 为模糊输入选中的替代工具、单次配方使用多件同类工具以及多个耐久输入槽。规划器仍会验证每个候选的剩余物变化；随机、上下文相关或混合剩余物行为继续交回兼容路径。
 
 返回后保持不变的催化剂会在事务聚合图中租用一次，普通消耗输入继续沿已编译子图批量规划。多级精华等“每一级都复用同一个催化剂”的递归配方不再对每一级调用大型 AE2 原生子请求；兼容边界中剩余的普通子请求也会先做库存预检并受原生工作量上限保护。
 
-所有未经证明的局部 AE2 原生边界最多直接处理 `8192` 个逻辑物品。超过上限时 MAX_FAST 会撤销本次尝试并交给后续规划器或 AE2，避免特殊容器、耐久和候选分支在本模组内部执行数十万次线性请求。无效或非正的样板产量会直接回退，不再猜测为单产出。
+所有未经证明的局部 AE2 原生边界最多直接处理 `8192` 个逻辑物品。超过上限时 AELIS 会撤销本次尝试并交给后续规划器或 AE2，避免特殊容器、耐久和候选分支在本模组内部执行数十万次线性请求。无效或非正的样板产量会直接回退，不再猜测为单产出。
 
 ### 手动合成计划库存锁
 
-库存锁严格跟随 `crafting.max_fast.enable_automatic_planner`，没有独立开关。自动规划器关闭时不会创建预留，现有确认界面持有的预留也会停止限制提取并在下次菜单更新时释放；第三方通过 `MaxFastCraftingPlanner` API 主动调用规划器不会隐式开启库存锁。
+库存锁严格跟随 `crafting.aelis.enable_automatic_planner`，没有独立开关。自动规划器关闭时不会创建预留，现有确认界面持有的预留也会停止限制提取并在下次菜单更新时释放；第三方通过 `AelisCraftingPlanner` API 主动调用规划器不会隐式开启库存锁。
 
 规划完成并仍停留在 AE2 合成确认界面时，服务端会全量预留 `ICraftingPlan.usedItems()` 中的物品和流体。任意材料无法完整预留时不保留部分结果，而是根据扣除了其他确认菜单预留量的库存重新计算。实际提取和模拟提取都会保护其他计划的份额；订单提交期间只允许当前计划使用自己持有的份额。
 
@@ -166,9 +183,9 @@ MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成�
 
 ### 第三方规划器边界
 
-项目不根据特定 Mod ID、类名或约定优先级协调第三方规划器。第三方实现返回非 AE2 原生的 `ICraftingPlan` 时，结果界面会统一标记为`外部规划器`；该标记只用于展示，不代表已经解决多个规划器同时修改 AE2 流程时的执行顺序冲突。
+除已实现的 Useless Mod 智能倍增兼容外，项目不自动协调其他第三方规划器的执行顺序。第三方实现返回非 AE2 原生的 `ICraftingPlan` 时，结果界面会统一标记为`外部规划器`；该标记只用于展示，不代表已经解决多个规划器同时修改 AE2 流程时的执行顺序冲突。
 
-默认配置下 MAX_FAST 不会自动修改规划结果。未接入公共 API 的整合包只有在明确需要本模组接管 AE2 原生规划时，才应将 `crafting.max_fast.enable_automatic_planner` 设为 `true`。旧版的 `enableMaxFastPlanner` 配置键已失效，不会在升级后意外开启自动规划。
+默认配置下 AELIS 不会自动修改规划结果。未接入公共 API 的整合包只有在明确需要本模组接管 AE2 原生规划时，才应将 `crafting.aelis.enable_automatic_planner` 设为 `true`。升级时旧版规划器配置会自动迁移到 `crafting.aelis.*`。
 
 ## 配置
 
@@ -180,19 +197,25 @@ MAX_FAST 受节点数和编译时间预算约束。编译图仅在当前合成�
 | `crafting.max_crafting_order_amount` | `2147483647` | `1` ～ `Long.MAX_VALUE` | 单次 AE2 自动合成订单的最大数量 |
 | `crafting.enable_progress_display` | `false` | 布尔值 | 启用合成计算进度和路径显示 |
 | `crafting.enable_enhanced_material_calculation` | `false` | 布尔值 | 启用增强的存储、合成和缺失材料统计 |
-| `crafting.max_fast.enable_automatic_planner` | `false` | 布尔值 | 允许自动接入 AE2 原生规划，并启用手动计划库存锁 |
-| `crafting.max_fast.max_nodes` | `100000` | `1000` ～ `1000000` | 单次分析允许的最大节点数 |
-| `crafting.max_fast.compile_budget_ms` | `2000` | `100` ～ `30000` | 单次配方树分析的时间预算，单位为毫秒 |
-| `crafting.max_fast.enable_diagnostics` | `false` | 布尔值 | 输出详细的编译、执行与回退诊断日志 |
+| `crafting.aelis.enable_automatic_planner` | `false` | 布尔值 | 允许自动接入 AE2 原生规划，并启用手动计划库存锁 |
+| `crafting.aelis.max_nodes` | `100000` | `1000` ～ `1000000` | 单次分析允许的最大节点数 |
+| `crafting.aelis.compile_budget_ms` | `2000` | `100` ～ `30000` | 单次配方树分析的时间预算，单位为毫秒 |
+| `crafting.aelis.enable_diagnostics` | `false` | 布尔值 | 输出详细的编译、执行与回退诊断日志 |
+| `crafting.aelis.cycle_solver.max_scc_nodes` | `256` | `4` ～ `1024` | 单个循环强连通分量允许包含的最大材料节点数 |
+| `crafting.aelis.cycle_solver.max_search_states` | `1000000` | `1000` ～ `10000000` | 多候选循环惰性分支搜索允许访问的最大状态数 |
+| `crafting.aelis.cycle_solver.budget_ms` | `1000` | `10` ～ `5000` | 每次全图或局部循环求解的时间预算 |
+| `crafting.aelis.cycle_solver.seed_policy` | `PRESERVE_MINIMUM` | `PRESERVE_MINIMUM` / `MAX_THROUGHPUT` | 每单保留已证明的最小启动种子；或允许循环使用全部可用库存以追求最大吞吐 |
 | `performance.pattern_cache.enabled` | `true` | 布尔值 | 启用样板输入与容器返还物缓存 |
 | `performance.pattern_cache.max_entries_per_pattern` | `32` | `8` ～ `256` | 每张样板保留的多键缓存最大条目数 |
 | `performance.storage_bus.enable_slot_index` | `true` | 布尔值 | 为物品存储总线启用候选槽位索引 |
 | `performance.io_bus.enable_slot_routing` | `true` | 布尔值 | 为输入与输出总线启用经过验证的槽位提示 |
 | `storage.infinite.enable_listing_limit_bypass` | `false` | 布尔值 | 将无限磁盘网络数量提升到 `Long.MAX_VALUE` 并显示为 `9.2E` |
 
-旧版拆分的 `appliedenhancements-common.toml` 与 `appliedenhancements-maxfast.toml` 会自动迁移。原 common 文件会以 `.pre-unified.bak` 后缀备份，旧 MAX_FAST 文件会改名为 `.migrated.bak`，已有自定义值会被保留。
+AELIS 之前的规划器配置会自动迁移到 `crafting.aelis.*`。原 common 文件会以 `.pre-aelis.bak` 后缀备份，旧拆分规划器文件会改名为 `.migrated.bak`，已有自定义值会被保留。
 
-`crafting.max_fast.enable_diagnostics` 会产生大量日志，只应在定位回退原因或兼容问题时临时启用。
+`crafting.aelis.enable_diagnostics` 会产生大量日志，只应在定位回退原因或兼容问题时临时启用。
+
+安装 Configured 时，本模组会修正其保存 Applied Enhancements 嵌套配置时覆盖同组其他选项的问题。进度显示、增强材料计算、自动 AELIS 和诊断日志可以独立切换，未修改的自定义数量、预算与种子策略会被保留。
 
 ## 无限存储磁盘标记
 
@@ -235,7 +258,7 @@ ServerEvents.tags('item', event => {
 构建产物位于：
 
 ```text
-build/libs/appliedenhancements-1.0.3.jar
+build/libs/appliedenhancements-1.0.4.jar
 ```
 
 ## 验证范围
@@ -244,7 +267,7 @@ build/libs/appliedenhancements-1.0.3.jar
 
 - `long` 数量解析、饱和加法/乘法和原生规划器安全边界；
 - 服务端配置同步、计算进度生命周期和路径网络 ID；
-- MAX_FAST 执行策略、递归保护、候选回退、数量反馈、稀疏容量求解和深度边界；
+- AELIS 执行策略、递归保护、候选回退、数量反馈、稀疏容量求解和深度边界；
 - 合成 CPU 执行数量、模拟库存差量、外部计划材料汇总和终端任务生命周期；
 - 无限存储白名单、物品标签、运行时标记和网络安全汇总；
 - 网络物品菜单注册顺序与精确数量提取载荷边界；
@@ -252,18 +275,36 @@ build/libs/appliedenhancements-1.0.3.jar
 - 手动计划库存预留的全有或全无、并发防超卖、提交所有权与幂等释放；
 - Mixin 所属包和目标源码的结构性保护。
 
-`runGameTestServer` 可检查服务端启动和实际加载到的 Mixin，但仓库当前没有场景化 GameTest。客户端界面仍应通过 `runClient` 手动验证普通数量、超大数量、非法数量、进度显示和配置关闭后的原生流程。
+`1.0.4` 的发行验证结果如下：
+
+| 范围 | 结果 | 统计含义 |
+|---|---:|---|
+| 仓库单元测试 | `358` 项通过 | 失败、错误、跳过均为零 |
+| 含 Data Energistics 的隔离运行环境 | `186` 项必需 GameTest 通过 | `35` 项 Applied Enhancements 专项场景，加 `151` 项依赖模组测试 |
+| 不含 Data Energistics 的隔离运行环境 | `175` 项必需 GameTest 通过 | `24` 项 Applied Enhancements 专项场景，加 `151` 项依赖模组测试；验证可选接入缺失时仍可运行 |
+
+专项场景覆盖原生与量子 CPU 循环、产物回投、保种、真实智能批量、订单包裹虚拟完成、存档状态、公共 API 兼容和快速移动边界。这些运行结果来自维护者使用可选模组依赖的独立验证环境，该环境尚不属于已纳入版本管理的标准测试源集。全新检出的仓库直接运行 `runGameTestServer` 不会复现全部 35 项场景，依赖模组自带的 GameTest 也不能算成本模组自己的测试。因没有用例而退出不代表场景验证成功。
+
+仓库单元测试使用 `test` 任务。客户端界面及完整整合包行为仍需实际运行验证，包括普通/超大/非法数量、进度显示、配置开关和关闭自动规划后的原生流程。
 
 ## 开发者接口
 
 完整的依赖配置、生命周期、线程/侧别要求及接入示例见 [API 接入文档](docs/API_INTEGRATION_ZH.md)。稳定兼容范围仅包括 `com.appliedenhancements.api` 与 `com.appliedenhancements.api.client`；Mixin、运行时实现和 `com.github.appliedenhancements` 下的内部桥接不属于公共 API。
 
+公开顶层 API 共 17 个，其中 16 个为现行接口，一个为已弃用兼容入口。
+
 | 接口 | 用途 |
 |---|---|
-| `MolecularBalancedBatchProvider` | 在一次 AE2 合成 CPU 调度内接收成对的批次开始与结束回调；异常退出也会关闭批次 |
-| `MaxFastCraftingPlanner` | 为其他 Mod 提供 MAX_FAST 会话创建、进度回调、执行结果和失败状态自动回滚接口 |
+| `MolecularBalancedBatchProvider` | 在一次 AE2 原版合成 CPU 调度内接收成对的批次开始与结束回调；异常退出也会关闭批次 |
+| `AelisCraftingPlanner` | 为其他 Mod 提供 AELIS 会话创建、进度回调、执行结果和失败状态自动回滚接口 |
+| `MaxFastCraftingPlanner`（已弃用） | 保留 1.0.3 公开签名，内部委托 AELIS，供旧接入继续加载 |
+| `AelisCycleExecutionApi` | 准备可提交计划、复制与查询元数据、保护输入、计算实际循环批次并读写完整运行时 NBT |
+| `AelisCycleExecutionPlan` | 提供压缩循环步骤、最小种子和受保护材料键 |
+| `AelisCycleSeedPolicy` | 选择订单完成后保留最低种子，或使用全部循环库存 |
+| `AelisCycleRuntimeController` | 提供顺序推进、种子消费阻断和最终产物暂存计算 |
+| `AelisCycleAwareCpu` | 由完整实现循环调度语义的第三方 CPU 声明支持 |
 | `InfiniteStorageCellMarker` | 由第三方运行时 `StorageCell` 实现，声明其内容应使用无限哨兵显示 |
-| `InfiniteStorageCells.ITEM_TAG` | 公共物品标签 `#appliedenhancements:infinite_storage_cells`，供数据包和 KubeJS 标记磁盘 |
+| `InfiniteStorageCells` | 提供公共 `ITEM_TAG` 与物品标签查询，供数据包和 KubeJS 标记磁盘 |
 | `PatternDuplicateApi` | 解析样板产物、查找重复或失效样板，并注册第三方样板解析器 |
 | `PatternOutputResolver` | 让第三方编码样板向重复筛选功能提供有序产物键 |
 | `PatternBatchMoveApi` | 发起快速移动请求，并为自定义服务端菜单注册原子移动处理器 |
@@ -274,12 +315,16 @@ build/libs/appliedenhancements-1.0.3.jar
 
 公共接口直接引用 AE2 类型，因此开发者依赖至少需要 AE2 `19.2.17`，并应在相同的 AE2 主版本内完成兼容验证。
 
-`MaxFastCraftingPlanner.createConfigured(...)` 使用服务端配置的节点数与编译预算，但不会检查 `crafting.max_fast.enable_automatic_planner`。每个 AE2 合成计算应创建一个会话，并在该计算的实际尝试和模拟尝试之间复用；当结果的 `shouldFallback()` 为 `true` 时，API 已恢复缺失物品计数与候选状态，调用方可以安全地继续自己的规划器或 AE2 原生流程。
+`AelisCycleExecutionApi` 提供 `preparePlan`、`guardInputs`、`dispatchedCrafts`、`writeRuntime`、`readRuntime`、`getCyclicCraftAmounts`，使独立 CPU 无需调用内部运行时类。必须使用准备方法返回的计划，通过 `AelisCycleRuntimeController.withCyclePhase(...)` 启用完整阶段协议，并在清理前结算返回产物。旧控制器构造器保留并发行为；MaxFast 兼容入口保留旧 Java 链接，不会自动让独立 CPU 接入新协议。
+
+`AelisCraftingPlanner.createConfigured(...)` 使用服务端配置的节点数与编译预算，但不会检查 `crafting.aelis.enable_automatic_planner`。每个 AE2 合成计算应创建一个会话，并在该计算的实际尝试和模拟尝试之间复用；当结果的 `shouldFallback()` 为 `true` 时，API 已恢复缺失物品计数与候选状态，调用方可以安全地继续自己的规划器或 AE2 原生流程。
+
+需要恢复被 AE2 递归过滤隐藏的精确循环候选时，可使用带 `ICraftingService` 参数的重载。未传入合成服务的旧调用保持原行为，不会进行原始候选查询。
 
 ```java
-var planner = MaxFastCraftingPlanner.createConfigured(
-        MaxFastCraftingPlanner.NO_PAUSE,
-        MaxFastCraftingPlanner.ProgressListener.NONE);
+var planner = AelisCraftingPlanner.createConfigured(
+        AelisCraftingPlanner.NO_PAUSE,
+        AelisCraftingPlanner.ProgressListener.NONE);
 
 var result = planner.tryExecute(
         root, inventory, requestedAmount, simulation, missingItems);
@@ -327,9 +372,9 @@ PatternTerminalIntegrationApi.register(
 | 限制 | 影响 |
 |---|---|
 | AE2 最低版本为 `19.2.17` | 元数据允许更高版本，但新的 AE2 大版本仍需重新验证内部 Mixin 注入点 |
-| MAX_FAST 只缓存当前计算会话 | 不提供跨 Grid、跨世界或持久化的配方图缓存 |
-| 没有场景化 GameTest | 自动化测试不能替代真实整合包中的客户端与服务端验证 |
-| MAX_FAST 采用单一激进策略 | 自动接入默认关闭；启用前应在实际整合包中验证配方兼容性 |
+| AELIS 只缓存当前计算会话 | 不提供跨 Grid、跨世界或持久化的配方图缓存 |
+| 独立运行验证环境 | 默认 GameTest 任务不会复现发行专项场景；自动化检查不能替代完整整合包的客户端与服务端验证 |
+| AELIS 采用单一激进策略 | 自动接入默认关闭；启用前应在实际整合包中验证配方兼容性 |
 | 超大订单仍受资源限制 | 合法的 `long` 数量不代表一定能在可接受时间和内存内完成 |
 
 ## 许可证

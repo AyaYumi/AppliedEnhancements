@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
 
-/** Reserves stored ingredients while a MAX_FAST manual plan awaits submission. */
+/** Reserves stored ingredients while an AELIS manual plan awaits submission. */
 public final class ManualCraftingInventoryLock {
     private static final Map<MEStorage, InventoryReservationLedger<AEKey>> LEDGERS =
             new WeakHashMap<>();
@@ -25,7 +25,7 @@ public final class ManualCraftingInventoryLock {
 
     /** The lock deliberately follows the automatic planner's existing switch. */
     public static boolean enabled() {
-        return Config.ENABLE_AUTOMATIC_MAX_FAST_PLANNER.get();
+        return Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get();
     }
 
     public static Reservation tryAcquire(

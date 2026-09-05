@@ -1,5 +1,7 @@
 package com.appliedenhancements;
 
+import com.appliedenhancements.api.AelisCycleSeedPolicy;
+
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /** Unified configuration for Applied Enhancements. */
@@ -12,11 +14,15 @@ public final class Config {
     public static final ModConfigSpec.BooleanValue ENABLE_PROGRESS_DISPLAY;
     public static final ModConfigSpec.BooleanValue ENABLE_ENHANCED_MATERIAL_CALCULATION;
 
-    // Crafting / MAX_FAST
-    public static final ModConfigSpec.BooleanValue ENABLE_AUTOMATIC_MAX_FAST_PLANNER;
-    public static final ModConfigSpec.IntValue MAX_FAST_MAX_NODES;
-    public static final ModConfigSpec.IntValue MAX_FAST_COMPILE_BUDGET_MS;
-    public static final ModConfigSpec.BooleanValue MAX_FAST_DIAGNOSTICS;
+    // Crafting / AELIS
+    public static final ModConfigSpec.BooleanValue ENABLE_AUTOMATIC_AELIS_PLANNER;
+    public static final ModConfigSpec.IntValue AELIS_MAX_NODES;
+    public static final ModConfigSpec.IntValue AELIS_COMPILE_BUDGET_MS;
+    public static final ModConfigSpec.BooleanValue AELIS_DIAGNOSTICS;
+    public static final ModConfigSpec.IntValue CYCLE_SOLVER_MAX_SCC_NODES;
+    public static final ModConfigSpec.IntValue CYCLE_SOLVER_MAX_SEARCH_STATES;
+    public static final ModConfigSpec.IntValue CYCLE_SOLVER_BUDGET_MS;
+    public static final ModConfigSpec.EnumValue<AelisCycleSeedPolicy> CYCLE_SEED_POLICY;
 
     // Performance
     public static final ModConfigSpec.BooleanValue ENABLE_PATTERN_CACHING;
@@ -77,52 +83,96 @@ public final class Config {
                 .define("enable_enhanced_material_calculation", false);
 
         builder.comment(
-                "MAX_FAST planner settings",
-                "MAX_FAST 规划器设置")
-                .translation("appliedenhancements.config.section.max_fast")
-                .push("max_fast");
+                "AELIS planner settings",
+                "AELIS 规划器设置")
+                .translation("appliedenhancements.config.section.aelis")
+                .push("aelis");
 
-        ENABLE_AUTOMATIC_MAX_FAST_PLANNER = builder
+        ENABLE_AUTOMATIC_AELIS_PLANNER = builder
                 .comment(
-                        "Enable automatic MAX_FAST integration in AE2's native planner.",
+                        "Enable automatic AELIS integration in AE2's native planner.",
                         "Third-party API calls are not affected by this setting.",
                         "Manual crafting-plan inventory reservations are active only while this is enabled.",
-                        "在 AE2 原生规划流程中自动启用 MAX_FAST。",
+                        "在 AE2 原生规划流程中自动启用 AELIS。",
                         "第三方 API 调用不受此设置影响。",
                         "手动合成计划库存预留仅在此项启用时生效。",
                         "Default / 默认值: false")
-                .translation("appliedenhancements.config.enable_automatic_max_fast_planner")
+                .translation("appliedenhancements.config.enable_automatic_aelis_planner")
                 .define("enable_automatic_planner", false);
 
-        MAX_FAST_MAX_NODES = builder
+        AELIS_MAX_NODES = builder
                 .comment(
-                        "Maximum nodes analyzed by MAX_FAST per attempt.",
+                        "Maximum nodes analyzed by AELIS per attempt.",
                         "Higher values allow more complex recipes but use more memory.",
-                        "MAX_FAST 每次尝试允许分析的最大节点数。",
+                        "AELIS 每次尝试允许分析的最大节点数。",
                         "数值越高，可处理的配方越复杂，但会占用更多内存。",
                         "Default / 默认值: 100000")
-                .translation("appliedenhancements.config.max_fast_max_nodes")
+                .translation("appliedenhancements.config.aelis_max_nodes")
                 .defineInRange("max_nodes", 100000, 1000, 1000000);
 
-        MAX_FAST_COMPILE_BUDGET_MS = builder
+        AELIS_COMPILE_BUDGET_MS = builder
                 .comment(
-                        "Compilation budget in milliseconds for each MAX_FAST attempt.",
+                        "Compilation budget in milliseconds for each AELIS attempt.",
                         "Limits time spent analyzing the crafting tree before execution.",
-                        "每次 MAX_FAST 尝试的编译时间预算，单位为毫秒。",
+                        "每次 AELIS 尝试的编译时间预算，单位为毫秒。",
                         "限制执行前分析合成树所花费的最长时间。",
                         "Default / 默认值: 2000")
-                .translation("appliedenhancements.config.max_fast_compile_budget_ms")
+                .translation("appliedenhancements.config.aelis_compile_budget_ms")
                 .defineInRange("compile_budget_ms", 2000, 100, 30000);
 
-        MAX_FAST_DIAGNOSTICS = builder
+        AELIS_DIAGNOSTICS = builder
                 .comment(
-                        "Enable detailed MAX_FAST planning diagnostics.",
+                        "Enable detailed AELIS planning diagnostics.",
                         "WARNING: This produces a large amount of log output.",
-                        "启用 MAX_FAST 规划诊断详情。",
+                        "启用 AELIS 规划诊断详情。",
                         "警告：这会产生大量日志输出。",
                         "Default / 默认值: false")
-                .translation("appliedenhancements.config.max_fast_diagnostics")
+                .translation("appliedenhancements.config.aelis_diagnostics")
                 .define("enable_diagnostics", false);
+
+        builder.comment(
+                "Bounded solver for cyclic crafting dependencies",
+                "循环合成依赖的有界求解器")
+                .translation("appliedenhancements.config.section.cycle_solver")
+                .push("cycle_solver");
+
+        CYCLE_SOLVER_MAX_SCC_NODES = builder
+                .comment(
+                        "Maximum material nodes in one strongly connected component.",
+                        "单个强连通分量允许包含的最大材料节点数。",
+                        "Default / 默认值: 256")
+                .translation("appliedenhancements.config.cycle_solver_max_scc_nodes")
+                .defineInRange("max_scc_nodes", 256, 4, 1024);
+
+        CYCLE_SOLVER_MAX_SEARCH_STATES = builder
+                .comment(
+                        "Maximum branch-search states for multi-candidate cyclic components.",
+                        "多候选循环分量允许搜索的最大分支状态数。",
+                        "Default / 默认值: 1000000")
+                .translation("appliedenhancements.config.cycle_solver_max_search_states")
+                .defineInRange("max_search_states", 1_000_000, 1_000, 10_000_000);
+
+        CYCLE_SOLVER_BUDGET_MS = builder
+                .comment(
+                        "Maximum time spent by one global or local cyclic solve in milliseconds.",
+                        "单次全图或局部循环求解允许使用的最大时间（毫秒）。",
+                        "Default / 默认值: 1000")
+                .translation("appliedenhancements.config.cycle_solver_budget_ms")
+                .defineInRange("budget_ms", 1000, 10, 5000);
+
+        CYCLE_SEED_POLICY = builder
+                .comment(
+                        "Policy for cycle startup materials after the proven cycle schedule finishes.",
+                        "PRESERVE_MINIMUM keeps the minimum seed vector for the next order.",
+                        "MAX_THROUGHPUT allows the current order to consume every cycle material.",
+                        "已证明循环顺序执行完成后，启动材料的处理策略。",
+                        "PRESERVE_MINIMUM 会为下一份订单保留最低种子向量。",
+                        "MAX_THROUGHPUT 允许当前订单使用全部循环材料。",
+                        "Default / 默认值: PRESERVE_MINIMUM")
+                .translation("appliedenhancements.config.cycle_seed_policy")
+                .defineEnum("seed_policy", AelisCycleSeedPolicy.PRESERVE_MINIMUM);
+
+        builder.pop();
 
         builder.pop();
         builder.pop();

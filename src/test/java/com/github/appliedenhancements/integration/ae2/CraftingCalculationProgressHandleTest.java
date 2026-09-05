@@ -11,32 +11,33 @@ class CraftingCalculationProgressHandleTest {
     void tracksAttemptAndClampsExecutionProgress() {
         var handle = new CraftingCalculationProgressHandle(7);
         handle.beginAttempt(false);
-        handle.beginMaxFastExecution(2);
+        handle.beginAelisExecution(2);
         handle.executionStep();
         handle.executionStep();
         handle.executionStep();
 
         var active = handle.snapshot(1);
-        assertEquals(CraftingCalculationProgressPhase.MAX_FAST_EXECUTING, active.phase());
+        assertEquals(CraftingCalculationProgressPhase.AELIS_EXECUTING, active.phase());
         assertEquals(2, active.completedUnits());
         assertEquals(2, active.totalUnits());
         assertEquals(3, active.processedSteps());
         assertEquals(1, active.attempt());
 
-        handle.complete(OmniCalculationPath.MAX_FAST);
+        handle.complete(AelisCalculationPath.AELIS);
         handle.executionStep();
         var completed = handle.snapshot(2);
         assertTrue(handle.terminal());
         assertEquals(CraftingCalculationProgressPhase.COMPLETED, completed.phase());
         assertEquals(2, completed.completedUnits());
         assertEquals(3, completed.processedSteps());
+        assertEquals(completed.elapsedMillis(), handle.snapshot(3).elapsedMillis());
     }
 
     @Test
     void terminalStateCannotBeOverwritten() {
         var handle = new CraftingCalculationProgressHandle(1);
         handle.cancel();
-        handle.beginAe2(OmniCalculationPath.AE2_NATIVE);
+        handle.beginAe2(AelisCalculationPath.AE2_NATIVE);
         handle.fail();
         assertEquals(CraftingCalculationProgressPhase.CANCELLED, handle.snapshot(1).phase());
     }
@@ -46,7 +47,7 @@ class CraftingCalculationProgressHandleTest {
         var handle = new CraftingCalculationProgressHandle(1);
         assertThrows(
                 IllegalArgumentException.class,
-                () -> handle.beginAe2(OmniCalculationPath.MAX_FAST));
+                () -> handle.beginAe2(AelisCalculationPath.AELIS));
     }
 
     @Test

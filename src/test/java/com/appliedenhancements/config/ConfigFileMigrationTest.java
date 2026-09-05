@@ -15,9 +15,49 @@ class ConfigFileMigrationTest {
     Path configDirectory;
 
     @Test
+    void migratesActiveMaxFastSectionToAelisWithoutLosingValues() throws Exception {
+        Path common = configDirectory.resolve(ConfigFileMigration.COMMON_FILE);
+        Files.writeString(common, """
+                [crafting.max_fast]
+                enable_automatic_planner = true
+                max_nodes = 654321
+                compile_budget_ms = 4321
+                enable_diagnostics = false
+
+                [crafting.max_fast.cycle_solver]
+                max_scc_nodes = 512
+                max_search_states = 2000000
+                budget_ms = 2500
+                """);
+
+        ConfigFileMigration.migrate(configDirectory);
+
+        try (CommentedFileConfig migrated = CommentedFileConfig.builder(common)
+                .sync()
+                .build()) {
+            migrated.load();
+            assertEquals(true, migrated.get("crafting.aelis.enable_automatic_planner"));
+            assertEquals(654321,
+                    ((Number) migrated.get("crafting.aelis.max_nodes")).intValue());
+            assertEquals(4321,
+                    ((Number) migrated.get("crafting.aelis.compile_budget_ms")).intValue());
+            assertEquals(false, migrated.get("crafting.aelis.enable_diagnostics"));
+            assertEquals(512, ((Number) migrated.get(
+                    "crafting.aelis.cycle_solver.max_scc_nodes")).intValue());
+            assertEquals(2_000_000, ((Number) migrated.get(
+                    "crafting.aelis.cycle_solver.max_search_states")).intValue());
+            assertEquals(2500, ((Number) migrated.get(
+                    "crafting.aelis.cycle_solver.budget_ms")).intValue());
+            assertEquals("PRESERVE_MINIMUM", migrated.get(
+                    "crafting.aelis.cycle_solver.seed_policy"));
+            assertFalse(migrated.contains("crafting.max_fast"));
+        }
+    }
+
+    @Test
     void mergesSplitLegacyFilesWithoutLosingCustomizedValues() throws Exception {
         Path common = configDirectory.resolve(ConfigFileMigration.COMMON_FILE);
-        Path maxFast = configDirectory.resolve(ConfigFileMigration.LEGACY_MAX_FAST_FILE);
+        Path legacy = configDirectory.resolve(ConfigFileMigration.LEGACY_PRE_AELIS_FILE);
         Files.writeString(common, """
                 [crafting]
                 max_crafting_order_amount = 9999999999
@@ -36,7 +76,7 @@ class ConfigFileMigrationTest {
                 [io_bus]
                 enable_io_bus_optimization = false
                 """);
-        Files.writeString(maxFast, """
+        Files.writeString(legacy, """
                 [features]
                 enableLongRangeCrafting = false
                 enableProgressDisplay = false
@@ -63,12 +103,20 @@ class ConfigFileMigrationTest {
             assertEquals(false,
                     migrated.get("crafting.enable_enhanced_material_calculation"));
             assertEquals(true,
-                    migrated.get("crafting.max_fast.enable_automatic_planner"));
+                    migrated.get("crafting.aelis.enable_automatic_planner"));
             assertEquals(456789,
-                    ((Number) migrated.get("crafting.max_fast.max_nodes")).intValue());
+                    ((Number) migrated.get("crafting.aelis.max_nodes")).intValue());
             assertEquals(12345,
-                    ((Number) migrated.get("crafting.max_fast.compile_budget_ms")).intValue());
-            assertEquals(true, migrated.get("crafting.max_fast.enable_diagnostics"));
+                    ((Number) migrated.get("crafting.aelis.compile_budget_ms")).intValue());
+            assertEquals(256, ((Number) migrated.get(
+                    "crafting.aelis.cycle_solver.max_scc_nodes")).intValue());
+            assertEquals(1_000_000, ((Number) migrated.get(
+                    "crafting.aelis.cycle_solver.max_search_states")).intValue());
+            assertEquals(1000, ((Number) migrated.get(
+                    "crafting.aelis.cycle_solver.budget_ms")).intValue());
+            assertEquals("PRESERVE_MINIMUM", migrated.get(
+                    "crafting.aelis.cycle_solver.seed_policy"));
+            assertEquals(true, migrated.get("crafting.aelis.enable_diagnostics"));
             assertEquals(false, migrated.get("performance.pattern_cache.enabled"));
             assertEquals(128, ((Number) migrated.get(
                     "performance.pattern_cache.max_entries_per_pattern")).intValue());
@@ -84,19 +132,19 @@ class ConfigFileMigrationTest {
             assertFalse(migrated.contains("storage_bus.enable_storage_bus_slot_index"));
         }
 
-        assertFalse(Files.exists(maxFast));
-        assertEquals(1, countFilesContaining("appliedenhancements-common.toml.pre-unified.bak"));
+        assertFalse(Files.exists(legacy));
+        assertEquals(1, countFilesContaining("appliedenhancements-common.toml.pre-aelis.bak"));
         assertEquals(1, countFilesContaining("appliedenhancements-maxfast.toml.migrated.bak"));
 
         ConfigFileMigration.migrate(configDirectory);
-        assertEquals(1, countFilesContaining("appliedenhancements-common.toml.pre-unified.bak"));
+        assertEquals(1, countFilesContaining("appliedenhancements-common.toml.pre-aelis.bak"));
         assertEquals(1, countFilesContaining("appliedenhancements-maxfast.toml.migrated.bak"));
     }
 
     @Test
     void createsUnifiedFileWhenOnlyLegacyMaxFastConfigExists() throws Exception {
-        Path maxFast = configDirectory.resolve(ConfigFileMigration.LEGACY_MAX_FAST_FILE);
-        Files.writeString(maxFast, """
+        Path legacy = configDirectory.resolve(ConfigFileMigration.LEGACY_PRE_AELIS_FILE);
+        Files.writeString(legacy, """
                 [features]
                 enableLongRangeCrafting = true
                 enableProgressDisplay = false
@@ -114,7 +162,7 @@ class ConfigFileMigrationTest {
 
         Path common = configDirectory.resolve(ConfigFileMigration.COMMON_FILE);
         assertTrue(Files.exists(common));
-        assertFalse(Files.exists(maxFast));
+        assertFalse(Files.exists(legacy));
         try (CommentedFileConfig migrated = CommentedFileConfig.builder(common)
                 .sync()
                 .build()) {
@@ -122,7 +170,7 @@ class ConfigFileMigrationTest {
             assertEquals(true, migrated.get("crafting.enable_long_range_crafting"));
             assertEquals(false, migrated.get("crafting.enable_progress_display"));
             assertEquals(true,
-                    migrated.get("crafting.max_fast.enable_automatic_planner"));
+                    migrated.get("crafting.aelis.enable_automatic_planner"));
             assertEquals(true, migrated.get("performance.pattern_cache.enabled"));
             assertEquals(false,
                     migrated.get("storage.infinite.enable_listing_limit_bypass"));

@@ -88,7 +88,7 @@ class InventoryReservationLedgerTest {
         String code = Files.readString(source);
 
         assertTrue(code.contains(
-                "Config.ENABLE_AUTOMATIC_MAX_FAST_PLANNER.get()"));
+                "Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get()"));
         assertFalse(code.contains("enableManualCraftingInventoryLock"));
     }
 }

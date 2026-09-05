@@ -18,6 +18,7 @@ public final class PatternQuickMoveController {
     private final LinkedHashSet<PatternSlotRef> cut = new LinkedHashSet<>();
     private boolean enabled;
     private boolean selecting;
+    private boolean subtractSelection;
     private double startX;
     private double startY;
     private double currentX;
@@ -55,6 +56,7 @@ public final class PatternQuickMoveController {
             return false;
         }
         selecting = true;
+        subtractSelection = subtract;
         startX = currentX = mouseX;
         startY = currentY = mouseY;
         return true;
@@ -94,7 +96,7 @@ public final class PatternQuickMoveController {
             maxY = minY + 2;
         }
 
-        if (dragged) {
+        if (dragged && !subtractSelection) {
             selected.clear();
             cut.clear();
         }
@@ -108,7 +110,10 @@ public final class PatternQuickMoveController {
             if (slotX < maxX && slotX + 16 > minX
                     && slotY < maxY && slotY + 16 > minY) {
                 PatternSlotRef source = resolve(patternSlot, displayToSource);
-                if (!dragged) {
+                if (subtractSelection) {
+                    selected.remove(source);
+                    cut.remove(source);
+                } else if (!dragged) {
                     if (!selected.remove(source)) {
                         selected.add(source);
                     } else {
@@ -163,7 +168,7 @@ public final class PatternQuickMoveController {
     public boolean cutSelectedPattern(
             PatternSlot slot, Map<PatternSlotRef, PatternSlotRef> displayToSource) {
         PatternSlotRef source = resolve(slot, displayToSource);
-        if (!selected.contains(source)) {
+        if (!selected.contains(source) || selected.size() > PatternBatchMoveApi.MAX_SOURCES) {
             return false;
         }
         cut.clear();
@@ -172,24 +177,33 @@ public final class PatternQuickMoveController {
     }
 
     public int cutGroup(Collection<PatternContainerRecord> containers) {
-        selected.clear();
-        cut.clear();
+        var sources = new LinkedHashSet<PatternSlotRef>();
         for (PatternContainerRecord container : containers) {
             var inventory = container.getInventory();
             for (int slot = 0; slot < inventory.size(); slot++) {
                 if (!inventory.getStackInSlot(slot).isEmpty()) {
                     var source = new PatternSlotRef(container.getServerId(), slot);
-                    selected.add(source);
-                    cut.add(source);
+                    sources.add(source);
+                    if (sources.size() > PatternBatchMoveApi.MAX_SOURCES) {
+                        return 0;
+                    }
                 }
             }
         }
+        selected.clear();
+        selected.addAll(sources);
+        cut.clear();
+        cut.addAll(sources);
         return cut.size();
     }
 
     public boolean paste(
             int menuId, List<Long> targetContainerIds, int preferredSlot) {
-        if (cut.isEmpty() || targetContainerIds.isEmpty()) {
+        if (menuId < 0 || preferredSlot < -1 || cut.isEmpty()
+                || cut.size() > PatternBatchMoveApi.MAX_SOURCES
+                || targetContainerIds == null || targetContainerIds.isEmpty()
+                || targetContainerIds.size() > PatternBatchMoveApi.MAX_TARGETS
+                || targetContainerIds.stream().anyMatch(java.util.Objects::isNull)) {
             return false;
         }
         PatternBatchMoveApi.requestMove(
@@ -219,5 +233,6 @@ public final class PatternQuickMoveController {
         selected.clear();
         cut.clear();
         selecting = false;
+        subtractSelection = false;
     }
 }

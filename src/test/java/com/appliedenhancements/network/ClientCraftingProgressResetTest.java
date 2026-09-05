@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
-import com.github.appliedenhancements.integration.ae2.OmniCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -62,7 +62,7 @@ class ClientCraftingProgressResetTest {
                 generation,
                 revision,
                 CraftingCalculationProgressPhase.AE2_CALCULATING,
-                OmniCalculationPath.AE2_NATIVE,
+                AelisCalculationPath.AE2_NATIVE,
                 1,
                 1,
                 0,

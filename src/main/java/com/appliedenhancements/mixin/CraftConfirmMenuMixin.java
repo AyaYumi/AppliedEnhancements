@@ -26,14 +26,15 @@ import com.appliedenhancements.runtime.CraftingProgressTaskBinding;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.appliedenhancements.runtime.TerminalAwareFuture;
-import com.github.appliedenhancements.crafting.maxfast.OmniOrderedChoicePlanningRejectedException;
+import com.github.appliedenhancements.crafting.aelis.AelisOrderedChoicePlanningRejectedException;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressHandle;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressRequester;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
-import com.github.appliedenhancements.integration.ae2.OmniCalculationPath;
-import com.github.appliedenhancements.integration.ae2.OmniCalculationPathCarrier;
-import com.github.appliedenhancements.integration.ae2.OmniCalculationPathMenuBridge;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPathMenuBridge;
+import com.github.appliedenhancements.integration.ae2.AelisCyclicCraftAmountsCarrier;
 import com.github.appliedenhancements.network.CraftingCalculationPathPayload;
 import com.github.appliedenhancements.network.CraftingCalculationProgressPayload;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -51,13 +52,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Objects;
+import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Mixin(value = CraftConfirmMenu.class, remap = false)
 public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgressMenuBridge,
-        LongCraftingConfirmMenuBridge, OmniCalculationPathMenuBridge {
+        LongCraftingConfirmMenuBridge, AelisCalculationPathMenuBridge {
     @Unique
     private static final AtomicLong appliedenhancements$nextProgressGeneration = new AtomicLong();
 
@@ -91,7 +93,10 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     private long appliedenhancements$terminalProgressSentGeneration = -1;
 
     @Unique
-    private OmniCalculationPath appliedenhancements$calculationPath = OmniCalculationPath.AE2_NATIVE;
+    private AelisCalculationPath appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
+
+    @Unique
+    private Map<AEKey, Long> appliedenhancements$cyclicCraftAmounts = Map.of();
 
     @Unique
     private long appliedenhancements$requestedAmount;
@@ -107,13 +112,24 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     private ICraftingPlan appliedenhancements$reservedPlan;
 
     @Override
-    public OmniCalculationPath molecularmanipulator$getCalculationPath() {
+    public AelisCalculationPath molecularmanipulator$getCalculationPath() {
         return appliedenhancements$calculationPath;
     }
 
     @Override
-    public void molecularmanipulator$setCalculationPath(OmniCalculationPath path) {
+    public void molecularmanipulator$setCalculationPath(AelisCalculationPath path) {
         appliedenhancements$calculationPath = java.util.Objects.requireNonNull(path, "path");
+    }
+
+    @Override
+    public Map<AEKey, Long> appliedenhancements$getCyclicCraftAmounts() {
+        return appliedenhancements$cyclicCraftAmounts;
+    }
+
+    @Override
+    public void appliedenhancements$setCyclicCraftAmounts(Map<AEKey, Long> amounts) {
+        appliedenhancements$cyclicCraftAmounts = Map.copyOf(
+                Objects.requireNonNull(amounts, "amounts"));
     }
 
     @Override
@@ -163,7 +179,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         appliedenhancements$progressRevision = 0;
         appliedenhancements$lastProgressSyncTick = Long.MIN_VALUE;
         appliedenhancements$terminalProgressSentGeneration = -1;
-        appliedenhancements$calculationPath = OmniCalculationPath.AE2_NATIVE;
+        appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
         return task;
     }
 
@@ -179,7 +195,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         if (!((CraftConfirmMenu) (Object) this).isClientSide()) {
             appliedenhancements$requestedAmount = amount;
             appliedenhancements$calculationStrategy = strategy;
-            appliedenhancements$calculationPath = OmniCalculationPath.AE2_NATIVE;
+            appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
+            appliedenhancements$cyclicCraftAmounts = Map.of();
             appliedenhancements$releaseInventoryReservation();
             appliedenhancements$cancelProgress();
         }
@@ -223,7 +240,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         this.whatToCraft = what;
         this.amount = (int) Math.min(requestedAmount, Integer.MAX_VALUE);
         this.appliedenhancements$requestedAmount = requestedAmount;
-        this.appliedenhancements$calculationPath = OmniCalculationPath.AE2_NATIVE;
+        this.appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
+        this.appliedenhancements$cyclicCraftAmounts = Map.of();
 
         ICraftingSimulationRequester requester = new ICraftingSimulationRequester() {
             @Override
@@ -346,7 +364,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                         return;
                     }
                     var progress = progressTask.progress();
-                    OmniCalculationPath path = appliedenhancements$resolveCalculationPath(plan);
+                    AelisCalculationPath path = appliedenhancements$resolveCalculationPath(plan);
                     appliedenhancements$calculationPath = path;
                     if (progress != null) {
                         progress.complete(path);
@@ -358,7 +376,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                     }
                     appliedenhancements$finishFailedProgress(progressTask, failure);
                     var orderedChoiceRejection =
-                            OmniOrderedChoicePlanningRejectedException.find(failure);
+                            AelisOrderedChoicePlanningRejectedException.find(failure);
                     if (orderedChoiceRejection != null) {
                         ((CraftConfirmMenu) (Object) this).getPlayer().sendSystemMessage(
                                 Component.translatable(
@@ -409,15 +427,15 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     }
 
     @Unique
-    private OmniCalculationPath appliedenhancements$resolveCalculationPath(ICraftingPlan plan) {
-        OmniCalculationPath carriedPath = plan instanceof OmniCalculationPathCarrier carrier
+    private AelisCalculationPath appliedenhancements$resolveCalculationPath(ICraftingPlan plan) {
+        AelisCalculationPath carriedPath = plan instanceof AelisCalculationPathCarrier carrier
                 ? carrier.molecularmanipulator$getCalculationPath()
                 : null;
-        if (carriedPath != null && carriedPath != OmniCalculationPath.AE2_NATIVE) {
+        if (carriedPath != null && carriedPath != AelisCalculationPath.AE2_NATIVE) {
             return carriedPath;
         }
         if (plan != null && !(plan instanceof CraftingPlan)) {
-            return OmniCalculationPath.EXTERNAL;
+            return AelisCalculationPath.EXTERNAL;
         }
         return appliedenhancements$calculationPath;
     }
@@ -433,10 +451,16 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         }
 
         var path = appliedenhancements$resolveCalculationPath(this.result);
+        Map<AEKey, Long> cyclicCraftAmounts =
+                this.result instanceof AelisCyclicCraftAmountsCarrier carrier
+                        ? carrier.appliedenhancements$getCyclicCraftAmounts()
+                        : Map.of();
         PacketDistributor.sendToPlayer(
                 player,
-                new CraftingCalculationPathPayload(menu.containerId, path));
+                new CraftingCalculationPathPayload(
+                        menu.containerId, path, cyclicCraftAmounts));
         appliedenhancements$calculationPath = path;
+        appliedenhancements$cyclicCraftAmounts = cyclicCraftAmounts;
         appliedenhancements$sendCalculationProgress(player, menu);
     }
 

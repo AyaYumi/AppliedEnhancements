@@ -38,6 +38,14 @@ desktop.ini
 *.tmp
 *~
 
+# local compiled classes, release archives and JVM diagnostics
+*.class
+*.hprof
+*.jfr
+/*.jar
+/*.zip
+/codex-backups/
+
 # local release notes
 /CHANGELOG.md
 /CHANGELOG_*.md

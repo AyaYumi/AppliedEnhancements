@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.appliedenhancements.api.AelisCycleSeedPolicy;
 import org.junit.jupiter.api.Test;
 
 class ConfigDefaultsTest {
@@ -21,11 +22,17 @@ class ConfigDefaultsTest {
     }
 
     @Test
-    void maxFastDefaultsRemainConservative() {
-        assertFalse(Config.ENABLE_AUTOMATIC_MAX_FAST_PLANNER.getDefault());
-        assertFalse(Config.MAX_FAST_DIAGNOSTICS.getDefault());
-        assertEquals(100000, Config.MAX_FAST_MAX_NODES.getDefault());
-        assertEquals(2000, Config.MAX_FAST_COMPILE_BUDGET_MS.getDefault());
+    void aelisDefaultsRemainConservative() {
+        assertFalse(Config.ENABLE_AUTOMATIC_AELIS_PLANNER.getDefault());
+        assertFalse(Config.AELIS_DIAGNOSTICS.getDefault());
+        assertEquals(100000, Config.AELIS_MAX_NODES.getDefault());
+        assertEquals(2000, Config.AELIS_COMPILE_BUDGET_MS.getDefault());
+        assertEquals(256, Config.CYCLE_SOLVER_MAX_SCC_NODES.getDefault());
+        assertEquals(1_000_000, Config.CYCLE_SOLVER_MAX_SEARCH_STATES.getDefault());
+        assertEquals(1000, Config.CYCLE_SOLVER_BUDGET_MS.getDefault());
+        assertEquals(
+                AelisCycleSeedPolicy.PRESERVE_MINIMUM,
+                Config.CYCLE_SEED_POLICY.getDefault());
     }
 
     @Test
@@ -44,10 +51,14 @@ class ConfigDefaultsTest {
         assertTrue(values.contains("crafting.max_crafting_order_amount"));
         assertTrue(values.contains("crafting.enable_progress_display"));
         assertTrue(values.contains("crafting.enable_enhanced_material_calculation"));
-        assertTrue(values.contains("crafting.max_fast.enable_automatic_planner"));
-        assertTrue(values.contains("crafting.max_fast.max_nodes"));
-        assertTrue(values.contains("crafting.max_fast.compile_budget_ms"));
-        assertTrue(values.contains("crafting.max_fast.enable_diagnostics"));
+        assertTrue(values.contains("crafting.aelis.enable_automatic_planner"));
+        assertTrue(values.contains("crafting.aelis.max_nodes"));
+        assertTrue(values.contains("crafting.aelis.compile_budget_ms"));
+        assertTrue(values.contains("crafting.aelis.enable_diagnostics"));
+        assertTrue(values.contains("crafting.aelis.cycle_solver.max_scc_nodes"));
+        assertTrue(values.contains("crafting.aelis.cycle_solver.max_search_states"));
+        assertTrue(values.contains("crafting.aelis.cycle_solver.budget_ms"));
+        assertTrue(values.contains("crafting.aelis.cycle_solver.seed_policy"));
         assertTrue(values.contains("performance.pattern_cache.enabled"));
         assertTrue(values.contains("performance.pattern_cache.max_entries_per_pattern"));
         assertTrue(values.contains("performance.storage_bus.enable_slot_index"));

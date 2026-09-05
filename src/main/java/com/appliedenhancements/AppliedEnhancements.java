@@ -48,14 +48,14 @@ public class AppliedEnhancements {
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info(
-                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, longRangeCrafting={}, progressDisplay={}, automaticMaxFast={}",
+                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, longRangeCrafting={}, progressDisplay={}, automaticAelis={}",
                 Config.ENABLE_PATTERN_CACHING.get(),
                 Config.ENABLE_STORAGE_BUS_SLOT_INDEX.get(),
                 Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
                 Config.ENABLE_IO_BUS_OPTIMIZATION.get(),
                 Config.ENABLE_LONG_RANGE_CRAFTING.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
-                Config.ENABLE_AUTOMATIC_MAX_FAST_PLANNER.get());
+                Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get());
     }
 
     public static net.minecraft.resources.ResourceLocation id(String path) {
@@ -63,7 +63,7 @@ public class AppliedEnhancements {
     }
 
     private void registerPayloads(final RegisterPayloadHandlersEvent event) {
-        final PayloadRegistrar registrar = event.registrar("1");
+        final PayloadRegistrar registrar = event.registrar("3");
         NetworkHandler.register(registrar);
         ServerConfigSyncPayload.register(registrar);
         CraftingCalculationProgressPayload.register(registrar);

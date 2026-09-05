@@ -13,7 +13,7 @@ public final class CraftingCalculationProgressHandle {
 
     private volatile CraftingCalculationProgressPhase phase =
             CraftingCalculationProgressPhase.QUEUED;
-    private volatile OmniCalculationPath path = OmniCalculationPath.AE2_NATIVE;
+    private volatile AelisCalculationPath path = AelisCalculationPath.AE2_NATIVE;
     private volatile long totalUnits = -1;
     private volatile long finishedElapsedNanos = -1;
     private volatile int attempt;
@@ -45,32 +45,32 @@ public final class CraftingCalculationProgressHandle {
         this.phase = CraftingCalculationProgressPhase.PREPARING;
     }
 
-    public synchronized void beginMaxFastCompilation() {
+    public synchronized void beginAelisCompilation() {
         if (terminal.get()) {
             return;
         }
-        this.path = OmniCalculationPath.MAX_FAST;
+        this.path = AelisCalculationPath.AELIS;
         this.completedUnits.set(0);
         this.totalUnits = -1;
-        this.phase = CraftingCalculationProgressPhase.MAX_FAST_COMPILING;
+        this.phase = CraftingCalculationProgressPhase.AELIS_COMPILING;
     }
 
-    public synchronized void beginMaxFastExecution(long totalUnits) {
+    public synchronized void beginAelisExecution(long totalUnits) {
         if (terminal.get()) {
             return;
         }
-        this.path = OmniCalculationPath.MAX_FAST;
+        this.path = AelisCalculationPath.AELIS;
         this.completedUnits.set(0);
         this.totalUnits = Math.max(-1, totalUnits);
-        this.phase = CraftingCalculationProgressPhase.MAX_FAST_EXECUTING;
+        this.phase = CraftingCalculationProgressPhase.AELIS_EXECUTING;
     }
 
-    public synchronized void beginAe2(OmniCalculationPath path) {
+    public synchronized void beginAe2(AelisCalculationPath path) {
         if (terminal.get()) {
             return;
         }
-        if (path != OmniCalculationPath.AE2_NATIVE
-                && path != OmniCalculationPath.AE2_FALLBACK) {
+        if (path != AelisCalculationPath.AE2_NATIVE
+                && path != AelisCalculationPath.AE2_FALLBACK) {
             throw new IllegalArgumentException("AE2 progress requires a native or fallback path");
         }
         this.path = path;
@@ -102,7 +102,7 @@ public final class CraftingCalculationProgressHandle {
         }
     }
 
-    public synchronized void complete(OmniCalculationPath finalPath) {
+    public synchronized void complete(AelisCalculationPath finalPath) {
         if (terminal.compareAndSet(false, true)) {
             this.path = finalPath == null ? this.path : finalPath;
             long total = this.totalUnits;

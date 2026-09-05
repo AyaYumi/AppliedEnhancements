@@ -37,10 +37,10 @@ class LocalizationCompletenessTest {
                     + "\\.[A-Za-z0-9_.-]+"
                     + "|key\\.categories\\.appliedenhancements)\"");
     private static final Pattern CONFIG_DEFINE = Pattern.compile(
-            "\\.define(?:InRange)?\\s*\\(");
+            "\\.define(?:InRange|Enum)?\\s*\\(");
     private static final Pattern CONFIG_TRANSLATED_DEFINE = Pattern.compile(
             "(?s)\\.translation\\(\"([^\"]+)\"\\)\\s*"
-                    + "\\.define(?:InRange)?\\s*\\(");
+                    + "\\.define(?:InRange|Enum)?\\s*\\(");
     private static final Pattern CONFIG_COMMENT = Pattern.compile(
             "(?s)\\.comment\\((.*?)\\)\\s*"
                     + "(?:\\.translation\\(\"[^\"]+\"\\)\\s*)?"
@@ -51,9 +51,9 @@ class LocalizationCompletenessTest {
             "%(?:\\d+\\$)?([a-zA-Z%])");
 
     private static final Set<String> INTENTIONALLY_LANGUAGE_NEUTRAL = Set.of(
-            "gui.appliedenhancements.calculation_result.path.max_fast",
+            "gui.appliedenhancements.calculation_result.path.aelis",
             "gui.appliedenhancements.calculation_result.path.ae2_native",
-            "gui.appliedenhancements.calculation_progress.engine.max_fast",
+            "gui.appliedenhancements.calculation_progress.engine.aelis",
             "gui.appliedenhancements.calculation_progress.engine.ae2_native",
             "key.categories.appliedenhancements");
 

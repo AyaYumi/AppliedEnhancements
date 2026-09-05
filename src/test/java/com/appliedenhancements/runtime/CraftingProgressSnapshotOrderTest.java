@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
-import com.github.appliedenhancements.integration.ae2.OmniCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import org.junit.jupiter.api.Test;
 
 class CraftingProgressSnapshotOrderTest {
@@ -43,7 +43,7 @@ class CraftingProgressSnapshotOrderTest {
                 generation,
                 revision,
                 phase,
-                OmniCalculationPath.AE2_NATIVE,
+                AelisCalculationPath.AE2_NATIVE,
                 0,
                 0,
                 0,

@@ -37,6 +37,7 @@ public final class PatternQuickMoveSession {
         return delegate.cutCount();
     }
 
+    /** When subtract is true, the gesture removes hit slots without adding unselected slots. */
     public boolean beginSelection(
             double mouseX,
             double mouseY,
@@ -75,16 +76,19 @@ public final class PatternQuickMoveSession {
         delegate.renderSelectedSlots(graphics, menuSlots, displayToSource);
     }
 
+    /** Returns false without replacing the cut buffer if the selection exceeds the request limit. */
     public boolean cutSelectedPattern(
             PatternSlot slot,
             Map<PatternSlotRef, PatternSlotRef> displayToSource) {
         return delegate.cutSelectedPattern(slot, displayToSource);
     }
 
+    /** Returns zero and preserves the current selection/buffer if the whole group exceeds the request limit. */
     public int cutGroup(Collection<PatternContainerRecord> containers) {
         return delegate.cutGroup(containers);
     }
 
+    /** Returns false without sending or clearing the buffer for invalid or oversized requests. */
     public boolean paste(
             int menuId, List<Long> targetContainerIds, int preferredSlot) {
         return delegate.paste(menuId, targetContainerIds, preferredSlot);

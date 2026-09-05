@@ -6,7 +6,7 @@ public record CraftingCalculationProgressSnapshot(
         long generation,
         long revision,
         CraftingCalculationProgressPhase phase,
-        OmniCalculationPath path,
+        AelisCalculationPath path,
         long processedSteps,
         long discoveredNodes,
         long completedUnits,
@@ -17,7 +17,7 @@ public record CraftingCalculationProgressSnapshot(
     private static final CraftingCalculationProgressSnapshot IDLE =
             new CraftingCalculationProgressSnapshot(
                     0, 0, CraftingCalculationProgressPhase.IDLE,
-                    OmniCalculationPath.AE2_NATIVE, 0, 0, 0, -1, 0, 0, false);
+                    AelisCalculationPath.AE2_NATIVE, 0, 0, 0, -1, 0, 0, false);
 
     public CraftingCalculationProgressSnapshot {
         if (generation < 0 || revision < 0 || processedSteps < 0

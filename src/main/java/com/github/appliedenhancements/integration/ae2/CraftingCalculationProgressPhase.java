@@ -5,8 +5,8 @@ public enum CraftingCalculationProgressPhase {
     QUEUED(1, false),
     WAITING_SLOT(2, false),
     PREPARING(3, false),
-    MAX_FAST_COMPILING(4, false),
-    MAX_FAST_EXECUTING(5, false),
+    AELIS_COMPILING(11, false),
+    AELIS_EXECUTING(12, false),
     AE2_CALCULATING(6, false),
     BUILDING_PLAN(7, false),
     COMPLETED(8, true),
@@ -35,8 +35,8 @@ public enum CraftingCalculationProgressPhase {
             case 1 -> QUEUED;
             case 2 -> WAITING_SLOT;
             case 3 -> PREPARING;
-            case 4 -> MAX_FAST_COMPILING;
-            case 5 -> MAX_FAST_EXECUTING;
+            case 11 -> AELIS_COMPILING;
+            case 12 -> AELIS_EXECUTING;
             case 6 -> AE2_CALCULATING;
             case 7 -> BUILDING_PLAN;
             case 8 -> COMPLETED;
