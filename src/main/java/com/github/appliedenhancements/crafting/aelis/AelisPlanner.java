@@ -113,6 +113,16 @@ public final class AelisPlanner {
         public Result tryExecute(CraftingTreeNode requestedRoot, CraftingSimulationState inventory,
                 long requestedAmount, boolean simulation, KeyCounter missingItems)
                 throws InterruptedException {
+            try (var seeds = new AelisIgnoredSeedScope(inventory)) {
+                var result = tryExecuteWithSeeds(requestedRoot, inventory, requestedAmount, simulation, missingItems);
+                if (result.applied()) seeds.commit();
+                return result;
+            }
+        }
+
+        private Result tryExecuteWithSeeds(CraftingTreeNode requestedRoot, CraftingSimulationState inventory,
+                long requestedAmount, boolean simulation, KeyCounter missingItems)
+                throws InterruptedException {
             if (requestedAmount <= 0) {
                 return Result.fallback("invalid_request_amount", 0, 0, 0, 0, 0, null);
             }
@@ -439,6 +449,7 @@ public final class AelisPlanner {
             long requestedAmount, boolean simulation,
             KeyCounter stagedMissing, PauseCheckpoint pauseCheckpoint)
             throws InterruptedException, Fallback {
+        try (var seedLease = AelisIgnoredSeedScope.lease(parent)) {
         var variants = new LinkedHashMap<AEKey,
                 List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>();
         var canonicalCandidates = new LinkedHashMap<AEKey, List<CompiledCandidate>>();
@@ -612,6 +623,19 @@ public final class AelisPlanner {
                 variants, root.key, BigInteger.valueOf(rootItems),
                 available, limits);
         var result = preserved.result();
+        if (result != null && result.solved() && value(available, root.key).signum() == 0
+                && variants.getOrDefault(root.key, List.of()).stream().anyMatch(v -> cyclicCraftingCandidates.contains(v.id()))) {
+            BigInteger missingSeed = value(result.plan().missing(), root.key);
+            if (missingSeed.signum() > 0 && missingSeed.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
+                long borrowed = seedLease.expose(root.key, missingSeed.longValue());
+                if (borrowed > 0) {
+                    available.put(root.key, BigInteger.valueOf(parent.extract(root.key, Long.MAX_VALUE, Actionable.SIMULATE)));
+                    preserved = solveGlobalCyclePlan(variants, root.key, BigInteger.valueOf(rootItems), available, limits,
+                            Map.of(root.key, BigInteger.valueOf(borrowed)));
+                    result = preserved.result();
+                }
+            }
+        }
         if (!preserved.converged() || result == null || !result.solved()) {
             if (Config.AELIS_DIAGNOSTICS.get()) {
                 AppliedEnhancements.LOGGER.info(
@@ -716,7 +740,9 @@ public final class AelisPlanner {
                     result.exploredStates(),
                     (System.nanoTime() - startedAt) / 1_000_000.0);
         }
+        seedLease.commit();
         return true;
+        }
     }
 
     private static boolean tryExecuteLocalCyclicRegion(
@@ -729,6 +755,7 @@ public final class AelisPlanner {
         long startedAt = System.nanoTime();
         try {
             var attempt = new ChildCraftingSimulationState(parent);
+            try (var seedLease = AelisIgnoredSeedScope.lease(attempt)) {
             var attemptMissing = new KeyCounter();
             long requestedItems = checkedMultiply(
                     requestedNode.amount, requestMultipliers,
@@ -759,6 +786,18 @@ public final class AelisPlanner {
                     BigInteger.valueOf(requestedItems),
                     available, limits);
             var result = preserved.result();
+            if (result != null && result.solved() && value(available, requestedNode.key).signum() == 0) {
+                BigInteger missingSeed = value(result.plan().missingSeeds(), requestedNode.key);
+                if (missingSeed.signum() > 0 && missingSeed.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
+                    long borrowed = seedLease.expose(requestedNode.key, missingSeed.longValue());
+                    if (borrowed > 0) {
+                        available.put(requestedNode.key, BigInteger.valueOf(attempt.extract(requestedNode.key, Long.MAX_VALUE, Actionable.SIMULATE)));
+                        preserved = solveLocalCyclePlan(local.model, requestedNode.key, BigInteger.valueOf(requestedItems), available, limits,
+                                Map.of(requestedNode.key, BigInteger.valueOf(borrowed)));
+                        result = preserved.result();
+                    }
+                }
+            }
             if (!preserved.converged() || result == null || !result.solved()) {
                 throw new Fallback(
                         !preserved.converged()
@@ -949,7 +988,9 @@ public final class AelisPlanner {
                         plan.missingSeeds().size(), result.exploredStates(),
                         (System.nanoTime() - startedAt) / 1_000_000.0);
             }
+            seedLease.commit();
             return true;
+            }
         } catch (Fallback fallback) {
             if (Config.AELIS_DIAGNOSTICS.get()) {
                 AppliedEnhancements.LOGGER.info(
@@ -1134,7 +1175,15 @@ public final class AelisPlanner {
             BigInteger rootDemand,
             Map<AEKey, BigInteger> available,
             AelisCyclicDemandSolver.Limits limits) throws Fallback {
-        var retainedSeeds = new LinkedHashMap<AEKey, BigInteger>();
+        return solveGlobalCyclePlan(variants, rootKey, rootDemand, available, limits, Map.of());
+    }
+
+    private static PreservedGlobalCyclePlan solveGlobalCyclePlan(
+            Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>> variants,
+            AEKey rootKey, BigInteger rootDemand, Map<AEKey, BigInteger> available,
+            AelisCyclicDemandSolver.Limits limits, Map<AEKey, BigInteger> borrowedRootSeeds) throws Fallback {
+        // Borrowed final-output stock must be returned, not credited toward the new order.
+        var retainedSeeds = new LinkedHashMap<AEKey, BigInteger>(borrowedRootSeeds);
         AelisCyclicDemandSolver.Result<AEKey, CompiledCandidate> result = null;
         AelisCycleExecutionPlan executionPlan = null;
         for (int pass = 0; pass < 8; pass++) {
@@ -1159,7 +1208,7 @@ public final class AelisPlanner {
                     || Config.CYCLE_SEED_POLICY.get()
                             == AelisCycleSeedPolicy.MAX_THROUGHPUT) {
                 return new PreservedGlobalCyclePlan(
-                        result, executionPlan, Map.of(), true);
+                        result, executionPlan, Map.copyOf(retainedSeeds), true);
             }
             Map<AEKey, BigInteger> additions = AelisCycleSeedReservation.additions(
                     executionPlan.minimumSeeds(), plan.surplus(), retainedSeeds);
@@ -1181,7 +1230,14 @@ public final class AelisPlanner {
             BigInteger demand,
             Map<AEKey, BigInteger> available,
             AelisCyclicDemandSolver.Limits limits) throws Fallback {
-        var retainedSeeds = new LinkedHashMap<AEKey, BigInteger>();
+        return solveLocalCyclePlan(region, demandKey, demand, available, limits, Map.of());
+    }
+
+    private static PreservedLocalCyclePlan solveLocalCyclePlan(
+            AelisCyclicRegionDetector.Region<AEKey, CompiledCandidate> region,
+            AEKey demandKey, BigInteger demand, Map<AEKey, BigInteger> available,
+            AelisCyclicDemandSolver.Limits limits, Map<AEKey, BigInteger> borrowedRootSeeds) throws Fallback {
+        var retainedSeeds = new LinkedHashMap<AEKey, BigInteger>(borrowedRootSeeds);
         AelisCyclicRegionSolver.Result<AEKey, CompiledCandidate> result = null;
         AelisCycleExecutionPlan executionPlan = null;
         for (int pass = 0; pass < 8; pass++) {
@@ -1200,7 +1256,7 @@ public final class AelisPlanner {
                     || Config.CYCLE_SEED_POLICY.get()
                             == AelisCycleSeedPolicy.MAX_THROUGHPUT) {
                 return new PreservedLocalCyclePlan(
-                        result, executionPlan, Map.of(), true);
+                        result, executionPlan, Map.copyOf(retainedSeeds), true);
             }
             Map<AEKey, BigInteger> additions = AelisCycleSeedReservation.additions(
                     executionPlan.minimumSeeds(), plan.surplus(), retainedSeeds);

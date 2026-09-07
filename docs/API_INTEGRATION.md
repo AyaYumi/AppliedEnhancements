@@ -2,7 +2,7 @@
 
 [中文文档](API_INTEGRATION_ZH.md)
 
-This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.5`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.6`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 ## Compatibility baseline
 
@@ -12,7 +12,9 @@ This guide is intended for NeoForge mod authors integrating with Applied Enhance
 | Java | `21` | Compilation and runtime target |
 | NeoForge | `21.1.220` | Build/runtime validation version; currently declared range: `[21.1.220,)` |
 | Applied Energistics 2 | `19.2.17` | Declared range: `[19.2.17,)`; public signatures directly reference AE2 types |
-| Applied Enhancements | `1.0.5` | Version covered by this guide |
+| Applied Enhancements | `1.0.6` | Version covered by this guide |
+
+Version `1.0.6` preserves the public Java API signatures and payload protocol `3` from `1.0.5`. Existing callers can adopt this release without changing API calls. Integrations that rely on the corrected AELIS source label or requested-output seed handling should require `1.0.6` or newer, as in the dependency examples below.
 
 Only the following packages are part of the stable integration surface:
 
@@ -41,10 +43,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly files("libs/appliedenhancements-1.0.5.jar")
+    compileOnly files("libs/appliedenhancements-1.0.6.jar")
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly files("libs/appliedenhancements-1.0.5.jar")
+    runtimeOnly files("libs/appliedenhancements-1.0.6.jar")
 }
 ```
 
@@ -54,7 +56,7 @@ If your integration unconditionally loads Applied Enhancements API classes, decl
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.5,)"
+versionRange="[1.0.6,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -65,7 +67,7 @@ If all API references are isolated behind an optional compatibility layer, decla
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.5,)"
+versionRange="[1.0.6,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -114,7 +116,7 @@ There are 17 public top-level API types: 16 current types plus one deprecated co
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.5` uses internal payload protocol `3`. Built-in packets synchronize selected server feature settings, calculation progress and planner-path display, but not third-party registrations or custom CPU state. Payload classes are internal.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.6` uses internal payload protocol `3`. Built-in packets synchronize selected server feature settings, calculation progress and planner-path display, but not third-party registrations or custom CPU state. Payload classes are internal.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 
@@ -211,7 +213,11 @@ if (result.shouldFallback()) {
 
 If `tryExecute` throws `InterruptedException`, a runtime exception, or an error, the wrapper restores the attempt state before propagating the failure.
 
-### Cycle metadata for direct API calls
+### Planner provenance and cycle metadata for direct API calls
+
+Successful API planning preserves the `AELIS` source label for both ordinary and cyclic plans, including when automatic integration is disabled.
+
+When the requested output is also a cycle's startup seed, the solver may borrow only the proven missing startup amount from stock hidden by AE2's output-ignore operation. The borrowed amount is recorded as real plan input and must be returned in addition to the requested new output under both `PRESERVE_MINIMUM` and `MAX_THROUGHPUT`. Ordinary recipes still ignore existing output stock. Rejected branches and unsuccessful attempts restore borrowed inventory and extraction accounting; missing real seeds or other materials still prevent submission.
 
 Direct API calls can produce cyclic plans, preserve seeds, and submit to supported CPUs while automatic integration is disabled. Use the overload accepting `ICraftingService` when recursion-hidden candidates must be recovered:
 
@@ -222,7 +228,7 @@ var planner = AelisCraftingPlanner.createConfigured(
         grid.getCraftingService());
 ```
 
-After `tryExecute(...)` returns `applied() == true`, the native `CraftingSimulationState.buildCraftingPlan(...)` method already includes cycle metadata. Attach it explicitly when constructing a custom plan:
+After `tryExecute(...)` returns `applied() == true`, the native `CraftingSimulationState.buildCraftingPlan(...)` method already includes the AELIS source label and any cycle metadata. Attach them explicitly when constructing a custom plan, including an ordinary plan:
 
 ```java
 ICraftingPlan plan = buildCustomPlan();
@@ -673,7 +679,7 @@ These features require AE2 Java types, client UI integration, or server-authorit
 
 ## Pre-release integration checklist
 
-See the [release validation scope](../README.md#validation) for the `1.0.5` build/keybinding checks and earlier `1.0.4` crafting/API runtime results. The separate runtime harness and dependency-provided GameTests are not the repository's default unit suite; a custom CPU must still verify its own integration boundaries.
+See the [release validation scope](../README.md#validation) for the `1.0.6` build and `362` unit tests, existing API/seed integration records, and earlier keybinding and crafting runtime results. The separate runtime harness and dependency-provided GameTests are not the repository's default unit suite; a custom CPU must still verify its own integration boundaries.
 
 - [ ] Imports are limited to the stable API packages.
 - [ ] Optional compatibility classes cannot load when Applied Enhancements is absent.
@@ -681,6 +687,8 @@ See the [release validation scope](../README.md#validation) for the `1.0.5` buil
 - [ ] Registration IDs use the integrating mod's namespace and are unique.
 - [ ] AELIS planner instances are not shared across calculations or threads.
 - [ ] Normal planner fallback continues through another planner or AE2's native path.
+- [ ] Custom plans use the return value of `attachToPlan` or `copyMetadata` to retain the AELIS source label and cycle metadata.
+- [ ] Requested-output seed tests verify the full new output plus borrowed-seed return, and reject orders with real missing inputs.
 - [ ] Batch movement revalidates every client-supplied field on the server.
 - [ ] Batch movement restores every source and target after failure.
 - [ ] `PatternQuickMoveSession` is cleared when its screen closes.

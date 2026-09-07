@@ -358,7 +358,10 @@ public abstract class AelisCraftingCalculationMixin
             boolean simulation, long amount,
             CallbackInfoReturnable<CraftingPlan> callback) {
         if ((Object) callback.getReturnValue() instanceof AelisCalculationPathCarrier carrier) {
-            carrier.molecularmanipulator$setCalculationPath(molecularmanipulator$calculationPath);
+            // An external API caller may already have attached the actual path.
+            if (carrier.molecularmanipulator$getCalculationPath() != AelisCalculationPath.AELIS) {
+                carrier.molecularmanipulator$setCalculationPath(molecularmanipulator$calculationPath);
+            }
         }
     }
 

@@ -19,6 +19,9 @@ public interface CraftingSimulationStateLongSafetyAccessor {
     @Accessor("modifiableCache")
     KeyCounter appliedenhancements$getModifiableCache();
 
+    @Accessor("requiredExtract")
+    KeyCounter appliedenhancements$getRequiredExtract();
+
     @Accessor("crafts")
     Map<IPatternDetails, Long> appliedenhancements$getCrafts();
 }

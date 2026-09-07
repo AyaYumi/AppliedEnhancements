@@ -204,6 +204,9 @@ final class AelisCraftingPlannerImpl implements AelisCraftingPlanner {
         if (!result.applied()) {
             restoreAttemptState(root, missingItems, missingSnapshot, possibleSnapshot);
         }
+        if (result.applied() && inventory instanceof com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier path) {
+            path.molecularmanipulator$setCalculationPath(com.github.appliedenhancements.integration.ae2.AelisCalculationPath.AELIS);
+        }
         return new Result(
                 result.applied(),
                 result.fallbackReason(),

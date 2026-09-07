@@ -29,14 +29,6 @@ public abstract class CPUSelectionListMixin {
         }
     }
 
-    @WrapOperation(method = "drawBackgroundLayer", at = @At(value = "INVOKE",
-            target = "Ljava/lang/String;valueOf(I)Ljava/lang/String;"))
-    private String appliedenhancements$formatInfiniteParallelism(int value, Operation<String> original) {
-        return value == InfiniteConstants.INFINITE_PARALLELISM
-                ? "9.2E"
-                : original.call(value);
-    }
-
     @WrapOperation(method = "getTooltip", at = @At(value = "INVOKE",
             target = "Lappeng/core/localization/Tooltips;ofNumber(J)Lnet/minecraft/network/chat/MutableComponent;"))
     private MutableComponent appliedenhancements$tooltipInfiniteParallelism(

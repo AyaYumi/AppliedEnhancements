@@ -2,6 +2,10 @@ package com.appliedenhancements.mixin;
 
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEKey;
+import appeng.api.config.Actionable;
+import com.github.appliedenhancements.integration.ae2.AelisIgnoredSeedInventory;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
 import appeng.crafting.CraftingCalculation;
 import appeng.crafting.CraftingPlan;
 import appeng.crafting.inv.CraftingSimulationState;
@@ -26,7 +30,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = CraftingSimulationState.class, remap = false)
 public abstract class CraftingSimulationStateCyclicCraftingMixin
-        implements AelisCyclicCraftingTracker {
+        implements AelisCyclicCraftingTracker, AelisIgnoredSeedInventory, AelisCalculationPathCarrier {
+    @Unique private final Map<AEKey, Long> appliedenhancements$ignoredSeeds = new LinkedHashMap<>();
+    @Unique private AelisCalculationPath appliedenhancements$apiPath;
+
+    @Override public Map<AEKey, Long> appliedenhancements$ignoredSeeds() { return appliedenhancements$ignoredSeeds; }
+    @Override public AelisCalculationPath molecularmanipulator$getCalculationPath() { return appliedenhancements$apiPath; }
+    @Override public void molecularmanipulator$setCalculationPath(AelisCalculationPath path) { appliedenhancements$apiPath = path; }
+
+    @Inject(method = "ignore", at = @At("HEAD"))
+    private void appliedenhancements$rememberIgnoredStock(AEKey key, CallbackInfo callback) {
+        long available = ((CraftingSimulationState) (Object) this).extract(key, Long.MAX_VALUE, Actionable.SIMULATE);
+        appliedenhancements$ignoredSeeds.put(key, available);
+    }
+
     @Unique
     private final Map<AEKey, Long> appliedenhancements$cyclicCraftAmounts =
             new LinkedHashMap<>();
@@ -112,7 +129,8 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
             long calculatedAmount,
             CallbackInfoReturnable<CraftingPlan> callback) {
         var tracker = (AelisCyclicCraftingTracker) state;
-        if (tracker.appliedenhancements$getCycleExecutionPlan() != null) {
+        if (tracker.appliedenhancements$getCycleExecutionPlan() != null
+                || ((AelisCalculationPathCarrier) state).molecularmanipulator$getCalculationPath() == AelisCalculationPath.AELIS) {
             callback.setReturnValue((CraftingPlan) AelisCycleExecutionApi.attachToPlan(
                     state, callback.getReturnValue()));
         } else {

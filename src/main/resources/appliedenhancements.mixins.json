@@ -41,7 +41,8 @@
     "PatternContainerTrackerAccessor",
     "StackImportFacadeMixin",
     "StorageImportStrategyMixin",
-    "StorageCellsMixin"
+    "StorageCellsMixin",
+    "AelisChildSimulationStateAccessor"
   ],
   "client": [
     "AEKeyAmountMixin",
@@ -62,7 +63,8 @@
     "PatternAccessSlotsRowMixin",
     "PatternAccessTermScreenDuplicateMixin",
     "ScreenWidgetAccessor",
-    "WirelessExtendedPatternAccessDuplicateMixin"
+    "WirelessExtendedPatternAccessDuplicateMixin",
+    "CPUSelectionListFinalAmountsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -10,9 +10,18 @@ Applied Enhancements is a NeoForge quality-of-life and performance addon for App
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.5`
+> Current version: `1.0.6`
 >
 > Target: Minecraft `1.21.1` / NeoForge / Java `21`
+
+## What's new in 1.0.6
+
+| Area | Update |
+|---|---|
+| AELIS API labels | Successful ordinary and cyclic API plans retain their `AELIS` source label, including when automatic planning is disabled. |
+| Requested-output cycle seeds | Cycles such as smithing-template duplication can borrow the proven startup amount from existing output stock. Borrowed seeds are returned in addition to the newly requested output; failed attempts restore inventory and extraction accounting. |
+| NeoEcoAE compatibility | Supported infinite CPUs display `9.2E` in the CPU list after number formatting, fixing the incorrect `2G` label. Finite counts and actual CPU capacity are unaffected. |
+| Integration compatibility | Public Java API signatures and internal payload protocol `3` are unchanged from `1.0.5`. |
 
 ## Features
 
@@ -57,7 +66,7 @@ Quantum CPU, smart-doubling and order-package integration additionally use the o
 Install the same Applied Enhancements release build on both the client and server, together with compatible NeoForge and AE2 versions.
 
 ```text
-mods/appliedenhancements-1.0.5.jar
+mods/appliedenhancements-1.0.6.jar
 ```
 
 ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
@@ -108,6 +117,8 @@ enable_automatic_planner = false
 ```
 
 Third-party Java mods may invoke `AelisCraftingPlanner` regardless of this switch. The automatic switch only controls Applied Enhancements' built-in interception and the manual-plan inventory lock; disabling it does not remove cycle execution metadata from an existing or API-created order.
+
+Successful API plans retain their `AELIS` source label for both ordinary and cyclic recipes. When the requested output is also a cycle's startup seed, the planner exposes only the missing startup amount proven by the solver from stock hidden by AE2's output-ignore operation. That borrowed amount is included in the plan's real inputs and returned separately from the new order, under either seed policy. Ordinary recipes continue to ignore existing output stock; absent seeds or other required materials still prevent submission. Rejected branches and unsuccessful attempts roll back borrowed stock and extraction accounting.
 
 Integrations that need recursion-hidden exact cycle recovery can use the `createConfigured(..., ICraftingService)` overload. Existing overloads retain tree-only behavior and never query raw network candidates.
 
@@ -280,12 +291,16 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
 Build output:
 
 ```text
-build/libs/appliedenhancements-1.0.5.jar
+build/libs/appliedenhancements-1.0.6.jar
 ```
 
 ## Validation
 
-Version `1.0.5` builds successfully and passes all `358` repository unit tests. The split-keybinding implementation also passed a separate client check covering default right-click versus Alt + right-click, GUI-only activation, independent keyboard routing and unbinding, custom modifiers, options save/reload, and migration of the old shared binding. That client harness is a local validation tool, not part of the repository's default unit-test task.
+Version `1.0.6` builds successfully with Java `21` and passes all `362` repository unit tests, with zero failures, errors, or skipped tests. Run `cleanTest build --no-configuration-cache` with the Gradle Wrapper to repeat the unit suite and build the JAR.
+
+The four added seed-scope tests cover borrowing only the proven amount with real extraction accounting, rejected-branch rollback, rollback of an accepted inner lease after outer failure, and prevention of invented stock or borrowing from another transaction.
+
+Existing separate integration records report six smithing-template duplication scenarios, submission and completion through the game UI, and regression checks with an existing API caller. The `1.0.5` split-keybinding implementation also passed a separate client check covering default right-click versus Alt + right-click, GUI-only activation, independent keyboard routing and unbinding, custom modifiers, options save/reload, and migration of the old shared binding. These external checks are not part of the repository's default unit-test task.
 
 The earlier `1.0.4` crafting/API runtime validation snapshot is retained below:
 

@@ -2,7 +2,7 @@
 
 [English documentation](API_INTEGRATION.md)
 
-本文面向希望接入 Applied Enhancements `1.0.5` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+本文面向希望接入 Applied Enhancements `1.0.6` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -12,7 +12,9 @@
 | Java | `21` | 编译与运行目标 |
 | NeoForge | `21.1.220` | 构建与运行验证版本；当前声明范围：`[21.1.220,)` |
 | Applied Energistics 2 | `19.2.17` | 声明范围：`[19.2.17,)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.0.5` | 本文档对应版本 |
+| Applied Enhancements | `1.0.6` | 本文档对应版本 |
+
+`1.0.6` 保留 `1.0.5` 的公共 Java API 签名和载荷协议 `3`，已有接入方升级时无须修改 API 调用。依赖 AELIS 来源标识或目标物种子修复的接入方，应按下方示例将最低版本设为 `1.0.6`。
 
 稳定兼容范围仅包括以下包：
 
@@ -40,10 +42,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly files("libs/appliedenhancements-1.0.5.jar")
+    compileOnly files("libs/appliedenhancements-1.0.6.jar")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly files("libs/appliedenhancements-1.0.5.jar")
+    runtimeOnly files("libs/appliedenhancements-1.0.6.jar")
 }
 ```
 
@@ -53,7 +55,7 @@ dependencies {
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.5,)"
+versionRange="[1.0.6,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -64,7 +66,7 @@ side="BOTH"
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.5,)"
+versionRange="[1.0.6,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -113,7 +115,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.5` 的内部载荷协议为 `3`。内置网络只同步部分服务端功能配置、计算进度和规划路径显示，不同步第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.6` 的内部载荷协议为 `3`。内置网络只同步部分服务端功能配置、计算进度和规划路径显示，不同步第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
@@ -205,7 +207,11 @@ if (result.shouldFallback()) {
 
 `tryExecute` 抛出 `InterruptedException`、运行时异常或错误时，包装层会先恢复本次尝试状态再向上传播。
 
-### API 调用中的循环元数据
+### API 调用中的来源标识与循环元数据
+
+通过 API 成功规划的普通和循环计划都会保留 `AELIS` 来源标识，自动规划关闭时也适用。
+
+目标物同时作为循环启动种子时，求解器只从 AE2 忽略的目标物旧库存中借用已证明缺少的启动量。借用量计入计划的真实输入，并在新增订单之外归还，`PRESERVE_MINIMUM` 和 `MAX_THROUGHPUT` 两种策略均适用。普通配方仍忽略目标物旧库存。分支被拒绝或整次尝试失败时，会恢复借用库存及提取记账；缺少真实种子或其他材料时仍不可提交。
 
 自动规划器关闭时，公共 API 仍可生成循环计划、保留种子并提交到支持的 CPU。需要恢复 AE2 递归过滤隐藏的候选时，建议调用带 `ICraftingService` 的重载：
 
@@ -216,7 +222,7 @@ var planner = AelisCraftingPlanner.createConfigured(
         grid.getCraftingService());
 ```
 
-`tryExecute(...)` 返回 `applied() == true` 后，原生 `CraftingSimulationState.buildCraftingPlan(...)` 已自动附带循环信息。如果接入方自行构造 `ICraftingPlan`，使用公共接口附加元数据：
+`tryExecute(...)` 返回 `applied() == true` 后，原生 `CraftingSimulationState.buildCraftingPlan(...)` 已自动附带 AELIS 来源标识和已有循环信息。如果接入方自行构造 `ICraftingPlan`，包括普通计划，使用公共接口附加元数据：
 
 ```java
 ICraftingPlan plan = buildCustomPlan();
@@ -653,7 +659,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 
 ## 发布前检查清单
 
-`1.0.5` 构建与按键检查，以及此前 `1.0.4` 合成和 API 运行结果见 [发行验证范围](../README_ZH.md#验证范围)。独立运行验证环境和依赖模组自带的 GameTest 不属于仓库默认单元测试；独立 CPU 仍需验证自己的接入边界。
+`1.0.6` 构建与 `362` 项单元测试、已有 API 和种子接入验证记录，以及此前按键和合成运行结果见 [发行验证范围](../README_ZH.md#验证范围)。独立运行验证环境和依赖模组自带的 GameTest 不属于仓库默认单元测试；独立 CPU 仍需验证自己的接入边界。
 
 - [ ] 只从稳定 API 包导入类型。
 - [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。
@@ -661,6 +667,8 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 - [ ] 注册 ID 使用接入方自己的命名空间且不会重复。
 - [ ] AELIS 实例没有跨计算或跨线程共享。
 - [ ] 普通回退时继续自己的规划器或 AE2 原生路径。
+- [ ] 自定义计划使用 `attachToPlan` 或 `copyMetadata` 的返回值，保留 AELIS 来源标识与循环元数据。
+- [ ] 目标物种子测试验证完整新增产量和借用种子归还，并拒绝真实输入不足的订单。
 - [ ] 批量移动处理器在服务端重新验证所有客户端字段。
 - [ ] 批量移动失败能恢复所有来源和目标槽。
 - [ ] `PatternQuickMoveSession` 在关闭界面时清除。
