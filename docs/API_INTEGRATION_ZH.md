@@ -2,7 +2,7 @@
 
 [English documentation](API_INTEGRATION.md)
 
-本文面向希望接入 Applied Enhancements `1.0.4` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+本文面向希望接入 Applied Enhancements `1.0.5` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -12,7 +12,7 @@
 | Java | `21` | 编译与运行目标 |
 | NeoForge | `21.1.220` | 构建与运行验证版本；当前声明范围：`[21.1.220,)` |
 | Applied Energistics 2 | `19.2.17` | 声明范围：`[19.2.17,)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.0.4` | 本文档对应版本 |
+| Applied Enhancements | `1.0.5` | 本文档对应版本 |
 
 稳定兼容范围仅包括以下包：
 
@@ -40,10 +40,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly files("libs/appliedenhancements-1.0.4.jar")
+    compileOnly files("libs/appliedenhancements-1.0.5.jar")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly files("libs/appliedenhancements-1.0.4.jar")
+    runtimeOnly files("libs/appliedenhancements-1.0.5.jar")
 }
 ```
 
@@ -53,7 +53,7 @@ dependencies {
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.4,)"
+versionRange="[1.0.5,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -64,7 +64,7 @@ side="BOTH"
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.4,)"
+versionRange="[1.0.5,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -113,7 +113,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.4` 的内部载荷协议为 `3`。内置网络只同步部分服务端功能配置、计算进度和规划路径显示，不同步第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.5` 的内部载荷协议为 `3`。内置网络只同步部分服务端功能配置、计算进度和规划路径显示，不同步第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
@@ -577,6 +577,8 @@ public void onClose() {
 
 ## 8. 网络物品右键菜单扩展
 
+从 `1.0.5` 起，内置物品操作菜单使用独立的“打开物品操作菜单”绑定，默认 **Alt＋右键**；样板快速移动的剪切、粘贴使用“打开样板移动菜单”，默认 **右键**。两项均检查 NeoForge 修饰键和 GUI 状态。旧共享绑定保留给样板移动，因此已保存的右键设置不会覆盖新的物品操作默认值。已注册的兼容界面会自动采用这一区分，注册菜单条目不会修改任何绑定。完全自定义的界面需要自行分开处理两类输入。本次拆分不改变公共 Java API 签名，内部载荷协议仍为 `3`。
+
 在 Client Setup 中注册菜单项提供器：
 
 ```java
@@ -651,7 +653,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 
 ## 发布前检查清单
 
-`1.0.4` 的单元测试及隔离运行结果见 [发行验证范围](../README_ZH.md#验证范围)。独立运行验证环境和依赖模组自带的 GameTest 不属于仓库默认单元测试；独立 CPU 仍需验证自己的接入边界。
+`1.0.5` 构建与按键检查，以及此前 `1.0.4` 合成和 API 运行结果见 [发行验证范围](../README_ZH.md#验证范围)。独立运行验证环境和依赖模组自带的 GameTest 不属于仓库默认单元测试；独立 CPU 仍需验证自己的接入边界。
 
 - [ ] 只从稳定 API 包导入类型。
 - [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。

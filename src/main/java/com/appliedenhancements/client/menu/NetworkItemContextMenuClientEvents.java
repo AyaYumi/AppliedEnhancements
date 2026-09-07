@@ -61,18 +61,22 @@ public final class NetworkItemContextMenuClientEvents {
                         event.getScanCode(),
                         event.getModifiers())) {
             event.setCanceled(true);
-        } else if (ItemContextMenuKeyMapping.matchesKey(
-                event.getKeyCode(), event.getScanCode())) {
+        } else {
+            boolean itemTrigger = ItemContextMenuKeyMapping.matchesKey(event.getKeyCode(), event.getScanCode());
+            boolean patternTrigger = ItemContextMenuKeyMapping.matchesPatternKey(event.getKeyCode(), event.getScanCode());
+            if (!itemTrigger && !patternTrigger) {
+                return;
+            }
             double[] mouse = scaledMousePosition();
-            if (OptionalJeiItemContextMenu.handler().trigger(
+            if (itemTrigger && OptionalJeiItemContextMenu.handler().trigger(
                     event.getScreen(), mouse[0], mouse[1])) {
                 event.setCanceled(true);
-            } else if (event.getScreen()
+            } else if (itemTrigger && event.getScreen()
                     instanceof NetworkItemContextMenuScreenBridge bridge
                     && bridge.appliedenhancements$openNetworkItemMenu(
                             mouse[0], mouse[1])) {
                 event.setCanceled(true);
-            } else if (event.getScreen()
+            } else if (patternTrigger && event.getScreen()
                     instanceof PatternQuickMoveScreenBridge bridge
                     && bridge.appliedenhancements$openQuickMoveContextMenu(
                             mouse[0], mouse[1])) {

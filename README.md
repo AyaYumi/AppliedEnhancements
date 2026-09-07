@@ -10,7 +10,7 @@ Applied Enhancements is a NeoForge quality-of-life and performance addon for App
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.4`
+> Current version: `1.0.5`
 >
 > Target: Minecraft `1.21.1` / NeoForge / Java `21`
 
@@ -30,7 +30,7 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 | Duplicate-output patterns | Supported pattern terminals can show only encoded patterns whose primary output occurs more than once, ignoring output quantity. |
 | Invalid-pattern finder | Supported pattern terminals can isolate encoded patterns that can no longer be resolved and show their source machine and slot. |
 | Quick pattern movement | Select patterns by clicking or dragging, then atomically cut and paste them between compatible machines. |
-| Item context menus | Right-click ME entries to extract, craft, or copy IDs; right-click JEI entries to view recipes, copy names/IDs, and use JEI-authorized cheat actions. |
+| Item context menus | Alt + right-click ME entries to extract, craft, or copy IDs; Alt + right-click JEI entries to view recipes, copy names/IDs, and use JEI-authorized cheat actions. |
 | Infinite-cell markers | AE2 creative cells, supported ExtendedAE infinite cells, tagged items, and Java marker implementations use the compact `9.2E` display. |
 | Pattern caching | Bounded per-pattern caches reduce repeated input validation and container-item work. |
 | Provider batch API | Third-party crafting providers can receive paired scheduling-batch start and end callbacks from the native AE2 CPU. |
@@ -57,7 +57,7 @@ Quantum CPU, smart-doubling and order-package integration additionally use the o
 Install the same Applied Enhancements release build on both the client and server, together with compatible NeoForge and AE2 versions.
 
 ```text
-mods/appliedenhancements-1.0.4.jar
+mods/appliedenhancements-1.0.5.jar
 ```
 
 ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
@@ -162,13 +162,20 @@ Paste requests are revalidated and committed atomically by the server. Encoded p
 
 ## Network-item context menu
 
-Right-click a network item with an empty cursor in an AE2 storage screen or compatible subclass to open the action menu. It can extract one item to the cursor, move one stack to the player, extract a custom exact amount into available player-inventory space, start an available autocraft, or copy the resource ID.
+Alt + right-click a network item with an empty cursor in an AE2 storage screen or compatible subclass to open the action menu. It can extract one item to the cursor, move one stack to the player, extract a custom exact amount into available player-inventory space, start an available autocraft, or copy the resource ID.
 
 Holding an item or container preserves AE2's original right-click storage and container-filling behavior. The menu can also copy the localized name and search the terminal for items from the same mod. Custom extraction is revalidated by the server against the active menu, synchronized entry serial, connection, power, current storage, and player inventory capacity. Third-party client integrations can contribute entries through `NetworkItemContextMenuApi`.
 
-With JEI `19.27.0` or newer installed, right-clicking an ingredient-list or bookmark entry can show its recipes or uses, copy its localized name or registry ID, or search JEI for items from the same mod. While an AE2 storage terminal is open, an exactly matching synchronized network entry also enables ME extraction, ME autocrafting, and terminal search. If JEI cheat mode is active and JEI can provide a cheat stack for the ingredient, the menu also offers Give One and Give Stack. These actions reuse JEI's own synchronized permission and give behavior; Applied Enhancements does not bypass JEI or server permissions.
+With JEI `19.27.0` or newer installed, Alt + right-clicking an ingredient-list or bookmark entry can show its recipes or uses, copy its localized name or registry ID, or search JEI for items from the same mod. While an AE2 storage terminal is open, an exactly matching synchronized network entry also enables ME extraction, ME autocrafting, and terminal search. If JEI cheat mode is active and JEI can provide a cheat stack for the ingredient, the menu also offers Give One and Give Stack. These actions reuse JEI's own synchronized permission and give behavior; Applied Enhancements does not bypass JEI or server permissions.
 
-The trigger is configurable under Options → Controls → Key Binds → Applied Enhancements → Open Item Context Menu. It defaults to the right mouse button, can be rebound to another mouse or keyboard key, and controls JEI, bookmarks, AE2 network entries, and pattern Quick Move cut/paste menus. It is active only in GUIs.
+Two independent triggers are configurable under Options → Controls → Key Binds → Applied Enhancements:
+
+| Binding | Default | Menus |
+|---|---|---|
+| Open Pattern Quick Move Menu | Right mouse button | Pattern Cut/Paste in Quick Move mode |
+| Open Item Actions Menu | Alt + right mouse button | AE2 network entries, JEI ingredients and bookmarks |
+
+Both support mouse or keyboard rebinding and NeoForge modifiers, and are active only in GUIs. Existing shared key settings are retained for pattern Quick Move; the new item-action binding starts with Alt + right-click. Changing either binding does not change the other.
 
 ## Configuration
 
@@ -273,12 +280,14 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
 Build output:
 
 ```text
-build/libs/appliedenhancements-1.0.4.jar
+build/libs/appliedenhancements-1.0.5.jar
 ```
 
 ## Validation
 
-The `1.0.4` release validation snapshot is:
+Version `1.0.5` builds successfully and passes all `358` repository unit tests. The split-keybinding implementation also passed a separate client check covering default right-click versus Alt + right-click, GUI-only activation, independent keyboard routing and unbinding, custom modifiers, options save/reload, and migration of the old shared binding. That client harness is a local validation tool, not part of the repository's default unit-test task.
+
+The earlier `1.0.4` crafting/API runtime validation snapshot is retained below:
 
 | Scope | Result | Interpretation |
 |---|---:|---|

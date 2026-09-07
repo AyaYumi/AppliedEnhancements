@@ -514,12 +514,12 @@ public abstract class PatternAccessTermScreenDuplicateMixin
             }
         }
 
-        if (ItemContextMenuKeyMapping.matchesMouse(button)
+        if (ItemContextMenuKeyMapping.matchesPatternMouse(button)
                 && appliedenhancements$openQuickMoveContextMenu(mouseX, mouseY)) {
             return true;
         }
 
-        if (ItemContextMenuKeyMapping.matchesMouse(button)
+        if (ItemContextMenuKeyMapping.matchesPatternMouse(button)
                 && mouseX >= screen.getGuiLeft() + 8
                 && mouseX < screen.getGuiLeft() + 170
                 && mouseY >= screen.getGuiTop() + appliedenhancements$EXPANDED_HEADER_HEIGHT
