@@ -108,8 +108,8 @@ final class AelisCyclicRegionDetector<K, V> {
         var rejectedRegions = new ArrayList<RejectedRegion<K>>();
         for (List<K> component : state.components) {
             boolean cyclic = component.size() > 1
-                    || adjacency.getOrDefault(component.getFirst(), Set.of())
-                            .contains(component.getFirst());
+                    || adjacency.getOrDefault(component.get(0), Set.of())
+                            .contains(component.get(0));
             if (!cyclic) {
                 continue;
             }

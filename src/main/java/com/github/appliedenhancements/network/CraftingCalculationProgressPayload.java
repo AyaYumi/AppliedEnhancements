@@ -1,5 +1,6 @@
 package com.github.appliedenhancements.network;
 
+import com.appliedenhancements.network.PacketCodec;
 import com.appliedenhancements.AppliedEnhancements;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
@@ -7,19 +8,14 @@ import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgres
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import io.netty.handler.codec.DecoderException;
 import java.util.Objects;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraft.network.FriendlyByteBuf;
 
 public record CraftingCalculationProgressPayload(
         int containerId,
-        CraftingCalculationProgressSnapshot progress)
-        implements CustomPacketPayload {
-    public static final Type<CraftingCalculationProgressPayload> TYPE =
-            new Type<>(AppliedEnhancements.id("aelis_calculation_progress"));
-    public static final StreamCodec<RegistryFriendlyByteBuf, CraftingCalculationProgressPayload>
-            STREAM_CODEC = StreamCodec.of(
+        CraftingCalculationProgressSnapshot progress) {
+    public static final int PACKET_ID = 4;
+    public static final PacketCodec<FriendlyByteBuf, CraftingCalculationProgressPayload>
+            STREAM_CODEC = PacketCodec.of(
                     CraftingCalculationProgressPayload::encode,
                     CraftingCalculationProgressPayload::decode);
 
@@ -30,13 +26,9 @@ public record CraftingCalculationProgressPayload(
         Objects.requireNonNull(progress, "progress");
     }
 
-    public static void register(net.neoforged.neoforge.network.registration.PayloadRegistrar registrar) {
-        registrar.playToClient(
-                TYPE, STREAM_CODEC, CraftingCalculationProgressPayload::handle);
-    }
 
-    private static void encode(
-            RegistryFriendlyByteBuf buffer,
+    public static void encode(
+            FriendlyByteBuf buffer,
             CraftingCalculationProgressPayload payload) {
         var progress = payload.progress;
         buffer.writeVarInt(payload.containerId);
@@ -53,8 +45,8 @@ public record CraftingCalculationProgressPayload(
         buffer.writeBoolean(progress.simulation());
     }
 
-    private static CraftingCalculationProgressPayload decode(
-            RegistryFriendlyByteBuf buffer) {
+    public static CraftingCalculationProgressPayload decode(
+            FriendlyByteBuf buffer) {
         int containerId = buffer.readVarInt();
         long generation = buffer.readLong();
         long revision = buffer.readLong();
@@ -105,18 +97,14 @@ public record CraftingCalculationProgressPayload(
         return new CraftingCalculationProgressPayload(containerId, progress);
     }
 
-    private static void handle(
+    public static void handle(
             CraftingCalculationProgressPayload payload,
-            IPayloadContext context) {
-        var menu = context.player().containerMenu;
+            net.minecraft.world.entity.player.Player receivingPlayer) {
+        var menu = receivingPlayer.containerMenu;
         if (menu.containerId == payload.containerId
                 && menu instanceof CraftingCalculationProgressMenuBridge bridge) {
             bridge.molecularmanipulator$acceptCalculationProgress(payload.progress);
         }
     }
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
-    }
 }

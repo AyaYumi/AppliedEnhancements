@@ -1,21 +1,17 @@
 package com.appliedenhancements.network;
 
+import com.appliedenhancements.network.PacketCodec;
+import net.minecraft.network.FriendlyByteBuf;
 import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
  * Network payload for long-range crafting requests.
  * Allows crafting orders to exceed Integer.MAX_VALUE.
  */
-public record LongCraftingRequestPayload(long amount, boolean craftMissingAmount, boolean autoStart)
-        implements CustomPacketPayload {
+public record LongCraftingRequestPayload(long amount, boolean craftMissingAmount, boolean autoStart) {
 
     public LongCraftingRequestPayload {
         if (amount <= 0) {
@@ -23,32 +19,23 @@ public record LongCraftingRequestPayload(long amount, boolean craftMissingAmount
         }
     }
 
-    public static final CustomPacketPayload.Type<LongCraftingRequestPayload> TYPE =
-            new CustomPacketPayload.Type<>(ResourceLocation.fromNamespaceAndPath(
-                    AppliedEnhancements.MODID, "long_crafting_request"));
 
-    public static final StreamCodec<ByteBuf, LongCraftingRequestPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.VAR_LONG, LongCraftingRequestPayload::amount,
-                    ByteBufCodecs.BOOL, LongCraftingRequestPayload::craftMissingAmount,
-                    ByteBufCodecs.BOOL, LongCraftingRequestPayload::autoStart,
-                    LongCraftingRequestPayload::new
-            );
+    public static final PacketCodec<FriendlyByteBuf, LongCraftingRequestPayload> STREAM_CODEC = PacketCodec.of(
+            (buffer, value) -> {
+                buffer.writeVarLong(value.amount());
+                buffer.writeBoolean(value.craftMissingAmount());
+                buffer.writeBoolean(value.autoStart());
+            },
+            buffer -> new LongCraftingRequestPayload(buffer.readVarLong(), buffer.readBoolean(), buffer.readBoolean()));
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
-    }
 
-    public static void handle(LongCraftingRequestPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
-            if (context.player() instanceof ServerPlayer player
+    public static void handle(LongCraftingRequestPayload payload, net.minecraft.world.entity.player.Player receivingPlayer) {
+            if (receivingPlayer instanceof ServerPlayer player
                     && player.containerMenu instanceof LongCraftingAmountMenuBridge bridge) {
                 bridge.appliedenhancements$confirmLong(
                         payload.amount,
                         payload.craftMissingAmount,
                         payload.autoStart);
             }
-        });
     }
 }

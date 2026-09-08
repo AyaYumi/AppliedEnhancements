@@ -94,7 +94,7 @@ public final class PatternDuplicateApi {
     /** Returns the first output key used for duplicate grouping. */
     public static Optional<AEKey> primaryOutput(ItemStack patternStack, Level level) {
         List<AEKey> outputs = resolveOutputs(patternStack, level);
-        return outputs.isEmpty() ? Optional.empty() : Optional.of(outputs.getFirst());
+        return outputs.isEmpty() ? Optional.empty() : Optional.of(outputs.get(0));
     }
 
     /**

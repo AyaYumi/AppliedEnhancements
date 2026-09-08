@@ -59,7 +59,7 @@ public final class PatternMoveSlotIndex<T> {
         TargetSlots<T> preferredTarget = null;
         int preferredCandidate = -1;
         if (preferredSlot >= 0 && targets.size() == 1) {
-            preferredTarget = targets.getFirst();
+            preferredTarget = targets.get(0);
             preferredCandidate = Arrays.binarySearch(preferredTarget.emptySlots, preferredSlot);
             if (preferredCandidate >= 0
                     && !preferredTarget.reserved.get(preferredCandidate)

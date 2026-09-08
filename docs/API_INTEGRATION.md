@@ -2,19 +2,19 @@
 
 [中文文档](API_INTEGRATION_ZH.md)
 
-This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.6`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+This guide is intended for Forge mod authors integrating with Applied Enhancements `1.0.6-forge`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 ## Compatibility baseline
 
 | Component | Version / validation baseline | Notes |
 |---|---:|---|
-| Minecraft | `1.21.1` | Declared game range: `[1.21.1]` |
-| Java | `21` | Compilation and runtime target |
-| NeoForge | `21.1.220` | Build/runtime validation version; currently declared range: `[21.1.220,)` |
-| Applied Energistics 2 | `19.2.17` | Declared range: `[19.2.17,)`; public signatures directly reference AE2 types |
-| Applied Enhancements | `1.0.6` | Version covered by this guide |
+| Minecraft | `1.20.1` | Declared game range: `[1.20.1,1.21)` |
+| Java | `17` | Compilation and runtime target |
+| Forge | `47.4.20` | Build/runtime validation version; currently declared range: `[47.4.10,)` |
+| Applied Energistics 2 | `15.4.10` | Declared range: `[15.4.10,16)`; public signatures directly reference AE2 types |
+| Applied Enhancements | `1.0.6-forge` | Version covered by this guide |
 
-Version `1.0.6` preserves the public Java API signatures and payload protocol `3` from `1.0.5`. Existing callers can adopt this release without changing API calls. Integrations that rely on the corrected AELIS source label or requested-output seed handling should require `1.0.6` or newer, as in the dependency examples below.
+The Forge build preserves the public planner/provider APIs while adapting AE2 dependencies to 15.4.10. The network uses Forge SimpleChannel with protocol `1.0.6-forge-1`; client and server must use this Forge build. Minecraft 1.21.1 jars are not binary compatible with this port.
 
 Only the following packages are part of the stable integration surface:
 
@@ -37,26 +37,32 @@ The following are implementation details and do not carry source or binary compa
 Applied Enhancements does not yet publish a separate Maven API artifact. Place the release JAR in your project's `libs` directory and reference it with `compileOnly`:
 
 ```groovy
+repositories {
+    maven { url = "https://api.modrinth.com/maven" }
+    flatDir { dirs "libs" }
+}
 dependencies {
     // Integrations normally depend on AE2 directly because its types appear
     // in the public Applied Enhancements signatures.
-    compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
+    implementation fg.deobf("maven.modrinth:ae2:15.4.10")
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly files("libs/appliedenhancements-1.0.6.jar")
+    compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.6-forge")
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly files("libs/appliedenhancements-1.0.6.jar")
+    runtimeOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.6-forge")
 }
 ```
 
-If your integration unconditionally loads Applied Enhancements API classes, declare a required dependency in `neoforge.mods.toml`:
+Alternatively, run `./gradlew publish` in the Applied Enhancements checkout to publish the complete mod to its local `repo` Maven directory. The coordinate is `com.appliedenhancements:appliedenhancements:1.0.6-forge`; its POM declares AE2 as a compile dependency and MixinExtras as a runtime dependency. Replace `flatDir` in the consuming project with `maven { url = uri("../AppliedEnhancements/repo") }`, adjust the checkout path, and retain Modrinth and Maven Central repositories. This task does not upload to a public Maven service.
+
+If your integration unconditionally loads Applied Enhancements API classes, declare a required dependency in `mods.toml`:
 
 ```toml
 [[dependencies.yourmod]]
 modId="appliedenhancements"
-type="required"
-versionRange="[1.0.6,)"
+mandatory=true
+versionRange="[1.0.6-forge,1.1)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -66,8 +72,8 @@ If all API references are isolated behind an optional compatibility layer, decla
 ```toml
 [[dependencies.yourmod]]
 modId="appliedenhancements"
-type="optional"
-versionRange="[1.0.6,)"
+mandatory=false
+versionRange="[1.0.6-forge,1.1)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -116,11 +122,13 @@ There are 17 public top-level API types: 16 current types plus one deprecated co
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.6` uses internal payload protocol `3`. Built-in packets synchronize selected server feature settings, calculation progress and planner-path display, but not third-party registrations or custom CPU state. Payload classes are internal.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.6-forge` uses SimpleChannel protocol `1.0.6-forge-1`. Built-in packets synchronize selected server feature settings, calculation progress and planner-path display, but not third-party registrations or custom CPU state. Payload classes are internal.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 
 ### Migrating from the 1.0.3 planner API
+
+This describes source migration. Integrations from 1.21.1 NeoForge must recompile with Java 17, Forge and AE2 15; the facade does not provide binary compatibility across Minecraft versions or loaders.
 
 `MaxFastCraftingPlanner` remains as a deprecated compatibility facade for integrations compiled against `1.0.3`, including its `PauseCheckpoint`, `ProgressListener`, `Result`, `createConfigured(...)`, `create(...)` and `tryExecute(...)` signatures. It delegates planning to AELIS and does not restore the old implementation or rename the current UI/configuration back to MAX_FAST.
 
@@ -293,7 +301,7 @@ Advance the controller immediately before calling a provider that may return out
 
 Do not implement only the marker interface. A CPU that advertises the capability but ignores ordering, protected inputs, final-output retention, or persistence can still deadlock.
 
-The built-in native and quantum CPU integrations support no-output completion for marked Data Energistics order packages with both automatic planning and direct API submission. Quantum CPUs record only the actual package output registered after successful dispatch; native CPUs align DE's existing completion records with batch counts. Settling a virtual package still requires the cycle phase to finish before job cleanup. Manual cancellation remains immediate. Independent CPUs implementing virtual outputs must preserve DE's semantics instead of materializing packages or treating requester acceptance as the completion record.
+The following Data Energistics integration protocol is retained in source and has not been runtime-validated for this Forge branch. The built-in native and quantum CPU integrations support no-output completion for marked Data Energistics order packages with both automatic planning and direct API submission. Quantum CPUs record only the actual package output registered after successful dispatch; native CPUs align DE's existing completion records with batch counts. Settling a virtual package still requires the cycle phase to finish before job cleanup. Manual cancellation remains immediate. Independent CPUs implementing virtual outputs must preserve DE's semantics instead of materializing packages or treating requester acceptance as the completion record.
 
 ### Public CPU integration helpers
 
@@ -305,8 +313,10 @@ External CPU integrations can perform normalization, guarded input access and pe
 | `Map<AEKey, Long> getCyclicCraftAmounts(ICraftingPlan plan)` | Immutable cyclic-material amounts; empty when absent. This is not the runtime pending-output map |
 | `ICraftingInventory guardInputs(AelisCycleRuntimeController runtime, AEKey patternDefinition, ICraftingInventory inventory)` | Nullable runtime is allowed and returns the original inventory. A null result means dispatch is forbidden. Use the returned inventory for the entire extraction, including additional batch inputs and rollback |
 | `long dispatchedCrafts(AelisCycleRuntimeController runtime, AEKey patternDefinition, KeyCounter[] inputs)` | Actual firing count represented by aggregated inputs for the active cycle step; returns zero for non-current work. Inputs and holders must be non-null and each protected input must imply the same complete positive count within the remaining step |
-| `CompoundTag writeRuntime(AelisCycleRuntimeController runtime, HolderLookup.Provider registries)` | Serializes the plan, phase and pending-output state of a non-null runtime |
-| `Optional<AelisCycleRuntimeController> readRuntime(CompoundTag tag, HolderLookup.Provider registries)` | Restores supported runtime formats, including legacy v1. Empty indicates missing, invalid or unsupported state; do not silently resume a job that had saved cycle metadata as an ordinary order |
+| `CompoundTag writeRuntime(AelisCycleRuntimeController runtime)` | Serializes the plan, phase and pending-output state of a non-null runtime |
+| `Optional<AelisCycleRuntimeController> readRuntime(CompoundTag tag)` | Restores supported runtime formats, including legacy v1. Empty indicates missing, invalid or unsupported state; do not silently resume a job that had saved cycle metadata as an ordinary order |
+
+Forge/AE2 15 serializes keys through static item/fluid registries. Prefer the overloads above without a registry parameter. The `HolderLookup.Provider` overloads remain available, reject a null provider and delegate to the same implementation.
 
 Call `preparePlan` before constructing the CPU's task map; reading `getPlan` alone does not replace that map. A guarded inventory belongs to one extraction attempt and cannot be cached across pattern changes or runtime advancement. `dispatchedCrafts` does not advance the controller. A step with no protected inputs is valid, but this helper cannot infer its actual firing count; the host must provide a verified count bounded by `remainingCrafts()` before calling `patternDispatched`.
 
@@ -319,13 +329,13 @@ var runtime = AelisCycleExecutionApi.getPlan(plan)
 // Save only when this CPU still owns the corresponding job.
 if (runtime != null) {
     jobTag.put("cycleRuntime",
-            AelisCycleExecutionApi.writeRuntime(runtime, registries));
+            AelisCycleExecutionApi.writeRuntime(runtime));
 }
 
 // On load, an existing but invalid tag is an error requiring safe job handling.
 if (jobTag.contains("cycleRuntime")) {
     var restored = AelisCycleExecutionApi.readRuntime(
-            jobTag.getCompound("cycleRuntime"), registries);
+            jobTag.getCompound("cycleRuntime"));
     if (restored.isEmpty()) {
         rejectOrCancelSavedJobSafely(); // Host-specific handling; preserve inventories.
         return;
@@ -349,7 +359,7 @@ Item-backed storage cells should prefer the public tag:
 Create this resource in the integrating mod:
 
 ```text
-src/main/resources/data/appliedenhancements/tags/item/infinite_storage_cells.json
+src/main/resources/data/appliedenhancements/tags/items/infinite_storage_cells.json
 ```
 
 Example:
@@ -404,7 +414,7 @@ Register once from Common Setup through `enqueueWork`:
 
 ```java
 event.enqueueWork(() -> PatternDuplicateApi.registerOutputResolver(
-        ResourceLocation.fromNamespaceAndPath("examplemod", "custom_patterns"),
+        new ResourceLocation("examplemod", "custom_patterns"),
         100,
         (patternStack, level) -> {
             if (!isExamplePattern(patternStack)) {
@@ -459,7 +469,7 @@ Register the exact client screen class name during Client Setup:
 
 ```java
 event.enqueueWork(() -> PatternTerminalIntegrationApi.register(
-        ResourceLocation.fromNamespaceAndPath("examplemod", "pattern_terminal"),
+        new ResourceLocation("examplemod", "pattern_terminal"),
         PatternTerminalIntegrationApi.Family.AE2_PATTERN_ACCESS,
         "examplemod.client.gui.ExamplePatternAccessScreen"));
 ```
@@ -516,7 +526,7 @@ Menus that cannot implement `MenuExtension` directly can register a server handl
 
 ```java
 event.enqueueWork(() -> PatternBatchMoveApi.registerMenuHandler(
-        ResourceLocation.fromNamespaceAndPath("examplemod", "pattern_menu"),
+        new ResourceLocation("examplemod", "pattern_menu"),
         100,
         new PatternBatchMoveApi.MenuHandler() {
             @Override
@@ -599,13 +609,13 @@ Disabling the session clears selection and the cut buffer. `clear()` clears buff
 
 ## 8. Network-item context-menu extensions
 
-Starting with `1.0.5`, built-in item-action menus use their own configurable binding, **Open Item Actions Menu**, defaulting to **Alt + right-click**. Pattern Quick Move Cut/Paste uses **Open Pattern Quick Move Menu**, defaulting to **right-click**. Both bindings honor NeoForge modifiers and GUI context. The old shared binding is retained for pattern Quick Move, so a saved right-click mapping does not overwrite the new item-action default. Compatible registered screens receive this separation automatically; registering menu entries does not change either binding. Custom screens own their input routing and must keep the two actions separate. Public Java API signatures and payload protocol `3` are unchanged by this split.
+Starting with `1.0.5`, built-in item-action menus use their own configurable binding, **Open Item Actions Menu**, defaulting to **Alt + right-click**. Pattern Quick Move Cut/Paste uses **Open Pattern Quick Move Menu**, defaulting to **right-click**. Both bindings honor Forge modifiers and GUI context. The old shared binding is retained for pattern Quick Move, so a saved right-click mapping does not overwrite the new item-action default. Compatible registered screens receive this separation automatically; registering menu entries does not change either binding. Custom screens own their input routing and must keep the two actions separate. This Forge build uses SimpleChannel protocol `1.0.6-forge-1`; client and server must install the same version.
 
 Register entry providers during Client Setup:
 
 ```java
 event.enqueueWork(() -> NetworkItemContextMenuApi.register(
-        ResourceLocation.fromNamespaceAndPath("examplemod", "inspect_item"),
+        new ResourceLocation("examplemod", "inspect_item"),
         100,
         context -> {
             if (!context.key().getId().getNamespace().equals("examplemod")) {
@@ -679,7 +689,7 @@ These features require AE2 Java types, client UI integration, or server-authorit
 
 ## Pre-release integration checklist
 
-See the [release validation scope](../README.md#validation) for the `1.0.6` build and `362` unit tests, existing API/seed integration records, and earlier keybinding and crafting runtime results. The separate runtime harness and dependency-provided GameTests are not the repository's default unit suite; a custom CPU must still verify its own integration boundaries.
+See the [release validation scope](../README.md#validation) for the Forge build, `362` unit tests, and separate modpack records for ordinary crafting, AELIS and pattern management. Earlier NeoForge GameTests do not validate this branch; custom CPUs must still verify cycle execution, persistence, virtual outputs and dedicated-server integration.
 
 - [ ] Imports are limited to the stable API packages.
 - [ ] Optional compatibility classes cannot load when Applied Enhancements is absent.
@@ -694,4 +704,4 @@ See the [release validation scope](../README.md#validation) for the `1.0.6` buil
 - [ ] `PatternQuickMoveSession` is cleared when its screen closes.
 - [ ] Custom network-item menu server actions revalidate every client-supplied field.
 - [ ] Infinite markers are applied only to storage implementations that are already infinite.
-- [ ] The integration has been tested with AE2 `19.2.17` and the target modpack on both client and server.
+- [ ] The integration has been tested with AE2 `15.4.10` and the target modpack on both client and server.

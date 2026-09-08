@@ -9,7 +9,6 @@ import com.appliedenhancements.Config;
 import com.appliedenhancements.api.AelisCycleSeedPolicy;
 import com.appliedenhancements.test.TestAEKey;
 import com.electronwill.nightconfig.core.CommentedConfig;
-import com.electronwill.nightconfig.core.concurrent.SynchronizedConfig;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
@@ -19,8 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import net.neoforged.fml.config.IConfigSpec;
-import net.neoforged.fml.config.ModConfig;
+import net.minecraftforge.fml.config.IConfigSpec;
+import net.minecraftforge.fml.config.ModConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -130,15 +129,10 @@ class AelisEmptyCycleExecutionPlanTest {
     }
 
     private static void loadConfig(AelisCycleSeedPolicy policy) throws Exception {
-        var data = new SynchronizedConfig(TomlFormat.instance(), HashMap::new);
+        var data = com.electronwill.nightconfig.core.CommentedConfig.inMemory();
         Config.SPEC.correct(data);
         data.set("crafting.aelis.cycle_solver.seed_policy", policy.name());
-        // NeoForge seals ILoadedConfig; use its actual in-memory holder without saving.
-        var constructor = Class.forName("net.neoforged.fml.config.LoadedConfig")
-                .getDeclaredConstructor(CommentedConfig.class, Path.class, ModConfig.class);
-        constructor.setAccessible(true);
-        Config.SPEC.acceptConfig((IConfigSpec.ILoadedConfig)
-                constructor.newInstance(data, null, null));
+        Config.SPEC.setConfig(data);
     }
 
     private static AelisCyclicDemandSolver.Limits limits() {

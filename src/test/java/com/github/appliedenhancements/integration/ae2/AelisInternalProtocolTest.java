@@ -16,8 +16,7 @@ class AelisInternalProtocolTest {
         assertEquals(aelis, AelisCalculationPath.fromNetworkId(4));
         assertThrows(IllegalArgumentException.class,
                 () -> AelisCalculationPath.fromNetworkId(1));
-        assertEquals("appliedenhancements:aelis_calculation_path",
-                CraftingCalculationPathPayload.TYPE.id().toString());
+        assertEquals(5, CraftingCalculationPathPayload.PACKET_ID);
     }
 
     @Test
@@ -35,7 +34,6 @@ class AelisInternalProtocolTest {
                 () -> CraftingCalculationProgressPhase.fromNetworkId(4));
         assertThrows(IllegalArgumentException.class,
                 () -> CraftingCalculationProgressPhase.fromNetworkId(5));
-        assertEquals("appliedenhancements:aelis_calculation_progress",
-                CraftingCalculationProgressPayload.TYPE.id().toString());
+        assertEquals(4, CraftingCalculationProgressPayload.PACKET_ID);
     }
 }

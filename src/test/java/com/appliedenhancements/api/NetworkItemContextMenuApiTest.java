@@ -24,7 +24,7 @@ class NetworkItemContextMenuApiTest {
 
     @Test
     void duplicateProviderIdsAreRejected() {
-        var id = ResourceLocation.fromNamespaceAndPath(
+        var id = new ResourceLocation(
                 "contextmenutest", "duplicate");
         NetworkItemContextMenuApi.register(id, 0, context -> List.of());
 
@@ -36,7 +36,7 @@ class NetworkItemContextMenuApiTest {
 
     private static void register(String path, int priority) {
         NetworkItemContextMenuApi.register(
-                ResourceLocation.fromNamespaceAndPath("contextmenuorder", path),
+                new ResourceLocation("contextmenuorder", path),
                 priority,
                 context -> List.of());
     }

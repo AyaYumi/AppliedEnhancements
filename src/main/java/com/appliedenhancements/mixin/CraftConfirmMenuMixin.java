@@ -42,7 +42,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
-import net.neoforged.neoforge.network.PacketDistributor;
+import com.appliedenhancements.network.NetworkHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -440,8 +440,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         return appliedenhancements$calculationPath;
     }
 
-    @Inject(method = "broadcastChanges", at = @At(value = "INVOKE",
-            target = "Lappeng/menu/me/crafting/CraftConfirmMenu;sendPacketToClient(Lappeng/core/network/ClientboundPacket;)V"))
+    @Inject(method = { "broadcastChanges", "m_38946_" }, at = @At(value = "INVOKE",
+            target = "Lappeng/menu/me/crafting/CraftConfirmMenu;sendPacketToClient(Lappeng/core/sync/BasePacket;)V"))
     private void appliedenhancements$syncCalculationPath(CallbackInfo callback) {
         var menu = (CraftConfirmMenu) (Object) this;
         if (menu.isClientSide()
@@ -455,7 +455,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                 this.result instanceof AelisCyclicCraftAmountsCarrier carrier
                         ? carrier.appliedenhancements$getCyclicCraftAmounts()
                         : Map.of();
-        PacketDistributor.sendToPlayer(
+        NetworkHandler.sendToPlayer(
                 player,
                 new CraftingCalculationPathPayload(
                         menu.containerId, path, cyclicCraftAmounts));
@@ -464,7 +464,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         appliedenhancements$sendCalculationProgress(player, menu);
     }
 
-    @Inject(method = "broadcastChanges", at = @At("RETURN"))
+    @Inject(method = { "broadcastChanges", "m_38946_" }, at = @At("RETURN"))
     private void appliedenhancements$syncCalculationProgress(CallbackInfo callback) {
         var menu = (CraftConfirmMenu) (Object) this;
         var progress = appliedenhancements$progressBinding.currentProgress();
@@ -481,7 +481,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         appliedenhancements$sendCalculationProgress(player, menu);
     }
 
-    @Inject(method = "broadcastChanges", at = @At("RETURN"))
+    @Inject(method = { "broadcastChanges", "m_38946_" }, at = @At("RETURN"))
     private void appliedenhancements$reserveCompletedPlanInventory(CallbackInfo callback) {
         var menu = (CraftConfirmMenu) (Object) this;
         if (menu.isClientSide()) {
@@ -606,7 +606,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
         appliedenhancements$lastProgressSyncTick = player.serverLevel().getGameTime();
         var snapshot = progress.snapshot(++appliedenhancements$progressRevision);
-        PacketDistributor.sendToPlayer(
+        NetworkHandler.sendToPlayer(
                 player,
                 new CraftingCalculationProgressPayload(menu.containerId, snapshot));
         if (snapshot.phase().terminal()) {
@@ -614,7 +614,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         }
     }
 
-    @Inject(method = "removed", at = @At("HEAD"))
+    @Inject(method = { "removed", "m_6877_" }, at = @At("HEAD"))
     private void appliedenhancements$cancelProgressWhenClosed(
             net.minecraft.world.entity.player.Player player,
             CallbackInfo callback) {

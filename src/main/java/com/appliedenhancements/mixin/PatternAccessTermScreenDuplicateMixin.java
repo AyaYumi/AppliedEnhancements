@@ -78,7 +78,7 @@ public abstract class PatternAccessTermScreenDuplicateMixin
     private static final int appliedenhancements$HEADER_INTERIOR_SAMPLE_Y = 8;
     @Unique
     private static final ResourceLocation appliedenhancements$PATTERN_TERMINAL_TEXTURE =
-            ResourceLocation.fromNamespaceAndPath(
+            new ResourceLocation(
                     "ae2", "textures/guis/patternaccessterminal.png");
 
     @Shadow
@@ -129,14 +129,21 @@ public abstract class PatternAccessTermScreenDuplicateMixin
     @Invoker("resetScrollbar")
     protected abstract void appliedenhancements$resetScrollbar();
 
-    @ModifyConstant(method = "init", constant = @Constant(intValue = 17))
+    @com.llamalad7.mixinextras.injector.ModifyExpressionValue(
+            method = { "init", "m_7856_" },
+            at = @At(value = "INVOKE", target = "Lappeng/api/config/TerminalStyle;getRows(I)I"))
+    private int appliedenhancements$keepRowsAtLargeGuiScale(int rows) {
+        return appliedenhancements$isSupportedScreen() ? Math.max(2, rows) : rows;
+    }
+
+    @ModifyConstant(method = { "init", "m_7856_" }, constant = @Constant(intValue = 17))
     private int appliedenhancements$includeToolbarInAvailableHeight(int original) {
         return appliedenhancements$isSupportedScreen()
                 ? appliedenhancements$EXPANDED_HEADER_HEIGHT
                 : original;
     }
 
-    @ModifyConstant(method = "init", constant = @Constant(intValue = 116))
+    @ModifyConstant(method = { "init", "m_7856_" }, constant = @Constant(intValue = 114))
     private int appliedenhancements$includeToolbarInImageHeight(int original) {
         return appliedenhancements$isSupportedScreen()
                 ? original + appliedenhancements$TOOLBAR_ROW_HEIGHT
@@ -147,13 +154,6 @@ public abstract class PatternAccessTermScreenDuplicateMixin
     private int appliedenhancements$shiftGroupHeaderContentDown(int original) {
         return appliedenhancements$isSupportedScreen()
                 ? original + appliedenhancements$TOOLBAR_ROW_HEIGHT
-                : original;
-    }
-
-    @ModifyConstant(method = "renderLinkStatus", constant = @Constant(intValue = 17))
-    private int appliedenhancements$shiftLinkStatusDown(int original) {
-        return appliedenhancements$isSupportedScreen()
-                ? appliedenhancements$EXPANDED_HEADER_HEIGHT
                 : original;
     }
 
@@ -200,7 +200,7 @@ public abstract class PatternAccessTermScreenDuplicateMixin
                 : -1);
     }
 
-    @Inject(method = "init", at = @At("RETURN"))
+    @Inject(method = { "init", "m_7856_" }, at = @At("RETURN"))
     private void appliedenhancements$addDuplicateButton(CallbackInfo callback) {
         if (!appliedenhancements$isSupportedScreen()) {
             return;
@@ -392,7 +392,7 @@ public abstract class PatternAccessTermScreenDuplicateMixin
         }
     }
 
-    @Inject(method = "slotClicked", at = @At("HEAD"), cancellable = true)
+    @Inject(method = { "slotClicked", "m_6597_" }, at = @At("HEAD"), cancellable = true)
     private void appliedenhancements$redirectSortedSlotClick(
             Slot slot,
             int slotIndex,

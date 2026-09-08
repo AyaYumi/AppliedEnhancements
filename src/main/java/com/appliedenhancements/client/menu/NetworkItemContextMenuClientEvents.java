@@ -3,12 +3,12 @@ package com.appliedenhancements.client.menu;
 import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.integration.ae2.NetworkItemContextMenuScreenBridge;
 import com.appliedenhancements.integration.ae2.PatternQuickMoveScreenBridge;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.bus.api.EventPriority;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.neoforge.client.event.RenderTooltipEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
+import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.client.event.RenderTooltipEvent;
 import net.minecraft.client.Minecraft;
 
 /** Handles screen inputs whose Minecraft implementations are interface defaults. */
@@ -34,15 +34,15 @@ public final class NetworkItemContextMenuClientEvents {
                 event.getScreen(),
                 event.getMouseX(),
                 event.getMouseY(),
-                event.getScrollDeltaX(),
-                event.getScrollDeltaY())) {
+                0,
+                event.getScrollDelta())) {
             event.setCanceled(true);
         } else if (event.getScreen() instanceof NetworkItemContextMenuScreenBridge bridge
                 && bridge.appliedenhancements$networkItemMenuMouseScrolled(
                         event.getMouseX(),
                         event.getMouseY(),
-                        event.getScrollDeltaX(),
-                        event.getScrollDeltaY())) {
+                        0,
+                        event.getScrollDelta())) {
             event.setCanceled(true);
         }
     }

@@ -66,7 +66,7 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
         if (pattern != null) {
             AelisCyclicCraftingAmounts.addOutputs(
                     appliedenhancements$cyclicCraftAmounts,
-                    pattern.getOutputs(), patternTimes);
+                    java.util.Arrays.asList(pattern.getOutputs()), patternTimes);
         }
     }
 

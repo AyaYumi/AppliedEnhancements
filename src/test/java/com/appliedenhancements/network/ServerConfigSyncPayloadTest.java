@@ -10,7 +10,7 @@ class ServerConfigSyncPayloadTest {
     @Test
     void roundTripsTheFullLongRange() {
         var expected = new ServerConfigSyncPayload(Long.MAX_VALUE, true, false, true);
-        var buffer = Unpooled.buffer();
+        var buffer = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
         try {
             ServerConfigSyncPayload.STREAM_CODEC.encode(buffer, expected);
 

@@ -21,7 +21,7 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.items.IItemHandler;
+import net.minecraftforge.items.IItemHandler;
 
 /**
  * Reuses AE2's periodic external-inventory listing as a candidate-slot index.
@@ -78,7 +78,7 @@ public abstract class ExternalStorageFacadeItemHandlerMixin {
     }
 
     @WrapOperation(method = "getAvailableStacks", at = @At(value = "INVOKE",
-            target = "Lnet/neoforged/neoforge/items/IItemHandler;getStackInSlot(I)Lnet/minecraft/world/item/ItemStack;"))
+            target = "Lnet/minecraftforge/items/IItemHandler;getStackInSlot(I)Lnet/minecraft/world/item/ItemStack;"))
     private ItemStack appliedenhancements$recordListedSlot(
             IItemHandler inventory,
             int slot,

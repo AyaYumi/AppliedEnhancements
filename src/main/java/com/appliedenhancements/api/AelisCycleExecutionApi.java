@@ -77,8 +77,8 @@ public final class AelisCycleExecutionApi {
 
     /** Writes the plan, phase, seed policy, progress and pending returns together. */
     public static CompoundTag writeRuntime(AelisCycleRuntimeController runtime, HolderLookup.Provider registries) {
-        return AelisCycleExecutionNbt.write(Objects.requireNonNull(runtime, "runtime"),
-                Objects.requireNonNull(registries, "registries"));
+        Objects.requireNonNull(registries, "registries");
+        return writeRuntime(runtime);
     }
 
     /**
@@ -89,7 +89,16 @@ public final class AelisCycleExecutionApi {
     public static Optional<AelisCycleRuntimeController> readRuntime(@Nullable CompoundTag tag,
             HolderLookup.Provider registries) {
         Objects.requireNonNull(registries, "registries");
-        return Optional.ofNullable(AelisCycleExecutionNbt.read(tag, registries));
+        return readRuntime(tag);
+    }
+
+    /** Forge 1.20.1 AE keys serialize against the static item/fluid registries. */
+    public static CompoundTag writeRuntime(AelisCycleRuntimeController runtime) {
+        return AelisCycleExecutionNbt.write(Objects.requireNonNull(runtime, "runtime"));
+    }
+
+    public static Optional<AelisCycleRuntimeController> readRuntime(@Nullable CompoundTag tag) {
+        return Optional.ofNullable(AelisCycleExecutionNbt.read(tag));
     }
 
     public static Optional<AelisCycleExecutionPlan> getPlan(ICraftingPlan plan) {

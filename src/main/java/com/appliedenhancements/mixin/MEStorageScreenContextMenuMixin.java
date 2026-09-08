@@ -35,13 +35,13 @@ public abstract class MEStorageScreenContextMenuMixin
     private final NetworkItemContextMenu appliedenhancements$networkItemMenu =
             new NetworkItemContextMenu();
 
-    @Inject(method = "init", at = @At("HEAD"))
+    @Inject(method = { "init", "m_7856_" }, at = @At("HEAD"))
     private void appliedenhancements$closeNetworkItemMenuOnInit(
             CallbackInfo callback) {
         appliedenhancements$networkItemMenu.close();
     }
 
-    @Inject(method = "removed", at = @At("HEAD"))
+    @Inject(method = { "removed", "m_7861_" }, at = @At("HEAD"))
     private void appliedenhancements$closeNetworkItemMenuOnRemoved(
             CallbackInfo callback) {
         appliedenhancements$networkItemMenu.close();

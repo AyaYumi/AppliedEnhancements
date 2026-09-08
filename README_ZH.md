@@ -2,22 +2,25 @@
 
 [English README](README.md)
 
-Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 功能增强模组。
+Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 Forge 功能增强模组。
 
 项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 AELIS 合成规划器。
 
-> 当前版本：`1.0.6`
+> 当前版本：`1.0.6-forge`
 >
-> 目标平台：Minecraft `1.21.1` / NeoForge / Java `21`
+> 目标平台：Minecraft `1.20.1` / Forge / Java `17`
 
-## 1.0.6 更新
+## Forge 1.20.1 移植
 
 | 项目 | 更新说明 |
 |---|---|
-| AELIS API 来源标识 | 通过 API 成功生成的普通和循环计划均保留 `AELIS` 标识，关闭自动规划时也适用 |
-| 目标物循环种子 | 锻造模板复制等循环可从目标物旧库存中借用求解确认需要的启动量；借用种子在新增订单之外归还，失败尝试恢复库存及提取记账 |
-| NeoEcoAE 兼容 | 修复 CPU 列表将无限并行错误显示为 `2G` 的问题，受支持的无限 CPU 最终显示为 `9.2E`；有限数量和实际 CPU 能力不变 |
-| 接入兼容性 | 相比 `1.0.5`，公共 Java API 签名及内部载荷协议 `3` 均保持不变 |
+| 平台 | 将 1.0.6 功能移植到 Minecraft 1.20.1、Forge 与 Java 17，基于 AE2 15.4.10 |
+| 网络与持久化 | 使用 Forge SimpleChannel，协议为 `1.0.6-forge-1`；适配 AE2 15 的 NBT 序列化，客户端与服务端均须安装 Forge 构建 |
+| 客户端兼容 | 适配原版与 ExtendedAE 样板终端布局、SRG Mixin 目标，以及存在 ExtendedAE Plus 时的最终 AELIS 结果标题 |
+| AELIS 与 CPU 显示 | 保留规划来源标记、目标物种子记账、循环执行及无限 CPU 的 `9.2E` 显示 |
+| 发布产物 | 主 JAR 内嵌 MixinExtras；物品标签使用 1.20.1 的 `tags/items` 目录 |
+
+当前分支为 `1.20.1-forge`。Minecraft 1.21.1 版本保留在 [`1.21.1-neoforge`](https://github.com/AyaYumi/AppliedEnhancements/tree/1.21.1-neoforge) 分支。接入方须针对 Forge 构建与 AE2 15 重新编译；本模组不提供跨 Minecraft 版本的 JAR 或世界存档迁移。
 
 ## 功能概览
 
@@ -44,29 +47,29 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 ## 版本与依赖
 
-| 组件 | 当前要求 | 类型 |
-|---|---:|---|
-| Minecraft | `1.21.1` | 必需，精确版本 |
-| Java | `21` | 开发与运行目标 |
-| NeoForge | `21.1.220` 及以上 | 必需 |
-| Applied Energistics 2 | `19.2.17` 及以上 | 必需 |
-| ExtendedAE | `1.21-2.2.32-neoforge` 及以上 | 可选；提供无限元件识别 |
-| AE2WTLib | `19.5.1` 及以上 | 可选兼容依赖；按测试整合包版本声明 |
-| Just Enough Items | `19.27.0` 及以上 | 可选；提供 JEI 侧栏与书签栏物品右键菜单 |
+| 组件 | 元数据声明范围 | 构建／整合包验证版本 | 类型 |
+|---|---|---|---|
+| Minecraft | `[1.20.1,1.21)` | `1.20.1` | 必需；本分支目标为 1.20.1 |
+| Java | Java 17 字节码 | JDK `17` 构建；Java `21.0.7` 实机运行 | 必需 |
+| Forge | `[47.4.10,)` | `47.4.20` | 必需 |
+| Applied Energistics 2 | `[15.4.10,16)` | `15.4.10` | 必需 |
+| ExtendedAE | `[1.20-1.4.12-forge,)` | `1.20-1.4.19-forge` | 可选；Mod ID 为 `expatternprovider` |
+| AE2WTLib | `[15.3.3,16)` | `15.3.3-forge` | 可选无线终端接入 |
+| Just Enough Items | `[15,16)` | `15.49.0.188` | 可选物品侧栏与书签菜单 |
 
-上表对应声明的依赖范围。当前构建使用 NeoForge `21.1.220` 与 AE2 `19.2.17` 编译和验证；由于核心功能使用 AE2 内部类和 Mixin 注入点，升级到新的 AE2 大版本前仍应重新检查客户端、服务端和实际合成流程。
+声明范围表示允许加载，不代表范围内每个版本均已实机验证。核心功能使用 AE2 内部类和 Mixin 注入点，其他版本与模组组合仍需单独检查。
 
-量子 CPU、智能倍增和订单包裹接入分别使用可选的 AdvancedAE、Useless Mod/OmniSequence、Data Energistics。发行验证使用了 AdvancedAE `1.6.12` 与 Data Energistics `3.2.0`；这些是验证版本，不代表承诺兼容所有后续版本。
+Forge 测试整合包同时加载了 AdvancedAE `1.3.6-1.20.1`、ExtendedAE Plus `1.5.5`、NeoEcoAE `20.4.0` 和 OmniSequence: Transfinite `2.0.0-forge`。共同加载不等于已覆盖全部量子 CPU、智能倍增或循环订单场景。源码保留 Data Energistics 虚拟订单接入，但本次 Forge 移植未对该功能进行实机验证。
 
 ## 安装
 
 目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
 
 ```text
-build/libs/appliedenhancements-1.0.6.jar
+build/libs/appliedenhancements-1.0.6-forge.jar
 ```
 
-同时需要安装匹配版本的 NeoForge 与 AE2。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
+同时需要安装匹配版本的 Forge 与 AE2。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
 
 本模组包含服务端配置同步和客户端界面 Mixin，联机环境应在客户端与服务端安装同一发行构建。
 
@@ -106,7 +109,7 @@ AELIS（Applied Enhancements Lattice Integer Solver）会在单次合成计算�
 
 同时安装 Useless Mod 和 OmniSequence 时，支持智能倍增的提供器可以按当前完整输入库存、当前步骤剩余次数和安全倍率动态扩大循环批量。桥接会提交真实的倍增样板，产物返回后重新计算批量，不增加订单总工作量。动态组件样板、替代输入及带容器返还的样板保留原派发方式。
 
-Data Energistics 的已标记订单包裹支持在原生与量子 CPU 上自动完成，完成计数与实际批量对齐：样板成功派发并登记实际产量后，CPU 按数据能源的“无实体输出”语义结算包裹；循环产物和保留种子未返回时，订单会继续等待。量子 CPU 的完成记录随原订单编号保存，不会生成额外实体包裹，玩家手动取消仍立即生效。普通订单和规划器 API 创建的订单均适用，包括自动 AELIS 关闭的情况。
+源码保留 Data Energistics 在原生与量子 CPU 上的无实体输出结算钩子，完成计数与实际批量、持久化订单编号对齐。该可选接入仍需 Forge 实机验证；此前 NeoForge 的结果不能作为本分支的兼容性结论。
 
 Useless Mod 的智能倍增只改写循环计划中的普通样板，循环样板在计划构建、API 包装和 CPU 提交时都会还原原始定义与执行次数，循环元数据随计划保留。已保存循环状态的订单也会校正剩余样板，不重置执行进度。读取旧量子 CPU 订单时，如果没有在途产物，会尝试还原被倍增的循环样板；只有重新求解的全部剩余执行次数与旧订单完全一致且不缺料时才恢复，库存和订单链接保持不变。无法证明安全的旧订单会保留原样并记录提示。
 
@@ -178,7 +181,7 @@ AELIS 受节点数和编译时间预算约束。编译图仅在当前合成计�
 
 手持物品或容器时不会接管右键，AE2 原有的存入与容器填充行为保持不变。自定义数量请求在服务端重新校验当前菜单、同步序号、网络连接、能源、实时库存和玩家背包容量；客户端显示数量不能强制服务器多取物品。
 
-安装 JEI `19.27.0` 及以上时，Alt＋右击 JEI 物品侧栏或书签栏条目会显示：
+安装 JEI `15.49.0` 及以上时，Alt＋右击 JEI 物品侧栏或书签栏条目会显示：
 
 - 查看合成表；
 - 查看用途；
@@ -197,7 +200,7 @@ AELIS 受节点数和编译时间预算约束。编译图仅在当前合成计�
 | 打开样板移动菜单 | 鼠标右键 | 快速移动模式中的样板剪切、粘贴 |
 | 打开物品操作菜单 | Alt＋鼠标右键 | AE2 网络物品、JEI 物品与书签栏 |
 
-两项都可以改为鼠标键、键盘键及 NeoForge 修饰键组合，只在 GUI 中生效。升级时原共享按键设置保留给样板移动，新的物品操作绑定默认使用 Alt＋右键；修改其中一项不会影响另一项。
+两项都可以改为鼠标键、键盘键及 Forge 修饰键组合，只在 GUI 中生效。升级时原共享按键设置保留给样板移动，新的物品操作绑定默认使用 Alt＋右键；修改其中一项不会影响另一项。
 
 ### 第三方规划器边界
 
@@ -242,7 +245,7 @@ AELIS 之前的规划器配置会自动迁移到 `crafting.aelis.*`。原 common
 | 来源 | 内置支持 |
 |---|---|
 | AE2 | `ae2:creative_storage_cell` 创造存储元件 |
-| ExtendedAE | `extendedae:infinity_water_cell`、`extendedae:infinity_cobblestone_cell`，以及使用其 `InfinityCellInventory` 的自定义无限元件 |
+| ExtendedAE | `expatternprovider:infinity_cell`，以及使用其 `InfinityCellInventory` 的自定义无限元件 |
 | 其他 Mod / 数据包 | 物品标签 `#appliedenhancements:infinite_storage_cells` |
 | Java 接入 | 运行时 `StorageCell` 实现 `InfiniteStorageCellMarker` |
 
@@ -263,7 +266,7 @@ ServerEvents.tags('item', event => {
 
 ## 构建与运行
 
-项目使用 Gradle Wrapper `8.14.2`，无需单独安装 Gradle，但需要可用的 JDK 21。
+项目使用 Gradle Wrapper `8.14.2`，无需单独安装 Gradle，但需要可用的 JDK 17。
 
 | 任务 | Windows | Linux / macOS |
 |---|---|---|
@@ -273,43 +276,26 @@ ServerEvents.tags('item', event => {
 | 启动开发服务端 | `.\gradlew.bat runServer` | `./gradlew runServer` |
 | 启动 GameTest 服务端 | `.\gradlew.bat runGameTestServer --no-daemon --console=plain` | `./gradlew runGameTestServer --no-daemon --console=plain` |
 
-构建产物位于：
+用于安装的完整产物位于以下路径，已内嵌 MixinExtras；`-slim.jar` 不是安装用产物：
 
 ```text
-build/libs/appliedenhancements-1.0.6.jar
+build/libs/appliedenhancements-1.0.6-forge.jar
 ```
 
 ## 验证范围
 
-自动化测试目前覆盖以下重点：
+2026-09-08 使用 JDK `17` 验证 Forge 构建，仓库全部 `362` 项单元测试通过，失败、错误、跳过均为零。使用 Gradle Wrapper 执行 `cleanTest build --no-daemon --console=plain` 可重跑测试并生成 JAR。默认 Maven 仓库访问曾停滞，发行检查使用了外部依赖镜像与缓存；该镜像配置不属于仓库。
 
-- `long` 数量解析、饱和加法/乘法和原生规划器安全边界；
-- 服务端配置同步、计算进度生命周期和路径网络 ID；
-- AELIS 执行策略、递归保护、候选回退、数量反馈、稀疏容量求解和深度边界；
-- 合成 CPU 执行数量、模拟库存差量、外部计划材料汇总和终端任务生命周期；
-- 无限存储白名单、物品标签、运行时标记和网络安全汇总；
-- 网络物品菜单注册顺序与精确数量提取载荷边界；
-- Provider 批次回调的正常与异常退出配对；
-- 手动计划库存预留的全有或全无、并发防超卖、提交所有权与幂等释放；
-- Mixin 所属包和目标源码的结构性保护。
+单元测试覆盖数量边界、规划回退与循环／种子记账、配置与网络包约定、库存预留、样板移动及公共 API 边界。同日的 Forge 47.4.20／AE2 15.4.10 独立整合包记录包含：
 
-`1.0.6` 使用 Java `21` 构建成功，仓库全部 `362` 项单元测试通过，失败、错误、跳过均为零。使用 Gradle Wrapper 执行 `cleanTest build --no-configuration-cache` 可重新运行单元测试并构建 JAR。
+| 实机检查 | 记录结果 |
+|---|---|
+| 普通自动合成 | 从真实 ME 终端请求 64 木板，消耗 16 原木并产出 64 木板 |
+| AELIS 自动合成 | 完成 1024 木板及后续 64 木板订单，库存变化准确；客户端与服务端均报告 `AELIS`，最终标题正确显示 AELIS 结果 |
+| 样板管理 | 操作重复／失效筛选；在 OmniSequence 提供器与 AE2 提供器间移动 4 张样板并移回，服务端核对数量 |
+| 配置数量上限 | 保留上限 `2147483647` 时，`2147483648` 被拒绝；未验证超过该上限的实际执行 |
 
-新增的 4 项种子作用域测试覆盖：只借用已证明需要的种子并计入真实提取、被拒绝分支回滚、内层已接受借用在外层失败后回滚，以及禁止凭空生成库存或跨事务借用。
-
-已有独立接入验证记录包含锻造模板复制的六个场景、游戏界面中的开始与完成，以及旧 API 调用方回归。`1.0.5` 按键拆分实现还通过了独立客户端检查，覆盖默认右键与 Alt＋右键区分、仅 GUI 生效、独立键盘路由和解绑、自定义修饰键、设置保存重载，以及旧共享绑定迁移。这些外部验证不属于仓库默认单元测试任务。
-
-下面保留此前 `1.0.4` 的合成与 API 运行验证记录：
-
-| 范围 | 结果 | 统计含义 |
-|---|---:|---|
-| 仓库单元测试 | `358` 项通过 | 失败、错误、跳过均为零 |
-| 含 Data Energistics 的隔离运行环境 | `186` 项必需 GameTest 通过 | `35` 项 Applied Enhancements 专项场景，加 `151` 项依赖模组测试 |
-| 不含 Data Energistics 的隔离运行环境 | `175` 项必需 GameTest 通过 | `24` 项 Applied Enhancements 专项场景，加 `151` 项依赖模组测试；验证可选接入缺失时仍可运行 |
-
-专项场景覆盖原生与量子 CPU 循环、产物回投、保种、真实智能批量、订单包裹虚拟完成、存档状态、公共 API 兼容和快速移动边界。这些运行结果来自维护者使用可选模组依赖的独立验证环境，该环境尚不属于已纳入版本管理的标准测试源集。全新检出的仓库直接运行 `runGameTestServer` 不会复现全部 35 项场景，依赖模组自带的 GameTest 也不能算成本模组自己的测试。因没有用例而退出不代表场景验证成功。
-
-仓库单元测试使用 `test` 任务。客户端界面及完整整合包行为仍需实际运行验证，包括普通/超大/非法数量、进度显示、配置开关和关闭自动规划后的原生流程。
+这些是已有整合包验证记录，不属于默认 GameTest 任务。本 Forge 发行不宣称完成独立专用服务端、大型循环订单、Data Energistics 虚拟订单或长期性能验证；此前 NeoForge 的 GameTest 数量不适用于本移植。
 
 ## 开发者接口
 
@@ -321,7 +307,7 @@ build/libs/appliedenhancements-1.0.6.jar
 |---|---|
 | `MolecularBalancedBatchProvider` | 在一次 AE2 原版合成 CPU 调度内接收成对的批次开始与结束回调；异常退出也会关闭批次 |
 | `AelisCraftingPlanner` | 为其他 Mod 提供 AELIS 会话创建、进度回调、执行结果和失败状态自动回滚接口 |
-| `MaxFastCraftingPlanner`（已弃用） | 保留 1.0.3 公开签名，内部委托 AELIS，供旧接入继续加载 |
+| `MaxFastCraftingPlanner`（已弃用） | 保留旧规划器接口形状，内部委托 AELIS，供旧接入源码迁移 |
 | `AelisCycleExecutionApi` | 准备可提交计划、复制与查询元数据、保护输入、计算实际循环批次并读写完整运行时 NBT |
 | `AelisCycleExecutionPlan` | 提供压缩循环步骤、最小种子和受保护材料键 |
 | `AelisCycleSeedPolicy` | 选择订单完成后保留最低种子，或使用全部循环库存 |
@@ -337,9 +323,9 @@ build/libs/appliedenhancements-1.0.6.jar
 | `NetworkItemContextMenuApi` | 在 ME 终端网络物品右键菜单中注册第三方客户端操作项 |
 | `PatternSlotRef` | 使用服务端容器 ID 与容器内槽号稳定标识当前终端中的样板槽 |
 
-公共接口直接引用 AE2 类型，因此开发者依赖至少需要 AE2 `19.2.17`，并应在相同的 AE2 主版本内完成兼容验证。
+公共接口直接引用 AE2 类型，因此开发者依赖至少需要 AE2 `15.4.10`，并应在相同的 AE2 主版本内完成兼容验证。
 
-`AelisCycleExecutionApi` 提供 `preparePlan`、`guardInputs`、`dispatchedCrafts`、`writeRuntime`、`readRuntime`、`getCyclicCraftAmounts`，使独立 CPU 无需调用内部运行时类。必须使用准备方法返回的计划，通过 `AelisCycleRuntimeController.withCyclePhase(...)` 启用完整阶段协议，并在清理前结算返回产物。旧控制器构造器保留并发行为；MaxFast 兼容入口保留旧 Java 链接，不会自动让独立 CPU 接入新协议。
+`AelisCycleExecutionApi` 提供 `preparePlan`、`guardInputs`、`dispatchedCrafts`、`writeRuntime`、`readRuntime`、`getCyclicCraftAmounts`，使独立 CPU 无需调用内部运行时类。必须使用准备方法返回的计划，通过 `AelisCycleRuntimeController.withCyclePhase(...)` 启用完整阶段协议，并在清理前结算返回产物。旧控制器构造器保留并发行为；MaxFast 兼容入口供源码迁移使用，调用方须针对 Forge／AE2 15 重新编译，并显式接入循环 CPU 协议。
 
 `AelisCraftingPlanner.createConfigured(...)` 使用服务端配置的节点数与编译预算，但不会检查 `crafting.aelis.enable_automatic_planner`。每个 AE2 合成计算应创建一个会话，并在该计算的实际尝试和模拟尝试之间复用；当结果的 `shouldFallback()` 为 `true` 时，API 已恢复缺失物品计数与候选状态，调用方可以安全地继续自己的规划器或 AE2 原生流程。
 
@@ -368,7 +354,7 @@ if (result.shouldFallback()) {
 
 ```java
 PatternDuplicateApi.registerOutputResolver(
-        ResourceLocation.fromNamespaceAndPath("examplemod", "custom_patterns"),
+        new ResourceLocation("examplemod", "custom_patterns"),
         100,
         (stack, level) -> {
             if (!isExamplePattern(stack)) {
@@ -382,7 +368,7 @@ PatternDuplicateApi.registerOutputResolver(
 
 ```java
 PatternTerminalIntegrationApi.register(
-        ResourceLocation.fromNamespaceAndPath("examplemod", "pattern_terminal"),
+        new ResourceLocation("examplemod", "pattern_terminal"),
         PatternTerminalIntegrationApi.Family.AE2_PATTERN_ACCESS,
         "examplemod.client.gui.ExamplePatternAccessScreen");
 ```
@@ -395,7 +381,7 @@ PatternTerminalIntegrationApi.register(
 
 | 限制 | 影响 |
 |---|---|
-| AE2 最低版本为 `19.2.17` | 元数据允许更高版本，但新的 AE2 大版本仍需重新验证内部 Mixin 注入点 |
+| AE2 范围为 `[15.4.10,16)` | 新的 AE2 大版本不在声明范围内，需要重新适配和验证 |
 | AELIS 只缓存当前计算会话 | 不提供跨 Grid、跨世界或持久化的配方图缓存 |
 | 独立运行验证环境 | 默认 GameTest 任务不会复现发行专项场景；自动化检查不能替代完整整合包的客户端与服务端验证 |
 | AELIS 采用单一激进策略 | 自动接入默认关闭；启用前应在实际整合包中验证配方兼容性 |

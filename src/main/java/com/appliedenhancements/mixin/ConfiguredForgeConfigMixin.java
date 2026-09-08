@@ -6,17 +6,17 @@ import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.UnmodifiableConfig;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import net.neoforged.fml.config.ModConfig;
+import net.minecraftforge.fml.config.ModConfig;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 
-/** Configured 2.6.3 shallowly replaces sections when saving changed values. */
+/** Configured Forge 2.2.x shallowly replaces sections when saving changed values. */
 @Pseudo
-@Mixin(targets = "com.mrcrayfish.configured.impl.neoforge.NeoForgeConfig", remap = false)
-public abstract class ConfiguredNeoForgeConfigMixin {
+@Mixin(targets = "com.mrcrayfish.configured.impl.forge.ForgeConfig", remap = false)
+public abstract class ConfiguredForgeConfigMixin {
     @Shadow
     @Final
     protected ModConfig config;

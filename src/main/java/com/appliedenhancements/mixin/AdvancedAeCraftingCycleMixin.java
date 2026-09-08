@@ -22,7 +22,6 @@ import com.appliedenhancements.runtime.AdvancedAeCycleRecovery;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import net.minecraft.core.HolderLookup;
 import appeng.me.service.CraftingService;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
@@ -167,21 +166,21 @@ public abstract class AdvancedAeCraftingCycleMixin {
     }
 
     @Inject(method = "writeToNBT", at = @At("RETURN"))
-    private void appliedenhancements$saveCycle(CompoundTag tag, HolderLookup.Provider registries,
+    private void appliedenhancements$saveCycle(CompoundTag tag,
             CallbackInfo callback) {
         if (hasJob() && appliedenhancements$cycleRuntime != null
                 && appliedenhancements$cycleRuntime.hasActiveSeedProtection()) {
             tag.put(APPLIEDENHANCEMENTS_CYCLE_TAG,
-                    AelisCycleExecutionApi.writeRuntime(appliedenhancements$cycleRuntime, registries));
+                    AelisCycleExecutionApi.writeRuntime(appliedenhancements$cycleRuntime));
         }
     }
 
     @Inject(method = "readFromNBT", at = @At("RETURN"))
-    private void appliedenhancements$loadCycle(CompoundTag tag, HolderLookup.Provider registries,
+    private void appliedenhancements$loadCycle(CompoundTag tag,
             CallbackInfo callback) {
         boolean saved = hasJob() && tag.contains(APPLIEDENHANCEMENTS_CYCLE_TAG);
         appliedenhancements$cycleRuntime = saved
-                ? AelisCycleExecutionApi.readRuntime(tag.getCompound(APPLIEDENHANCEMENTS_CYCLE_TAG), registries).orElse(null) : null;
+                ? AelisCycleExecutionApi.readRuntime(tag.getCompound(APPLIEDENHANCEMENTS_CYCLE_TAG)).orElse(null) : null;
         if (saved && appliedenhancements$cycleRuntime == null) {
             AppliedEnhancements.LOGGER.error("Invalid AELIS quantum CPU cycle state; cancelling job safely");
             cancel();

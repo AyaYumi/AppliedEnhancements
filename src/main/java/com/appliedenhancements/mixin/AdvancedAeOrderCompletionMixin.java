@@ -19,7 +19,6 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import java.util.UUID;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
@@ -123,7 +122,7 @@ public abstract class AdvancedAeOrderCompletionMixin {
     }
 
     @Inject(method = "writeToNBT", at = @At("RETURN"))
-    private void appliedenhancements$saveOrderCompletion(CompoundTag tag, HolderLookup.Provider registries,
+    private void appliedenhancements$saveOrderCompletion(CompoundTag tag,
             CallbackInfo callback) {
         if (hasJob() && appliedenhancements$pendingOrderCompletion > 0 && appliedenhancements$orderId != null) {
             var saved = new CompoundTag();
@@ -136,7 +135,7 @@ public abstract class AdvancedAeOrderCompletionMixin {
     }
 
     @Inject(method = "readFromNBT", at = @At("RETURN"))
-    private void appliedenhancements$loadOrderCompletion(CompoundTag tag, HolderLookup.Provider registries,
+    private void appliedenhancements$loadOrderCompletion(CompoundTag tag,
             CallbackInfo callback) {
         appliedenhancements$prepareOrder();
         if (appliedenhancements$orderId == null || !tag.contains(APPLIEDENHANCEMENTS_ORDER_TAG)) return;

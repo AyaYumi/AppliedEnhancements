@@ -11,7 +11,7 @@ class NetworkItemExtractPayloadTest {
     void roundTripsLongAmountAndSerial() {
         var expected = new NetworkItemExtractPayload(
                 Integer.MAX_VALUE, Long.MAX_VALUE, Long.MAX_VALUE);
-        var buffer = Unpooled.buffer();
+        var buffer = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
         try {
             NetworkItemExtractPayload.STREAM_CODEC.encode(buffer, expected);
             assertEquals(

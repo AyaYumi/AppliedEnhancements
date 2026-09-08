@@ -11,7 +11,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
 import appeng.api.stacks.AEItemKey;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.items.IItemHandler;
+import net.minecraftforge.items.IItemHandler;
 
 /** Reuses accepting item-handler slots between export-bus simulation and commit. */
 @Mixin(targets = "appeng.parts.automation.HandlerStrategy$1", remap = false)
@@ -19,9 +19,9 @@ public abstract class ItemHandlerStrategyMixin {
     @Unique
     private WeakSlotHintCache<IItemHandler, AEItemKey> appliedenhancements$slotHints;
 
-    @WrapOperation(method = "insert(Lnet/neoforged/neoforge/items/IItemHandler;Lappeng/api/stacks/AEKey;JLappeng/api/config/Actionable;)J",
+    @WrapOperation(method = "insert(Lnet/minecraftforge/items/IItemHandler;Lappeng/api/stacks/AEKey;JLappeng/api/config/Actionable;)J",
             at = @At(value = "INVOKE",
-                    target = "Lnet/neoforged/neoforge/items/ItemHandlerHelper;insertItem(Lnet/neoforged/neoforge/items/IItemHandler;Lnet/minecraft/world/item/ItemStack;Z)Lnet/minecraft/world/item/ItemStack;"))
+                    target = "Lnet/minecraftforge/items/ItemHandlerHelper;insertItem(Lnet/minecraftforge/items/IItemHandler;Lnet/minecraft/world/item/ItemStack;Z)Lnet/minecraft/world/item/ItemStack;"))
     private ItemStack appliedenhancements$insertUsingSlotHint(
             IItemHandler handler,
             ItemStack input,

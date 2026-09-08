@@ -18,12 +18,16 @@ public final class PatternHeaderActionButton {
     }
 
     public static int actionStartX(PatternContainerGroup group, int groupSize) {
+        return actionStartX(group, groupSize, NAME_X, MAX_ACTION_X);
+    }
+
+    public static int actionStartX(PatternContainerGroup group, int groupSize, int nameX, int maxActionX) {
         var font = Minecraft.getInstance().font;
         var text = Language.getInstance().getVisualOrder(
                 font.substrByWidth(
                         displayName(group, groupSize),
-                        MAX_ACTION_X - NAME_X - 3));
-        return Math.min(MAX_ACTION_X, NAME_X + font.width(text) + 3);
+                        maxActionX - nameX - 3));
+        return Math.min(maxActionX, nameX + font.width(text) + 3);
     }
 
     private static FormattedText displayName(
@@ -42,9 +46,15 @@ public final class PatternHeaderActionButton {
             boolean hovered,
             boolean active) {
         Icon background = hovered
-                ? Icon.TOOLBAR_BUTTON_BACKGROUND_HOVER
+                ? Icon.TOOLBAR_BUTTON_BACKGROUND
                 : Icon.TOOLBAR_BUTTON_BACKGROUND;
-        background.getBlitter().dest(x, y, SIZE, SIZE).zOffset(22).blit(graphics);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 22);
+        background.getBlitter().dest(x, y, SIZE, SIZE).blit(graphics);
+        graphics.pose().popPose();
+        if (hovered) {
+            graphics.renderOutline(x, y, SIZE, SIZE, 0xFFB8D4E8);
+        }
 
         var font = Minecraft.getInstance().font;
         Component label = Component.translatable(action.translationKey);

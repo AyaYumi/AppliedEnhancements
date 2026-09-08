@@ -13,7 +13,7 @@ import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -65,8 +65,8 @@ class AelisObservedPatternSemanticsTest {
         }
 
         @Override
-        public List<GenericStack> getOutputs() {
-            return List.of(new GenericStack(FEEDBACK, 9));
+        public GenericStack[] getOutputs() {
+            return List.of(new GenericStack(FEEDBACK, 9)).toArray(GenericStack[]::new);
         }
 
         @Override
@@ -85,9 +85,9 @@ class AelisObservedPatternSemanticsTest {
         private long amount = 8;
 
         @Override
-        public List<GenericStack> getOutputs() {
+        public GenericStack[] getOutputs() {
             amount++;
-            return List.of(new GenericStack(FEEDBACK, amount));
+            return List.of(new GenericStack(FEEDBACK, amount)).toArray(GenericStack[]::new);
         }
     }
 
@@ -164,7 +164,7 @@ class AelisObservedPatternSemanticsTest {
         }
 
         @Override
-        public CompoundTag toTag(HolderLookup.Provider registries) {
+        public CompoundTag toTag() {
             return new CompoundTag();
         }
 
@@ -175,11 +175,11 @@ class AelisObservedPatternSemanticsTest {
 
         @Override
         public ResourceLocation getId() {
-            return ResourceLocation.fromNamespaceAndPath("test", id);
+            return new ResourceLocation("test", id);
         }
 
         @Override
-        public void writeToPacket(RegistryFriendlyByteBuf data) {
+        public void writeToPacket(FriendlyByteBuf data) {
         }
 
         @Override
@@ -191,27 +191,22 @@ class AelisObservedPatternSemanticsTest {
         public void addDrops(long amount, List<ItemStack> drops,
                 Level level, BlockPos pos) {
         }
-
-        @Override
-        public boolean hasComponents() {
-            return false;
-        }
     }
 
     private static final class TestKeyType extends AEKeyType {
         private TestKeyType() {
             super(
-                    ResourceLocation.fromNamespaceAndPath("test", "key"),
+                    new ResourceLocation("test", "key"),
                     TestKey.class, Component.literal("Test Key"));
         }
 
         @Override
-        public MapCodec<? extends AEKey> codec() {
+        public AEKey loadKeyFromTag(CompoundTag tag) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public AEKey readFromPacket(RegistryFriendlyByteBuf input) {
+        public AEKey readFromPacket(FriendlyByteBuf input) {
             return null;
         }
     }

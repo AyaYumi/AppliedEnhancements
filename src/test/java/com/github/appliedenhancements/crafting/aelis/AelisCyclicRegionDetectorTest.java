@@ -35,7 +35,7 @@ class AelisCyclicRegionDetectorTest {
         var regions = AelisCyclicRegionDetector.detect(models);
 
         assertEquals(1, regions.size());
-        var region = regions.getFirst();
+        var region = regions.get(0);
         assertEquals(Set.of("meteorSeed", "pureMeteor", "meteorDust"), region.keys());
         assertEquals(2, region.variants().get("meteorSeed").size());
         assertTrue(region.variants().containsKey("pureMeteor"));
@@ -56,9 +56,9 @@ class AelisCyclicRegionDetectorTest {
         var regions = analysis.regions();
 
         assertEquals(1, regions.size());
-        assertEquals(Set.of("X"), regions.getFirst().keys());
+        assertEquals(Set.of("X"), regions.get(0).keys());
         assertEquals(1, analysis.rejectedRegions().size());
-        var rejected = analysis.rejectedRegions().getFirst();
+        var rejected = analysis.rejectedRegions().get(0);
         assertEquals(Set.of("A", "B"), rejected.keys());
         assertEquals(
                 "ordered candidate contains a substitute input",

@@ -14,11 +14,11 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(value = CPUSelectionList.class, priority = 900, remap = false)
 public abstract class CPUSelectionListFinalAmountsMixin {
     @WrapOperation(method = "drawBackgroundLayer", at = @At(value = "INVOKE",
-            target = "Lappeng/client/gui/widgets/InfoBar;add(Ljava/lang/String;IFII)V", ordinal = 2))
+            target = "Lappeng/client/gui/widgets/InfoBar;add(Ljava/lang/String;IF)V", ordinal = 2))
     private void appliedenhancements$formatFinalParallelism(InfoBar bar, String text, int color,
-            float scale, int x, int y, Operation<Void> original,
+            float scale, Operation<Void> original,
             @Local(name = "cpu") CraftingStatusMenu.CraftingCpuListEntry cpu) {
         if (cpu.coProcessors() == InfiniteConstants.INFINITE_PARALLELISM) text = "9.2E";
-        original.call(bar, text, color, scale, x, y);
+        original.call(bar, text, color, scale);
     }
 }

@@ -179,8 +179,8 @@ final class AelisCyclicDemandSolver<K, V> {
             mergeMaximum(requiredAvailable, componentPlan.requiredAvailable);
             mergePositive(surplus, componentPlan.surplus);
             boolean cyclic = component.size() > 1
-                    || adjacency.getOrDefault(component.getFirst(), Set.of())
-                            .contains(component.getFirst());
+                    || adjacency.getOrDefault(component.get(0), Set.of())
+                            .contains(component.get(0));
             if (cyclic && !componentPlan.executionSchedule.isEmpty()) {
                 cyclicSchedules.add(componentPlan.executionSchedule);
             }

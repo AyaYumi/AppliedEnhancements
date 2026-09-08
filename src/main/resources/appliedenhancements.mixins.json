@@ -1,8 +1,9 @@
 {
   "required": true,
   "minVersion": "0.8",
+  "refmap": "appliedenhancements.refmap.json",
   "package": "com.appliedenhancements.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_17",
   "mixins": [
     "AdvancedAeCycleAwareCpuMixin",
     "AdvancedAeCraftingCycleMixin",
@@ -52,7 +53,7 @@
     "CraftAmountScreenMixin",
     "NumberEntryWidgetAccessor",
     "CPUSelectionListMixin",
-    "ConfiguredNeoForgeConfigMixin",
+    "ConfiguredForgeConfigMixin",
     "CraftConfirmScreenMixin",
     "CraftConfirmTableRendererMixin",
     "ExtendedPatternAccessGroupHeaderMixin",

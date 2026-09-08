@@ -1418,7 +1418,7 @@ public final class AelisPlanner {
         CompiledCandidate activeCandidate = executeCompiledBoundary
                 ? compiledCandidate
                 : node.compiledCandidates.size() == 1
-                        ? node.compiledCandidates.getFirst()
+                        ? node.compiledCandidates.get(0)
                         : null;
         if (runtimeQuantityGuard == null
                 && (requestInput == null || !requestInput.substituteInput)
@@ -1625,7 +1625,7 @@ public final class AelisPlanner {
             return false;
         }
 
-        CompiledCandidate candidate = node.compiledCandidates.getFirst();
+        CompiledCandidate candidate = node.compiledCandidates.get(0);
         if (!candidate.quantityFeedbackBatch) {
             return false;
         }
@@ -1769,7 +1769,7 @@ public final class AelisPlanner {
         try {
             if (!node.occurrences.isEmpty()) {
                 List<CraftingTreeProcess> processes =
-                        ((AelisCraftingTreeNodeBridge) node.occurrences.getFirst())
+                        ((AelisCraftingTreeNodeBridge) node.occurrences.get(0))
                                 .molecularmanipulator$getProcesses();
                 if (processes != null) {
                     candidateCount = Math.max(candidateCount, processes.size());
@@ -1810,7 +1810,7 @@ public final class AelisPlanner {
                 && hasDeterministicCandidateSubgraph(graph, node);
         CraftingTreeNode candidateRoot = node.occurrences.isEmpty()
                 ? null
-                : node.occurrences.getFirst();
+                : node.occurrences.get(0);
         CandidateOccurrenceCheck entryCandidateCheck =
                 inspectSimulationFirstCandidateOccurrence(
                         node, candidateRoot, true, true, simulation);
@@ -1839,7 +1839,7 @@ public final class AelisPlanner {
                         graph, nodeIndex, parent, requestInput,
                         pauseCheckpoint)
                 : SimulationFirstCandidateProof.accept(0);
-        CompiledCandidate firstCandidate = node.compiledCandidates.getFirst();
+        CompiledCandidate firstCandidate = node.compiledCandidates.get(0);
         boolean singlePatternSimulationShape = simulation
                 && exactRequest
                 && !simulationProof.safe
@@ -1992,7 +1992,7 @@ public final class AelisPlanner {
         }
 
         if (candidateLimit == 1) {
-            CompiledCandidate candidate = node.compiledCandidates.getFirst();
+            CompiledCandidate candidate = node.compiledCandidates.get(0);
             CandidateAttempt attempt = executeCompiledCandidate(
                     graph, nodeIndex, candidate, parent, requestMultipliers,
                     rootRequestedAmount, simulation, pauseCheckpoint, requestInput,
@@ -2778,7 +2778,7 @@ public final class AelisPlanner {
         try {
             rootOccurrence = requestInput == null
                     ? (AelisCraftingTreeNodeBridge) graph.nodes.get(nodeIndex)
-                            .occurrences.getFirst()
+                            .occurrences.get(0)
                     : requestInput.child;
         } catch (RuntimeException exception) {
             return rejectSparseCapacityPlan(
@@ -3128,7 +3128,7 @@ public final class AelisPlanner {
                 }
                 return allSimulationShapesExact
                         ? node.compiledCandidates
-                        : List.of(node.compiledCandidates.getFirst());
+                        : List.of(node.compiledCandidates.get(0));
             }
             boolean allLocalShapesExact = true;
             for (int candidateIndex = 0;
@@ -3160,7 +3160,7 @@ public final class AelisPlanner {
                 || node.compiledCandidates.isEmpty()) {
             return null;
         }
-        return List.of(node.compiledCandidates.getFirst());
+        return List.of(node.compiledCandidates.get(0));
     }
 
     private static AelisSparseCapacitySolver.Candidate createSparseCapacityCandidate(
@@ -3229,7 +3229,7 @@ public final class AelisPlanner {
         }
         return validateSparseConsumableTemplates(
                 node,
-                (AelisCraftingTreeNodeBridge) node.occurrences.getFirst(),
+                (AelisCraftingTreeNodeBridge) node.occurrences.get(0),
                 inventory, pauseCheckpoint);
     }
 
@@ -3408,7 +3408,7 @@ public final class AelisPlanner {
         if (candidateRoot == null || node.compiledCandidates.isEmpty()) {
             return false;
         }
-        CompiledCandidate candidate = node.compiledCandidates.getFirst();
+        CompiledCandidate candidate = node.compiledCandidates.get(0);
         if (candidate.sourceIndex != 0) {
             return false;
         }
@@ -3416,10 +3416,10 @@ public final class AelisPlanner {
         List<CraftingTreeProcess> processes = withoutNoProgressCandidates(
                 node, rootBridge.molecularmanipulator$getProcesses());
         if (processes == null || processes.isEmpty()
-                || processes.getFirst() != candidate.sourceProcess) {
+                || processes.get(0) != candidate.sourceProcess) {
             return false;
         }
-        return isLiveCandidate(candidate, processes.getFirst());
+        return isLiveCandidate(candidate, processes.get(0));
     }
 
     private static boolean hasLiveCandidateSet(
@@ -3479,7 +3479,7 @@ public final class AelisPlanner {
         var states = new byte[graph.nodes.size()];
         states[node.index] = 1;
         boolean safe = isBatchValidCandidateSubgraph(
-                graph, node.compiledCandidates.getFirst(), states);
+                graph, node.compiledCandidates.get(0), states);
         states[node.index] = safe ? (byte) 2 : (byte) 3;
         node.batchValidFirstCandidateSubgraph = safe;
         return safe;
@@ -3515,7 +3515,7 @@ public final class AelisPlanner {
         CraftingTreeNode requestedOccurrence;
         try {
             requestedOccurrence = requestInput == null
-                    ? root.occurrences.getFirst()
+                    ? root.occurrences.get(0)
                     : (CraftingTreeNode) requestInput.child;
         } catch (RuntimeException exception) {
             return SimulationFirstCandidateProof.reject("root_occurrence");
@@ -3523,7 +3523,7 @@ public final class AelisPlanner {
         CandidateOccurrenceCheck requestedCheck =
                 inspectSimulationFirstCandidateOccurrence(
                         root, requestedOccurrence,
-                        requestedOccurrence == root.occurrences.getFirst(),
+                        requestedOccurrence == root.occurrences.get(0),
                         true, true);
         if (!requestedCheck.safe) {
             return SimulationFirstCandidateProof.reject(
@@ -3541,7 +3541,7 @@ public final class AelisPlanner {
             Node node = graph.nodes.get(nodeIndex);
             CraftingTreeNode occurrence;
             try {
-                occurrence = node.occurrences.getFirst();
+                occurrence = node.occurrences.get(0);
             } catch (RuntimeException exception) {
                 return SimulationFirstCandidateProof.reject(
                         "canonical_occurrence");
@@ -3589,7 +3589,7 @@ public final class AelisPlanner {
             if (node.compiledCandidates.isEmpty()) {
                 return SimulationFirstCandidateProof.reject("missing_candidate0");
             }
-            CompiledCandidate candidate = node.compiledCandidates.getFirst();
+            CompiledCandidate candidate = node.compiledCandidates.get(0);
             CandidateOccurrenceCheck canonicalCheck =
                     inspectSimulationFirstCandidateOccurrence(
                             node, occurrence, true, true, true);
@@ -3692,7 +3692,7 @@ public final class AelisPlanner {
                 CandidateOccurrenceCheck childCheck =
                         inspectSimulationFirstCandidateOccurrence(
                                 child, childOccurrence,
-                                childOccurrence == child.occurrences.getFirst(),
+                                childOccurrence == child.occurrences.get(0),
                                 true, true);
                 if (!childCheck.safe) {
                     return SimulationFirstCandidateProof.reject(
@@ -3746,7 +3746,7 @@ public final class AelisPlanner {
         return inspectSimulationFirstCandidateOccurrence(
                 node, occurrence,
                 occurrence != null && !node.occurrences.isEmpty()
-                        && occurrence == node.occurrences.getFirst(),
+                        && occurrence == node.occurrences.get(0),
                 false, true).safe;
     }
 
@@ -3786,14 +3786,14 @@ public final class AelisPlanner {
                         candidateOccurrenceDetail(
                                 node, "missing_live_candidate", null));
             }
-            CompiledCandidate candidate = node.compiledCandidates.getFirst();
+            CompiledCandidate candidate = node.compiledCandidates.get(0);
             if (candidate.sourceIndex != 0) {
                 return CandidateOccurrenceCheck.reject(
                         candidateOccurrenceDetail(
                                 node, "compiled_source_index="
                                         + candidate.sourceIndex, null));
             }
-            CraftingTreeProcess liveCandidate = processes.getFirst();
+            CraftingTreeProcess liveCandidate = processes.get(0);
             var process = (AelisCraftingTreeProcessBridge) liveCandidate;
             if (requireCanonicalSource
                     && liveCandidate != candidate.sourceProcess) {
@@ -3962,7 +3962,7 @@ public final class AelisPlanner {
                 .supportsDirectStockOutputMix(node.amount)
                 && !node.compiledCandidates.isEmpty()
                 && isDirectStockCandidate(
-                        graph, node, node.compiledCandidates.getFirst(), 0);
+                        graph, node, node.compiledCandidates.get(0), 0);
         node.directStockFirstCandidate = safe;
         return safe;
     }
@@ -4190,7 +4190,7 @@ public final class AelisPlanner {
                             == node.candidatePatterns.size()
                     && !node.compiledCandidates.isEmpty()
                     && isBatchValidCandidateSubgraph(
-                            graph, node.compiledCandidates.getFirst(), states);
+                            graph, node.compiledCandidates.get(0), states);
         } else if (node.barrier
                 || node.executionMode != ExecutionMode.PURE_FAST
                 || node.hasContainerItems
@@ -4203,7 +4203,7 @@ public final class AelisPlanner {
             safe = false;
         } else {
             safe = isBatchValidCandidateSubgraph(
-                    graph, node.compiledCandidates.getFirst(), states);
+                    graph, node.compiledCandidates.get(0), states);
         }
         states[nodeIndex] = safe ? (byte) 2 : (byte) 3;
         return safe;
@@ -4266,7 +4266,7 @@ public final class AelisPlanner {
                     .isBinarySearchCompatibleNativeLeaf(node.barrierReason);
         } else if (node.compiledCandidates.isEmpty()
                 || !hasDeterministicCandidateFlags(
-                        node.compiledCandidates.getFirst())
+                        node.compiledCandidates.get(0))
                 || node.executionMode != ExecutionMode.PURE_FAST
                         && !isInvariantReusableBoundary(node)) {
             deterministic = false;
@@ -4298,7 +4298,7 @@ public final class AelisPlanner {
         if (candidates.isEmpty()) {
             return false;
         }
-        long outputPerPattern = candidates.getFirst().outputPerPattern;
+        long outputPerPattern = candidates.get(0).outputPerPattern;
         if (outputPerPattern <= 0) {
             return false;
         }
@@ -4347,7 +4347,7 @@ public final class AelisPlanner {
                 && !node.barrier
                 && !node.compiledCandidates.isEmpty()
                 && hasDeterministicCandidateFlags(
-                        node.compiledCandidates.getFirst());
+                        node.compiledCandidates.get(0));
     }
 
     private static boolean hasPatternOutputAsInput(IPatternDetails details) {
@@ -4487,7 +4487,7 @@ public final class AelisPlanner {
         boolean completed = false;
         try {
             var bridge = requestInput == null
-                    ? (AelisCraftingTreeNodeBridge) node.occurrences.getFirst()
+                    ? (AelisCraftingTreeNodeBridge) node.occurrences.get(0)
                     : requestInput.child;
             bridge.molecularmanipulator$request(inventory, requestedAmount, null);
             completed = true;
@@ -4546,7 +4546,7 @@ public final class AelisPlanner {
                     "unsupported_barrier:" + node.barrierReason, null);
         }
 
-        var nodeBridge = (AelisCraftingTreeNodeBridge) node.occurrences.getFirst();
+        var nodeBridge = (AelisCraftingTreeNodeBridge) node.occurrences.get(0);
         List<CraftingTreeProcess> processes = nodeBridge.molecularmanipulator$getProcesses();
         if (processes == null || processes.size() != 1) {
             return rejectReusableBoundary(node, null, "pattern_candidate_count", null);
@@ -4555,7 +4555,7 @@ public final class AelisPlanner {
             return rejectReusableBoundary(node, null, "emitting_boundary", null);
         }
 
-        var process = (AelisCraftingTreeProcessBridge) processes.getFirst();
+        var process = (AelisCraftingTreeProcessBridge) processes.get(0);
         if (!process.molecularmanipulator$hasContainerItems()) {
             return rejectReusableBoundary(node, null, "container_flag_missing", null);
         }
@@ -5663,7 +5663,7 @@ public final class AelisPlanner {
                     int boundChildIndex = -1;
                     if (child != null && !child.occurrences.isEmpty()) {
                         var childBridge = (AelisCraftingTreeNodeBridge)
-                                child.occurrences.getFirst();
+                                child.occurrences.get(0);
                         var consumable = new GraphConsumableInput(
                                 input, childBridge, child.index,
                                 multiplier, false, false);
@@ -6203,7 +6203,7 @@ public final class AelisPlanner {
             }
 
             node.compiledCandidates.add(compileCandidate(
-                    node, processes.getFirst(), context, 0, true));
+                    node, processes.get(0), context, 0, true));
             node.allCandidatesCompiled = processes.size() == 1;
 
             if (processes.size() > 1) {
@@ -6838,7 +6838,7 @@ public final class AelisPlanner {
             var keys = new HashSet<AEKey>();
             keys.add(node.key);
             if (!node.occurrenceContexts.isEmpty()) {
-                addContextKeys(keys, node.occurrenceContexts.getFirst());
+                addContextKeys(keys, node.occurrenceContexts.get(0));
             }
             addContextKeys(keys, context);
             return new ContextSplit(reason, node.key, Set.copyOf(keys));
@@ -6865,7 +6865,7 @@ public final class AelisPlanner {
 
             RecipeContext canonicalContext = node.occurrenceContexts.isEmpty()
                     ? RecipeContext.ROOT
-                    : node.occurrenceContexts.getFirst();
+                    : node.occurrenceContexts.get(0);
             RecipeContext terminalContext = node.terminal ? canonicalContext : context;
             var diagnosticPatterns = new ArrayList<IPatternDetails>();
             String patternSource;

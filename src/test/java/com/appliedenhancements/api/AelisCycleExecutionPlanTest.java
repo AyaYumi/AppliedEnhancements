@@ -31,7 +31,7 @@ class AelisCycleExecutionPlanTest {
         steps.clear();
 
         assertEquals(1, plan.steps().size());
-        assertEquals(Map.of(seed, 2L), plan.steps().getFirst().inputsPerCraft());
+        assertEquals(Map.of(seed, 2L), plan.steps().get(0).inputsPerCraft());
         assertThrows(UnsupportedOperationException.class, () -> plan.steps().clear());
         assertThrows(IllegalArgumentException.class,
                 () -> new AelisCycleExecutionPlan.Step(

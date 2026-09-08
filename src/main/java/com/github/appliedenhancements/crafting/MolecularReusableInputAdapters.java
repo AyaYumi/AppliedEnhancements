@@ -4,7 +4,6 @@ import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.Level;
@@ -147,14 +146,13 @@ public final class MolecularReusableInputAdapters {
     private static boolean hasFiniteMutableDurability(ItemStack stack) {
         return stack.isDamageableItem()
                 && stack.getMaxDamage() > 0
-                && !stack.has(DataComponents.UNBREAKABLE);
+                && !(stack.hasTag() && stack.getTag().getBoolean("Unbreakable"));
     }
 
     private static boolean hasUnbreaking(ItemStack stack, Level level) {
-        var enchantments = stack.getAllEnchantments(
-                level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT));
+        var enchantments = stack.getAllEnchantments();
         for (var enchantment : enchantments.keySet()) {
-            if (enchantment.is(Enchantments.UNBREAKING)) {
+            if (enchantment == Enchantments.UNBREAKING) {
                 return true;
             }
         }

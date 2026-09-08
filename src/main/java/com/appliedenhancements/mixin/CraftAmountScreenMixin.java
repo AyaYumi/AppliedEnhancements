@@ -10,7 +10,7 @@ import com.appliedenhancements.network.LongCraftingRequestPayload;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import net.neoforged.neoforge.network.PacketDistributor;
+import com.appliedenhancements.network.NetworkHandler;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -71,7 +71,7 @@ public abstract class CraftAmountScreenMixin {
                 .orElse(0);
         if (amount > 0) {
             // Send long crafting request to server
-            PacketDistributor.sendToServer(new LongCraftingRequestPayload(
+            NetworkHandler.sendToServer(new LongCraftingRequestPayload(
                     amount,
                     this.amountToCraft.startsWithEquals(),
                     CraftAmountScreen.hasShiftDown()));

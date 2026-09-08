@@ -44,7 +44,7 @@ class AelisCyclicPatternOverlayTest {
         assertEquals(1, regions.size());
         assertEquals(
                 Set.of("quartzDust", "pureMeteor", "meteorSeed"),
-                regions.getFirst().keys());
+                regions.get(0).keys());
     }
 
     @Test
@@ -79,8 +79,8 @@ class AelisCyclicPatternOverlayTest {
 
         assertEquals(Set.of("quartzDust", "pureMeteor", "meteorSeed"),
                 global.keySet());
-        assertEquals("pulverize", global.get("quartzDust").getFirst().id());
-        assertEquals("aggregator", global.get("meteorSeed").getFirst().id());
+        assertEquals("pulverize", global.get("quartzDust").get(0).id());
+        assertEquals("aggregator", global.get("meteorSeed").get(0).id());
         assertEquals(true, solved.solved(), () -> String.valueOf(solved.failure()));
         assertEquals(BigInteger.valueOf(3),
                 solved.plan().firings().get("aggregator"));

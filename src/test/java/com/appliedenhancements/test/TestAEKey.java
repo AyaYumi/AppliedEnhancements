@@ -6,7 +6,7 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -16,7 +16,7 @@ public final class TestAEKey extends AEKey {
     private final ResourceLocation id;
 
     public TestAEKey(String path) {
-        this.id = ResourceLocation.fromNamespaceAndPath("test", path);
+        this.id = new ResourceLocation("test", path);
     }
 
     @Override
@@ -30,7 +30,7 @@ public final class TestAEKey extends AEKey {
     }
 
     @Override
-    public CompoundTag toTag(HolderLookup.Provider registries) {
+    public CompoundTag toTag() {
         return new CompoundTag();
     }
 
@@ -45,7 +45,7 @@ public final class TestAEKey extends AEKey {
     }
 
     @Override
-    public void writeToPacket(RegistryFriendlyByteBuf buffer) {
+    public void writeToPacket(FriendlyByteBuf buffer) {
     }
 
     @Override
@@ -56,10 +56,5 @@ public final class TestAEKey extends AEKey {
     @Override
     public void addDrops(
             long amount, List<ItemStack> drops, Level level, BlockPos pos) {
-    }
-
-    @Override
-    public boolean hasComponents() {
-        return false;
     }
 }

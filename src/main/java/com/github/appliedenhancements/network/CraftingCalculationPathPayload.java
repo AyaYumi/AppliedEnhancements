@@ -1,5 +1,6 @@
 package com.github.appliedenhancements.network;
 
+import com.appliedenhancements.network.PacketCodec;
 import com.appliedenhancements.AppliedEnhancements;
 import appeng.api.stacks.AEKey;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
@@ -8,21 +9,16 @@ import io.netty.handler.codec.DecoderException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraft.network.FriendlyByteBuf;
 
 public record CraftingCalculationPathPayload(
         int containerId,
         AelisCalculationPath path,
-        Map<AEKey, Long> cyclicCraftAmounts)
-        implements CustomPacketPayload {
+        Map<AEKey, Long> cyclicCraftAmounts) {
     private static final int MAX_CYCLIC_AMOUNT_ENTRIES = 1_000_000;
-    public static final Type<CraftingCalculationPathPayload> TYPE =
-            new Type<>(AppliedEnhancements.id("aelis_calculation_path"));
-    public static final StreamCodec<RegistryFriendlyByteBuf, CraftingCalculationPathPayload> STREAM_CODEC =
-            StreamCodec.of(CraftingCalculationPathPayload::encode, CraftingCalculationPathPayload::decode);
+    public static final int PACKET_ID = 5;
+    public static final PacketCodec<FriendlyByteBuf, CraftingCalculationPathPayload> STREAM_CODEC =
+            PacketCodec.of(CraftingCalculationPathPayload::encode, CraftingCalculationPathPayload::decode);
 
     public CraftingCalculationPathPayload {
         if (containerId < 0) {
@@ -45,11 +41,8 @@ public record CraftingCalculationPathPayload(
         cyclicCraftAmounts = Map.copyOf(copy);
     }
 
-    public static void register(net.neoforged.neoforge.network.registration.PayloadRegistrar registrar) {
-        registrar.playToClient(TYPE, STREAM_CODEC, CraftingCalculationPathPayload::handle);
-    }
 
-    private static void encode(RegistryFriendlyByteBuf buffer, CraftingCalculationPathPayload payload) {
+    public static void encode(FriendlyByteBuf buffer, CraftingCalculationPathPayload payload) {
         buffer.writeVarInt(payload.containerId);
         buffer.writeByte(payload.path.networkId());
         buffer.writeVarInt(payload.cyclicCraftAmounts.size());
@@ -59,7 +52,7 @@ public record CraftingCalculationPathPayload(
         }
     }
 
-    private static CraftingCalculationPathPayload decode(RegistryFriendlyByteBuf buffer) {
+    public static CraftingCalculationPathPayload decode(FriendlyByteBuf buffer) {
         int containerId = buffer.readVarInt();
         if (containerId < 0) {
             throw new DecoderException("Crafting calculation path containerId must be non-negative");
@@ -88,8 +81,8 @@ public record CraftingCalculationPathPayload(
         }
     }
 
-    private static void handle(CraftingCalculationPathPayload payload, IPayloadContext context) {
-        var menu = context.player().containerMenu;
+    public static void handle(CraftingCalculationPathPayload payload, net.minecraft.world.entity.player.Player receivingPlayer) {
+        var menu = receivingPlayer.containerMenu;
         if (menu.containerId == payload.containerId
                 && menu instanceof AelisCalculationPathMenuBridge bridge) {
             bridge.molecularmanipulator$setCalculationPath(payload.path);
@@ -98,8 +91,4 @@ public record CraftingCalculationPathPayload(
         }
     }
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
-    }
 }

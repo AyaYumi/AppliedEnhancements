@@ -22,7 +22,7 @@ class PatternTerminalIntegrationApiTest {
 
     @Test
     void thirdPartyScreenCanRegisterWithoutLoadingItsOptionalClass() {
-        var id = ResourceLocation.fromNamespaceAndPath(
+        var id = new ResourceLocation(
                 "examplemod", "test_pattern_terminal");
         PatternTerminalIntegrationApi.register(
                 id, Family.AE2_PATTERN_ACCESS, "examplemod.client.TestPatternScreen");

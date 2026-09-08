@@ -25,7 +25,7 @@ public abstract class MEStorageMenuContextMixin
 
     @Shadow
     @Final
-    protected IEnergySource energySource;
+    protected IEnergySource powerSource;
 
     @Shadow
     @Nullable
@@ -36,7 +36,7 @@ public abstract class MEStorageMenuContextMixin
             long serial, long requestedAmount) {
         var menu = (MEStorageMenu) (Object) this;
         if (requestedAmount <= 0
-                || !menu.getLinkStatus().connected()
+                || storage == null || powerSource == null || !menu.isPowered()
                 || !(menu.getPlayer() instanceof ServerPlayer player)
                 || !(getStackBySerial(serial) instanceof AEItemKey key)) {
             return 0;
@@ -53,7 +53,7 @@ public abstract class MEStorageMenuContextMixin
             return 0;
         }
         long extracted = StorageHelper.poweredExtraction(
-                energySource,
+                powerSource,
                 storage,
                 key,
                 Math.min(wanted, available),
@@ -69,7 +69,7 @@ public abstract class MEStorageMenuContextMixin
             // capacity calculation and placement. Reinsert defensively if a
             // third-party hook did so anyway.
             long returned = StorageHelper.poweredInsert(
-                    energySource,
+                    powerSource,
                     storage,
                     key,
                     remainder,

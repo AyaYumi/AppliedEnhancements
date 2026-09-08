@@ -47,12 +47,12 @@ public final class AelisLegacyCycleRecovery {
                 if (snapshot == null || snapshot.outputs().size() != 1) return null;
                 var inputs = new ArrayList<AelisCyclicDemandSolver.Input<AEKey>>();
                 for (var input : snapshot.inputs()) {
-                    if (input.possibleInputs().size() != 1 || input.remainingKeys().getFirst() != null) return null;
-                    var stack = input.possibleInputs().getFirst();
+                    if (input.possibleInputs().size() != 1 || input.remainingKeys().get(0) != null) return null;
+                    var stack = input.possibleInputs().get(0);
                     inputs.add(new AelisCyclicDemandSolver.Input<>(stack.what(), BigInteger.valueOf(
                             Math.multiplyExact(stack.amount(), input.multiplier()))));
                 }
-                var product = snapshot.outputs().getFirst();
+                var product = snapshot.outputs().get(0);
                 variants.computeIfAbsent(product.what(), ignored -> new ArrayList<>()).add(
                         new AelisCyclicDemandSolver.Variant<>(pattern, product.what(),
                                 BigInteger.valueOf(product.amount()), inputs));

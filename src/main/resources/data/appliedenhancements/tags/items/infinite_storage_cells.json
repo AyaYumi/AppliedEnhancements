@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "ae2:creative_storage_cell",
+    {
+      "id": "expatternprovider:infinity_cell",
+      "required": false
+    }
+  ]
+}

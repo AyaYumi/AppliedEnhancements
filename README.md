@@ -6,22 +6,25 @@
   <img src="artwork/project-logo-ae-text.png" alt="Applied Enhancements" width="720">
 </p>
 
-Applied Enhancements is a NeoForge quality-of-life and performance addon for Applied Energistics 2 (AE2).
+Applied Enhancements is a Forge quality-of-life and performance addon for Applied Energistics 2 (AE2).
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.6`
+> Current version: `1.0.6-forge`
 >
-> Target: Minecraft `1.21.1` / NeoForge / Java `21`
+> Target: Minecraft `1.20.1` / Forge / Java `17`
 
-## What's new in 1.0.6
+## Forge 1.20.1 port
 
 | Area | Update |
 |---|---|
-| AELIS API labels | Successful ordinary and cyclic API plans retain their `AELIS` source label, including when automatic planning is disabled. |
-| Requested-output cycle seeds | Cycles such as smithing-template duplication can borrow the proven startup amount from existing output stock. Borrowed seeds are returned in addition to the newly requested output; failed attempts restore inventory and extraction accounting. |
-| NeoEcoAE compatibility | Supported infinite CPUs display `9.2E` in the CPU list after number formatting, fixing the incorrect `2G` label. Finite counts and actual CPU capacity are unaffected. |
-| Integration compatibility | Public Java API signatures and internal payload protocol `3` are unchanged from `1.0.5`. |
+| Platform | Ports the 1.0.6 feature set to Minecraft 1.20.1, Forge and Java 17, with AE2 15.4.10. |
+| Networking and persistence | Uses Forge SimpleChannel protocol `1.0.6-forge-1` and AE2 15 NBT serialization. Install the Forge build on both client and server. |
+| Client compatibility | Adapts vanilla and ExtendedAE pattern-terminal layouts, SRG Mixin targets and the final AELIS result title when ExtendedAE Plus is present. |
+| AELIS and CPU display | Retains planner provenance, requested-output seed accounting, cycle execution and the `9.2E` infinite-CPU display. |
+| Distribution | The main JAR embeds MixinExtras; item tags use the 1.20.1 `tags/items` directory. |
+
+This branch is `1.20.1-forge`. Minecraft 1.21.1 support remains on [`1.21.1-neoforge`](https://github.com/AyaYumi/AppliedEnhancements/tree/1.21.1-neoforge). Integrations must recompile against the Forge build and AE2 15; JARs and worlds are not migrated across Minecraft versions by this mod.
 
 ## Features
 
@@ -47,26 +50,26 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 
 ## Requirements
 
-| Component | Requirement | Type |
-|---|---:|---|
-| Minecraft | `1.21.1` | Required, exact version |
-| Java | `21` | Required |
-| NeoForge | `21.1.220` or newer | Required |
-| Applied Energistics 2 | `19.2.17` or newer | Required |
-| ExtendedAE | `1.21-2.2.32-neoforge` or newer | Optional integration |
-| AE2WTLib | `19.5.1` or newer | Optional integration |
-| Just Enough Items | `19.27.0` or newer | Optional JEI ingredient-list and bookmark context menus |
+| Component | Declared range | Build / modpack validation version | Type |
+|---|---|---|---|
+| Minecraft | `[1.20.1,1.21)` | `1.20.1` | Required; this branch targets 1.20.1 |
+| Java | Java 17 bytecode | JDK `17` build; Java `21.0.7` modpack run | Required |
+| Forge | `[47.4.10,)` | `47.4.20` | Required |
+| Applied Energistics 2 | `[15.4.10,16)` | `15.4.10` | Required |
+| ExtendedAE | `[1.20-1.4.12-forge,)` | `1.20-1.4.19-forge` | Optional; mod ID `expatternprovider` |
+| AE2WTLib | `[15.3.3,16)` | `15.3.3-forge` | Optional wireless-terminal integration |
+| Just Enough Items | `[15,16)` | `15.49.0.188` | Optional ingredient-list and bookmark menus |
 
-The table reflects declared dependency ranges. This release is built and validated with NeoForge `21.1.220` and AE2 `19.2.17`. New AE2 major versions still require validation because several features use AE2 internal classes and Mixin injection points.
+Declared ranges permit loading; they do not establish runtime validation for every included version. This port uses AE2 internal classes and Mixin targets, so other versions and mod combinations need their own checks.
 
-Quantum CPU, smart-doubling and order-package integration additionally use the optional AdvancedAE, Useless Mod/OmniSequence, and Data Energistics mods respectively. Release validation included AdvancedAE `1.6.12` and Data Energistics `3.2.0`; these are validation versions, not a promise of compatibility with every later version.
+The Forge modpack also loaded AdvancedAE `1.3.6-1.20.1`, ExtendedAE Plus `1.5.5`, NeoEcoAE `20.4.0` and OmniSequence: Transfinite `2.0.0-forge`. Loading these mods does not prove every quantum-CPU, smart-doubling or cyclic-order scenario. Data Energistics virtual-order integration remains in the source but was not runtime-validated for this Forge port.
 
 ## Installation
 
-Install the same Applied Enhancements release build on both the client and server, together with compatible NeoForge and AE2 versions.
+Install the same Applied Enhancements release build on both the client and server, together with compatible Forge and AE2 versions.
 
 ```text
-mods/appliedenhancements-1.0.6.jar
+mods/appliedenhancements-1.0.6-forge.jar
 ```
 
 ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
@@ -101,7 +104,7 @@ Cycle plans also carry a compressed, proven runtime schedule. AE2's native craft
 
 With Useless Mod and OmniSequence installed, smart-doubling providers can expand cyclic batches based on complete available inputs, remaining firings in the current step, and the safe multiplier. The bridge submits a real scaled pattern and recalculates batch size after output returns without adding work to the order. Dynamic component patterns, alternative inputs, and container-return patterns retain their original dispatch path.
 
-Marked Data Energistics order packages complete automatically on native and quantum CPUs, with completion counts aligned to actual batches. After a pattern is accepted and its actual output is recorded, the CPU settles the package using Data Energistics' no-output semantics. Cyclic output and reserved seeds must still return before the order finishes. Quantum completion records persist with the original order ID, no extra physical package is produced, and manual cancellation remains immediate. This applies to ordinary orders and orders created through the planner API, including while automatic AELIS is disabled.
+The source retains Data Energistics no-output completion hooks for native and quantum CPUs, with counters aligned to actual batches and saved order IDs. This optional integration still needs Forge runtime validation; its previous NeoForge results do not establish compatibility here.
 
 Productive exact-input cycles are condensed into independently solved SCC regions. A supported dust/seed/crystal loop can therefore be batched even when unrelated branches of the same crafting calculation retain native or hybrid execution.
 
@@ -177,7 +180,7 @@ Alt + right-click a network item with an empty cursor in an AE2 storage screen o
 
 Holding an item or container preserves AE2's original right-click storage and container-filling behavior. The menu can also copy the localized name and search the terminal for items from the same mod. Custom extraction is revalidated by the server against the active menu, synchronized entry serial, connection, power, current storage, and player inventory capacity. Third-party client integrations can contribute entries through `NetworkItemContextMenuApi`.
 
-With JEI `19.27.0` or newer installed, Alt + right-clicking an ingredient-list or bookmark entry can show its recipes or uses, copy its localized name or registry ID, or search JEI for items from the same mod. While an AE2 storage terminal is open, an exactly matching synchronized network entry also enables ME extraction, ME autocrafting, and terminal search. If JEI cheat mode is active and JEI can provide a cheat stack for the ingredient, the menu also offers Give One and Give Stack. These actions reuse JEI's own synchronized permission and give behavior; Applied Enhancements does not bypass JEI or server permissions.
+With JEI `15.49.0` or newer installed, Alt + right-clicking an ingredient-list or bookmark entry can show its recipes or uses, copy its localized name or registry ID, or search JEI for items from the same mod. While an AE2 storage terminal is open, an exactly matching synchronized network entry also enables ME extraction, ME autocrafting, and terminal search. If JEI cheat mode is active and JEI can provide a cheat stack for the ingredient, the menu also offers Give One and Give Stack. These actions reuse JEI's own synchronized permission and give behavior; Applied Enhancements does not bypass JEI or server permissions.
 
 Two independent triggers are configurable under Options → Controls → Key Binds → Applied Enhancements:
 
@@ -186,7 +189,7 @@ Two independent triggers are configurable under Options → Controls → Key Bin
 | Open Pattern Quick Move Menu | Right mouse button | Pattern Cut/Paste in Quick Move mode |
 | Open Item Actions Menu | Alt + right mouse button | AE2 network entries, JEI ingredients and bookmarks |
 
-Both support mouse or keyboard rebinding and NeoForge modifiers, and are active only in GUIs. Existing shared key settings are retained for pattern Quick Move; the new item-action binding starts with Alt + right-click. Changing either binding does not change the other.
+Both support mouse or keyboard rebinding and Forge modifiers, and are active only in GUIs. Existing shared key settings are retained for pattern Quick Move; the new item-action binding starts with Alt + right-click. Changing either binding does not change the other.
 
 ## Configuration
 
@@ -225,7 +228,7 @@ Applied Enhancements recognizes these infinite storage sources:
 | Source | Integration |
 |---|---|
 | AE2 | `ae2:creative_storage_cell` |
-| ExtendedAE | Built-in infinite water/cobblestone cells and custom inventories backed by its `InfinityCellInventory` |
+| ExtendedAE | `expatternprovider:infinity_cell` and custom inventories backed by its `InfinityCellInventory` |
 | Data packs / KubeJS | `#appliedenhancements:infinite_storage_cells` item tag |
 | Java mods | Runtime `StorageCell` implementation of `InfiniteStorageCellMarker` |
 
@@ -272,13 +275,13 @@ There are 17 public top-level API types: 16 current types and one deprecated com
 | `PatternSlotRef` | Current terminal's server container and slot identity |
 | `MolecularBalancedBatchProvider` | Paired scheduling callbacks on the native AE2 CPU |
 
-`AelisCycleExecutionApi` exposes `preparePlan`, `guardInputs`, `dispatchedCrafts`, `writeRuntime`, `readRuntime`, and `getCyclicCraftAmounts` so CPU integrations do not need internal runtime classes. Use returned prepared plans, opt into the full phase protocol with `AelisCycleRuntimeController.withCyclePhase(...)`, and settle returned output before cleanup. The legacy controller constructors retain concurrent behavior; the deprecated MaxFast facade preserves old Java linkage, not automatic adoption of the new CPU protocol.
+`AelisCycleExecutionApi` exposes `preparePlan`, `guardInputs`, `dispatchedCrafts`, `writeRuntime`, `readRuntime`, and `getCyclicCraftAmounts` so CPU integrations do not need internal runtime classes. Use returned prepared plans, opt into the full phase protocol with `AelisCycleRuntimeController.withCyclePhase(...)`, and settle returned output before cleanup. The legacy controller constructors retain concurrent behavior. The deprecated MaxFast facade supports source migration; callers must recompile for Forge/AE2 15 and explicitly adopt the cycle CPU protocol.
 
 See the complete [API Integration Guide](docs/API_INTEGRATION.md) for dependency declarations, lifecycle rules, client/server boundaries, code examples, and validation requirements.
 
 ## Building and testing
 
-The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
+The project uses Gradle Wrapper `8.14.2` and requires JDK 17.
 
 | Task | Windows | Linux / macOS |
 |---|---|---|
@@ -288,31 +291,26 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
 | Development server | `.\gradlew.bat runServer` | `./gradlew runServer` |
 | GameTest server | `.\gradlew.bat runGameTestServer --no-daemon --console=plain` | `./gradlew runGameTestServer --no-daemon --console=plain` |
 
-Build output:
+Build output (includes MixinExtras; the `-slim.jar` is not the installation artifact):
 
 ```text
-build/libs/appliedenhancements-1.0.6.jar
+build/libs/appliedenhancements-1.0.6-forge.jar
 ```
 
 ## Validation
 
-Version `1.0.6` builds successfully with Java `21` and passes all `362` repository unit tests, with zero failures, errors, or skipped tests. Run `cleanTest build --no-configuration-cache` with the Gradle Wrapper to repeat the unit suite and build the JAR.
+On 2026-09-08, the Forge build passed all `362` repository unit tests with JDK `17`: zero failures, errors or skipped tests. Run `cleanTest build --no-daemon --console=plain` with the Gradle Wrapper to repeat the suite and build the JAR. The release check used an external dependency mirror/cache because access to the default Maven repositories stalled; the mirror configuration is not part of this repository.
 
-The four added seed-scope tests cover borrowing only the proven amount with real extraction accounting, rejected-branch rollback, rollback of an accepted inner lease after outer failure, and prevention of invented stock or borrowing from another transaction.
+The unit suite covers quantity bounds, planner fallback and cycle/seed accounting, configuration and packet contracts, inventory reservations, pattern movement, and API boundaries. A separate Forge 47.4.20 / AE2 15.4.10 modpack record from the same date covers:
 
-Existing separate integration records report six smithing-template duplication scenarios, submission and completion through the game UI, and regression checks with an existing API caller. The `1.0.5` split-keybinding implementation also passed a separate client check covering default right-click versus Alt + right-click, GUI-only activation, independent keyboard routing and unbinding, custom modifiers, options save/reload, and migration of the old shared binding. These external checks are not part of the repository's default unit-test task.
+| Runtime check | Recorded result |
+|---|---|
+| Ordinary crafting | Requested 64 planks through an ME terminal; 16 logs consumed and 64 planks produced. |
+| AELIS crafting | A 1024-plank order and subsequent 64-plank orders completed with matching inventory changes; client and server reported `AELIS`, and the final title displayed the AELIS result. |
+| Pattern management | Duplicate/invalid filters were exercised; 4 patterns moved from an OmniSequence provider to an AE2 provider and back with server-side counts checked. |
+| Configured amount limit | `2147483648` was rejected with the existing limit of `2147483647`; execution above that limit was not tested. |
 
-The earlier `1.0.4` crafting/API runtime validation snapshot is retained below:
-
-| Scope | Result | Interpretation |
-|---|---:|---|
-| Repository unit tests | `358` passed | Zero failures, errors or skipped tests |
-| Isolated runtime with Data Energistics | `186` required GameTests passed | `35` Applied Enhancements scenarios plus `151` dependency tests |
-| Isolated runtime without Data Energistics | `175` required GameTests passed | `24` Applied Enhancements scenarios plus `151` dependency tests; verifies the optional integration can be absent |
-
-The targeted scenarios covered native and quantum CPU cycling, reinvested outputs, seed retention, actual smart batches, virtual order-package completion, saved state, public API compatibility and Quick Move boundaries. These runtime results came from a maintainer's separate integration harness with optional mod dependencies; that harness is not part of the standard checked-in test source set. A fresh checkout's plain `runGameTestServer` does not reproduce all 35 scenarios, and dependency GameTests are not this mod's own tests. A no-tests GameTest exit is not a successful scenario run.
-
-Use `test` for repository unit tests. Client screens and complete modpack behavior still require runtime checks, including ordinary/large/invalid quantities, progress display, configuration toggles and the automatic-planner-off path.
+These are recorded modpack checks, not the default GameTest task. No dedicated-server, large cyclic-order, Data Energistics virtual-order or long-running performance validation is claimed for this Forge release. The earlier NeoForge GameTest totals do not describe this port.
 
 ## Known limitations
 

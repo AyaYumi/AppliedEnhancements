@@ -86,16 +86,20 @@ public abstract class AelisCraftingCalculationMixin
         molecularmanipulator$calculationProgress = progress;
     }
 
-    @Inject(method = "<init>", at = @At(value = "FIELD",
-            target = "Lappeng/crafting/CraftingCalculation;networkInv:Lappeng/crafting/inv/NetworkCraftingSimulationState;",
-            opcode = Opcodes.PUTFIELD,
-            shift = At.Shift.AFTER))
-    private void molecularmanipulator$bindCalculationProgress(Level level, IGrid grid,
-            ICraftingSimulationRequester requester, GenericStack output,
-            CalculationStrategy strategy, CallbackInfo callback) {
+    // Mixin 0.8.5 cannot inject a callback at a constructor field write.
+    // Wrap tree construction so progress is still bound before node discovery.
+    @com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation(method = "<init>",
+            at = @At(value = "NEW", target = "appeng/crafting/CraftingTreeNode"))
+    private appeng.crafting.CraftingTreeNode molecularmanipulator$bindCalculationProgress(
+            ICraftingService service, appeng.crafting.CraftingCalculation calculation,
+            appeng.api.stacks.AEKey output, long amount,
+            appeng.crafting.CraftingTreeProcess parent, int parentSlot,
+            com.llamalad7.mixinextras.injector.wrapoperation.Operation<appeng.crafting.CraftingTreeNode> original,
+            @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) ICraftingSimulationRequester requester) {
         if (requester instanceof CraftingCalculationProgressRequester tracked) {
             molecularmanipulator$calculationProgress = tracked.progress();
         }
+        return original.call(service, calculation, output, amount, parent, parentSlot);
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))

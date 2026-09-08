@@ -80,7 +80,11 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
 
     @Shadow
     @Final
-    private AETextField searchField;
+    private AETextField searchOutField;
+
+    @Shadow
+    @Final
+    private AETextField searchInField;
 
     @Shadow
     @Final
@@ -126,7 +130,13 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
     @Invoker("resetScrollbar")
     protected abstract void appliedenhancements$resetScrollbar();
 
-    @Inject(method = "init", at = @At("RETURN"))
+    @org.spongepowered.asm.mixin.injection.ModifyConstant(method = "drawFG",
+            constant = @org.spongepowered.asm.mixin.injection.Constant(intValue = 145))
+    private int appliedenhancements$reserveHeaderActions(int width) {
+        return appliedenhancements$quickMove != null && appliedenhancements$quickMove.enabled() ? 129 : width;
+    }
+
+    @Inject(method = { "init", "m_7856_" }, at = @At("RETURN"))
     private void appliedenhancements$addDuplicateButton(CallbackInfo callback) {
         if (!appliedenhancements$isSupportedScreen()) {
             return;
@@ -150,8 +160,8 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         }
         appliedenhancements$duplicateButton.setSelected(appliedenhancements$duplicatesOnly);
         appliedenhancements$duplicateButton.setPosition(
-                screen.getGuiLeft() + 87,
-                screen.getGuiTop() + 17);
+                screen.getGuiLeft() + 111,
+                screen.getGuiTop() + 37);
         ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
                 appliedenhancements$duplicateButton);
 
@@ -172,8 +182,8 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         }
         appliedenhancements$invalidButton.setSelected(appliedenhancements$invalidOnly);
         appliedenhancements$invalidButton.setPosition(
-                screen.getGuiLeft() + 111,
-                screen.getGuiTop() + 17);
+                screen.getGuiLeft() + 135,
+                screen.getGuiTop() + 37);
         ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
                 appliedenhancements$invalidButton);
 
@@ -195,8 +205,8 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         }
         appliedenhancements$quickMoveButton.setSelected(appliedenhancements$quickMove.enabled());
         appliedenhancements$quickMoveButton.setPosition(
-                screen.getGuiLeft() + 135,
-                screen.getGuiTop() + 17);
+                screen.getGuiLeft() + 159,
+                screen.getGuiTop() + 37);
         ((ScreenWidgetBridge) this).appliedenhancements$addRenderableWidget(
                 appliedenhancements$quickMoveButton);
     }
@@ -210,7 +220,8 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         }
 
         var level = Minecraft.getInstance().level;
-        boolean emptySearch = searchField.getValue().trim().isEmpty();
+        boolean emptySearch = searchOutField.getValue().trim().isEmpty()
+                && searchInField.getValue().trim().isEmpty();
         if (appliedenhancements$rowFactory == null) {
             appliedenhancements$rowFactory = PatternTerminalRowFactory.create(
                     "com.glodblock.github.extendedae.client.gui.GuiExPatternTerminal");
@@ -291,7 +302,7 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
         }
     }
 
-    @Inject(method = "slotClicked", at = @At("HEAD"), cancellable = true)
+    @Inject(method = { "slotClicked", "m_6597_" }, at = @At("HEAD"), cancellable = true)
     private void appliedenhancements$redirectSortedSlotClick(
             Slot slot,
             int slotIndex,
@@ -355,11 +366,11 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
                 break;
             }
             if (rows.get(modelIndex) instanceof PatternTerminalGroupHeaderBridge header) {
-                int rowTop = 30 + rowIndex * 18;
+                int rowTop = 51 + rowIndex * 18;
                 var groupContainers = appliedenhancements$getGroupContainers(
                         header.appliedenhancements$getGroup());
                 int actionX = PatternHeaderActionButton.actionStartX(
-                        header.appliedenhancements$getGroup(), groupContainers.size());
+                        header.appliedenhancements$getGroup(), groupContainers.size(), 34, 166);
                 int relativeY = rowTop + 5;
                 int absoluteY = screen.getGuiTop() + relativeY;
                 Hit cut = new Hit(

@@ -41,7 +41,6 @@ import appeng.crafting.inv.ICraftingInventory;
 import appeng.crafting.inv.ListCraftingInventory;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
 import appeng.me.service.CraftingService;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.Level;
 
@@ -266,28 +265,25 @@ public abstract class CraftingCpuLogicBatchMixin {
     @Inject(method = "writeToNBT", at = @At("RETURN"))
     private void appliedenhancements$writeCycleRuntime(
             CompoundTag data,
-            HolderLookup.Provider registries,
             CallbackInfo callback) {
         if (appliedenhancements$cycleRuntime != null
                 && appliedenhancements$cycleRuntime.hasActiveSeedProtection()) {
             data.put(
                     APPLIEDENHANCEMENTS_CYCLE_RUNTIME_TAG,
                     AelisCycleExecutionApi.writeRuntime(
-                            appliedenhancements$cycleRuntime, registries));
+                            appliedenhancements$cycleRuntime));
         }
     }
 
     @Inject(method = "readFromNBT", at = @At("RETURN"))
     private void appliedenhancements$readCycleRuntime(
             CompoundTag data,
-            HolderLookup.Provider registries,
             CallbackInfo callback) {
         boolean hasRuntime = job != null
                 && data.contains(APPLIEDENHANCEMENTS_CYCLE_RUNTIME_TAG);
         appliedenhancements$cycleRuntime = hasRuntime
                 ? AelisCycleExecutionApi.readRuntime(
-                        data.getCompound(APPLIEDENHANCEMENTS_CYCLE_RUNTIME_TAG),
-                        registries).orElse(null)
+                        data.getCompound(APPLIEDENHANCEMENTS_CYCLE_RUNTIME_TAG)).orElse(null)
                 : null;
         if (hasRuntime && appliedenhancements$cycleRuntime == null) {
             AppliedEnhancements.LOGGER.error(

@@ -54,14 +54,20 @@ public final class QuickPatternMoveToggleButton extends IconButton {
         }
         int yOffset = isHovered() ? 1 : 0;
         Icon background = isHovered()
-                ? Icon.TOOLBAR_BUTTON_BACKGROUND_HOVER
+                ? Icon.TOOLBAR_BUTTON_BACKGROUND
                 : isFocused()
-                        ? Icon.TOOLBAR_BUTTON_BACKGROUND_FOCUS
+                        ? Icon.TOOLBAR_BUTTON_BACKGROUND
                         : Icon.TOOLBAR_BUTTON_BACKGROUND;
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 2);
         background.getBlitter()
                 .dest(getX(), getY() + yOffset, BUTTON_WIDTH, BUTTON_HEIGHT)
-                .zOffset(2)
+
                 .blit(graphics);
+        graphics.pose().popPose();
+        if (isHovered() || isFocused()) {
+            graphics.renderOutline(getX(), getY(), getWidth(), getHeight(), 0xFFB8D4E8);
+        }
 
         var font = Minecraft.getInstance().font;
         Component label = Component.translatable(

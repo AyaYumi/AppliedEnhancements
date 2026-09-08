@@ -49,3 +49,6 @@ desktop.ini
 # local release notes
 /CHANGELOG.md
 /CHANGELOG_*.md
+
+# Local Forge dependency artifacts
+/libs/*.jar

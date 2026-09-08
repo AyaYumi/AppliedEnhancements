@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.appliedenhancements.Config;
 import com.electronwill.nightconfig.core.CommentedConfig;
-import com.electronwill.nightconfig.core.concurrent.SynchronizedConfig;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import java.util.HashMap;
 import java.util.List;
@@ -104,8 +103,8 @@ class ConfiguredConfigPatchTest {
         assertEquals(true, current.get(DIAGNOSTICS));
     }
 
-    private static SynchronizedConfig emptyConfig() {
-        return new SynchronizedConfig(TomlFormat.instance(), HashMap::new);
+    private static com.electronwill.nightconfig.core.CommentedConfig emptyConfig() {
+        return com.electronwill.nightconfig.core.CommentedConfig.inMemory();
     }
 
     private static CommentedConfig customizedConfig() {

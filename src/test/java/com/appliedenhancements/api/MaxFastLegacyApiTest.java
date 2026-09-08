@@ -27,6 +27,13 @@ import org.junit.jupiter.api.io.TempDir;
 
 @SuppressWarnings("deprecation")
 class MaxFastLegacyApiTest {
+    @org.junit.jupiter.api.BeforeEach
+    void loadForgeDefaults() {
+        var values = com.electronwill.nightconfig.core.CommentedConfig.inMemory();
+        com.appliedenhancements.Config.SPEC.correct(values);
+        com.appliedenhancements.Config.SPEC.setConfig(values);
+    }
+
     @TempDir static Path temporary;
     private static URLClassLoader clientLoader;
     private static Class<?> oldClient;
@@ -79,7 +86,7 @@ class MaxFastLegacyApiTest {
     void configuredLegacyDescriptorUsesConfiguredBudgets() throws Exception {
         // A plain unit test has no loaded game config. Populate only the value
         // caches used by this factory and restore their exact previous contents.
-        var cached = net.neoforged.neoforge.common.ModConfigSpec.ConfigValue.class.getDeclaredField("cachedValue");
+        var cached = net.minecraftforge.common.ForgeConfigSpec.ConfigValue.class.getDeclaredField("cachedValue");
         cached.setAccessible(true);
         Object previousNodes = cached.get(Config.AELIS_MAX_NODES);
         Object previousBudget = cached.get(Config.AELIS_COMPILE_BUDGET_MS);
@@ -141,7 +148,7 @@ class MaxFastLegacyApiTest {
         try (var manager = compiler.getStandardFileManager(null, null, null)) {
             var units = manager.getJavaFileObjects(source);
             assertTrue(compiler.getTask(null, manager, null,
-                    List.of("-proc:none", "--release", "21", "-classpath", classpath,
+                    List.of("-proc:none", "--release", "17", "-classpath", classpath,
                             "-d", output.toString()), null, units).call(), "Old API/client compilation failed");
         }
     }

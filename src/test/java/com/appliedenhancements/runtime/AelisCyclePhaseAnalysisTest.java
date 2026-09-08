@@ -41,7 +41,7 @@ class AelisCyclePhaseAnalysisTest {
         return AelisCyclePhaseAnalysis.describe(definition, new IPatternDetails() {
             @Override public AEItemKey getDefinition() { return null; }
             @Override public IInput[] getInputs() { return inputs; }
-            @Override public List<GenericStack> getOutputs() { return outputs; }
+            @Override public GenericStack[] getOutputs() { return outputs.toArray(GenericStack[]::new); }
         });
     }
 
@@ -71,7 +71,7 @@ class AelisCyclePhaseAnalysisTest {
         var otherCycleDefinition = new TestAEKey("other_cycle_pattern");
         var bridgeDefinition = new TestAEKey("bridge_pattern");
         var alternateDefinition = new TestAEKey("alternate_fuel_pattern");
-        var plan = new AelisCycleExecutionPlan(List.of(cycle().steps().getFirst(),
+        var plan = new AelisCycleExecutionPlan(List.of(cycle().steps().get(0),
                 new AelisCycleExecutionPlan.Step(otherCycleDefinition, 1, Map.of(seed, 1L), Set.of())),
                 Map.of(seed, 1L), Set.of(seed));
         var first = describe(cycleDefinition, List.of(new GenericStack(seed, 8)), input(seed, 1, null));

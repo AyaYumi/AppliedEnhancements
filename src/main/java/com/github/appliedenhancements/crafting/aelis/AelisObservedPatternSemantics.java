@@ -49,11 +49,11 @@ final class AelisObservedPatternSemantics {
         }
         try {
             AEItemKey definition = details.getDefinition();
-            List<GenericStack> liveOutputs = details.getOutputs();
-            if (liveOutputs == null || liveOutputs.isEmpty()) {
+            GenericStack[] liveOutputs = details.getOutputs();
+            if (liveOutputs == null || liveOutputs.length == 0) {
                 return null;
             }
-            var outputs = new ArrayList<GenericStack>(liveOutputs.size());
+            var outputs = new ArrayList<GenericStack>(liveOutputs.length);
             for (GenericStack output : liveOutputs) {
                 if (!validStack(output)) {
                     return null;

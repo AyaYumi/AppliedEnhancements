@@ -1,13 +1,9 @@
 package com.appliedenhancements.network;
 
+import com.appliedenhancements.network.PacketCodec;
+import net.minecraft.network.FriendlyByteBuf;
 import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
-import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import org.jetbrains.annotations.ApiStatus;
 
 /** Server-authoritative feature settings needed by client-side crafting screens. */
@@ -16,17 +12,16 @@ public record ServerConfigSyncPayload(
         long maxCraftingOrderAmount,
         boolean longRangeCraftingEnabled,
         boolean progressDisplayEnabled,
-        boolean infiniteStorageLimitBypassEnabled) implements CustomPacketPayload {
-    public static final Type<ServerConfigSyncPayload> TYPE =
-            new Type<>(AppliedEnhancements.id("server_config"));
+        boolean infiniteStorageLimitBypassEnabled) {
 
-    public static final StreamCodec<ByteBuf, ServerConfigSyncPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.VAR_LONG, ServerConfigSyncPayload::maxCraftingOrderAmount,
-                    ByteBufCodecs.BOOL, ServerConfigSyncPayload::longRangeCraftingEnabled,
-                    ByteBufCodecs.BOOL, ServerConfigSyncPayload::progressDisplayEnabled,
-                    ByteBufCodecs.BOOL, ServerConfigSyncPayload::infiniteStorageLimitBypassEnabled,
-                    ServerConfigSyncPayload::new);
+    public static final PacketCodec<FriendlyByteBuf, ServerConfigSyncPayload> STREAM_CODEC = PacketCodec.of(
+            (buffer, value) -> {
+                buffer.writeVarLong(value.maxCraftingOrderAmount());
+                buffer.writeBoolean(value.longRangeCraftingEnabled());
+                buffer.writeBoolean(value.progressDisplayEnabled());
+                buffer.writeBoolean(value.infiniteStorageLimitBypassEnabled());
+            },
+            buffer -> new ServerConfigSyncPayload(buffer.readVarLong(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean()));
 
     public ServerConfigSyncPayload {
         if (maxCraftingOrderAmount <= 0) {
@@ -42,12 +37,8 @@ public record ServerConfigSyncPayload(
                 Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get());
     }
 
-    public static void register(PayloadRegistrar registrar) {
-        registrar.playToClient(TYPE, STREAM_CODEC, ServerConfigSyncPayload::handle);
-    }
 
-    private static void handle(ServerConfigSyncPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
+    public static void handle(ServerConfigSyncPayload payload, net.minecraft.world.entity.player.Player receivingPlayer) {
             ServerConfigSyncState.accept(
                     payload.maxCraftingOrderAmount,
                     payload.longRangeCraftingEnabled,
@@ -55,12 +46,7 @@ public record ServerConfigSyncPayload(
                     payload.infiniteStorageLimitBypassEnabled);
             ClientCraftingProgressReset.resetIfDisabled(
                     payload.progressDisplayEnabled,
-                    context.player().containerMenu);
-        });
+                    receivingPlayer.containerMenu);
     }
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
-    }
 }

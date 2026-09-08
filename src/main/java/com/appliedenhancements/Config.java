@@ -2,39 +2,39 @@ package com.appliedenhancements;
 
 import com.appliedenhancements.api.AelisCycleSeedPolicy;
 
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec;
 
 /** Unified configuration for Applied Enhancements. */
 public final class Config {
-    public static final ModConfigSpec SPEC;
+    public static final ForgeConfigSpec SPEC;
 
     // Crafting
-    public static final ModConfigSpec.BooleanValue ENABLE_LONG_RANGE_CRAFTING;
-    public static final ModConfigSpec.LongValue MAX_CRAFTING_ORDER_AMOUNT;
-    public static final ModConfigSpec.BooleanValue ENABLE_PROGRESS_DISPLAY;
-    public static final ModConfigSpec.BooleanValue ENABLE_ENHANCED_MATERIAL_CALCULATION;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_LONG_RANGE_CRAFTING;
+    public static final ForgeConfigSpec.LongValue MAX_CRAFTING_ORDER_AMOUNT;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_PROGRESS_DISPLAY;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_ENHANCED_MATERIAL_CALCULATION;
 
     // Crafting / AELIS
-    public static final ModConfigSpec.BooleanValue ENABLE_AUTOMATIC_AELIS_PLANNER;
-    public static final ModConfigSpec.IntValue AELIS_MAX_NODES;
-    public static final ModConfigSpec.IntValue AELIS_COMPILE_BUDGET_MS;
-    public static final ModConfigSpec.BooleanValue AELIS_DIAGNOSTICS;
-    public static final ModConfigSpec.IntValue CYCLE_SOLVER_MAX_SCC_NODES;
-    public static final ModConfigSpec.IntValue CYCLE_SOLVER_MAX_SEARCH_STATES;
-    public static final ModConfigSpec.IntValue CYCLE_SOLVER_BUDGET_MS;
-    public static final ModConfigSpec.EnumValue<AelisCycleSeedPolicy> CYCLE_SEED_POLICY;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_AUTOMATIC_AELIS_PLANNER;
+    public static final ForgeConfigSpec.IntValue AELIS_MAX_NODES;
+    public static final ForgeConfigSpec.IntValue AELIS_COMPILE_BUDGET_MS;
+    public static final ForgeConfigSpec.BooleanValue AELIS_DIAGNOSTICS;
+    public static final ForgeConfigSpec.IntValue CYCLE_SOLVER_MAX_SCC_NODES;
+    public static final ForgeConfigSpec.IntValue CYCLE_SOLVER_MAX_SEARCH_STATES;
+    public static final ForgeConfigSpec.IntValue CYCLE_SOLVER_BUDGET_MS;
+    public static final ForgeConfigSpec.EnumValue<AelisCycleSeedPolicy> CYCLE_SEED_POLICY;
 
     // Performance
-    public static final ModConfigSpec.BooleanValue ENABLE_PATTERN_CACHING;
-    public static final ModConfigSpec.IntValue PATTERN_CACHE_SIZE;
-    public static final ModConfigSpec.BooleanValue ENABLE_STORAGE_BUS_SLOT_INDEX;
-    public static final ModConfigSpec.BooleanValue ENABLE_IO_BUS_OPTIMIZATION;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_PATTERN_CACHING;
+    public static final ForgeConfigSpec.IntValue PATTERN_CACHE_SIZE;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_STORAGE_BUS_SLOT_INDEX;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_IO_BUS_OPTIMIZATION;
 
     // Storage
-    public static final ModConfigSpec.BooleanValue ENABLE_INFINITE_STORAGE_LIMIT_BYPASS;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_INFINITE_STORAGE_LIMIT_BYPASS;
 
     static {
-        var builder = new ModConfigSpec.Builder();
+        var builder = new ForgeConfigSpec.Builder();
 
         builder.comment(
                 "AE2 crafting behavior and presentation",

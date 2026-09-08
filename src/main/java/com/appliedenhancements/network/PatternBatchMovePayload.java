@@ -1,25 +1,21 @@
 package com.appliedenhancements.network;
 
+import com.appliedenhancements.network.PacketCodec;
 import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.api.PatternBatchMoveApi;
 import com.appliedenhancements.api.PatternSlotRef;
 import io.netty.handler.codec.DecoderException;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /** Server-bound request to atomically move selected pattern slots. */
 public record PatternBatchMovePayload(
-        PatternBatchMoveApi.Request request) implements CustomPacketPayload {
-    public static final Type<PatternBatchMovePayload> TYPE =
-            new Type<>(AppliedEnhancements.id("pattern_batch_move"));
-    public static final StreamCodec<RegistryFriendlyByteBuf, PatternBatchMovePayload> STREAM_CODEC =
-            StreamCodec.of(PatternBatchMovePayload::encode, PatternBatchMovePayload::decode);
+        PatternBatchMoveApi.Request request) {
+    public static final PacketCodec<FriendlyByteBuf, PatternBatchMovePayload> STREAM_CODEC =
+            PacketCodec.of(PatternBatchMovePayload::encode, PatternBatchMovePayload::decode);
 
     public PatternBatchMovePayload {
         if (request == null) {
@@ -27,8 +23,8 @@ public record PatternBatchMovePayload(
         }
     }
 
-    private static void encode(
-            RegistryFriendlyByteBuf buffer, PatternBatchMovePayload payload) {
+    public static void encode(
+            FriendlyByteBuf buffer, PatternBatchMovePayload payload) {
         var request = payload.request();
         buffer.writeVarInt(request.menuId());
         buffer.writeVarInt(request.sources().size());
@@ -43,7 +39,7 @@ public record PatternBatchMovePayload(
         buffer.writeVarInt(request.preferredTargetSlot() + 1);
     }
 
-    private static PatternBatchMovePayload decode(RegistryFriendlyByteBuf buffer) {
+    public static PatternBatchMovePayload decode(FriendlyByteBuf buffer) {
         int containerId = buffer.readVarInt();
         int sourceCount = buffer.readVarInt();
         if (containerId < 0 || sourceCount <= 0
@@ -76,9 +72,8 @@ public record PatternBatchMovePayload(
                 containerId, sources, targets, preferredTargetSlot));
     }
 
-    public static void handle(PatternBatchMovePayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
-            if (!(context.player() instanceof ServerPlayer player)) {
+    public static void handle(PatternBatchMovePayload payload, net.minecraft.world.entity.player.Player receivingPlayer) {
+            if (!(receivingPlayer instanceof ServerPlayer player)) {
                 return;
             }
             PatternBatchMoveApi.Result result = PatternBatchMoveApi.execute(
@@ -92,7 +87,6 @@ public record PatternBatchMovePayload(
                         "message.appliedenhancements.pattern_batch_move.failure."
                                 + failureKey(result.failure())));
             }
-        });
     }
 
     private static String failureKey(PatternBatchMoveApi.Failure failure) {
@@ -107,8 +101,4 @@ public record PatternBatchMovePayload(
         };
     }
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
-    }
 }

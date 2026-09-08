@@ -140,7 +140,7 @@ class LocalizationCompletenessTest {
 
         for (Path source : javaSources()) {
             String text = Files.readString(source);
-            if (!text.contains("ModConfigSpec.Builder")) {
+            if (!text.contains("ForgeConfigSpec.Builder")) {
                 continue;
             }
             String relative = projectRoot().relativize(source).toString();

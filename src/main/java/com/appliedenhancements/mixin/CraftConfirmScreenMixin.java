@@ -19,8 +19,28 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(value = CraftConfirmScreen.class, remap = false)
-public abstract class CraftConfirmScreenMixin {
+@Mixin(value = CraftConfirmScreen.class, remap = false, priority = 1100)
+public abstract class CraftConfirmScreenMixin
+        extends appeng.client.gui.AEBaseScreen<appeng.menu.me.crafting.CraftConfirmMenu> {
+    protected CraftConfirmScreenMixin(appeng.menu.me.crafting.CraftConfirmMenu menu,
+            net.minecraft.world.entity.player.Inventory inventory, Component title,
+            appeng.client.gui.style.ScreenStyle style) {
+        super(menu, inventory, title, style);
+    }
+
+    // ExtendedAE Plus rewrites the title at RETURN. Preserve our engine label
+    // after that formatting pass, while leaving other external planners alone.
+    @Inject(method = "updateBeforeRender", at = @At("TAIL"))
+    private void appliedenhancements$keepAelisResultTitle(CallbackInfo callback) {
+        var menu = ((CraftConfirmScreen) (Object) this).getMenu();
+        if (menu.getPlan() != null && menu instanceof AelisCalculationPathMenuBridge bridge) {
+            var path = bridge.molecularmanipulator$getCalculationPath();
+            if (path == AelisCalculationPath.AELIS || path == AelisCalculationPath.AE2_FALLBACK) {
+                setTextContent("dialog_title", appliedenhancements$appendCalculationPath(Component.empty()));
+            }
+        }
+    }
+
     @ModifyArg(method = "updateBeforeRender", at = @At(value = "INVOKE",
             target = "Lappeng/client/gui/me/crafting/CraftConfirmScreen;setTextContent(Ljava/lang/String;Lnet/minecraft/network/chat/Component;)V",
             ordinal = 0), index = 1)

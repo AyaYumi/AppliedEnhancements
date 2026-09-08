@@ -2,12 +2,12 @@ package com.appliedenhancements.network;
 
 import com.appliedenhancements.AppliedEnhancements;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.event.config.ModConfigEvent;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import com.appliedenhancements.network.NetworkHandler;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import org.jetbrains.annotations.ApiStatus;
 
 /** Sends the authoritative server settings on login and after live config reloads. */
@@ -17,13 +17,13 @@ public final class ServerConfigSyncEvents {
     }
 
     public static void register(IEventBus modEventBus) {
-        NeoForge.EVENT_BUS.addListener(ServerConfigSyncEvents::onPlayerLoggedIn);
+        MinecraftForge.EVENT_BUS.addListener(ServerConfigSyncEvents::onPlayerLoggedIn);
         modEventBus.addListener(ServerConfigSyncEvents::onConfigReloaded);
     }
 
     private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            PacketDistributor.sendToPlayer(player, ServerConfigSyncPayload.currentServerValues());
+            NetworkHandler.sendToPlayer(player, ServerConfigSyncPayload.currentServerValues());
         }
     }
 
@@ -38,7 +38,7 @@ public final class ServerConfigSyncEvents {
         server.execute(() -> {
             var payload = ServerConfigSyncPayload.currentServerValues();
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                PacketDistributor.sendToPlayer(player, payload);
+                NetworkHandler.sendToPlayer(player, payload);
             }
         });
     }

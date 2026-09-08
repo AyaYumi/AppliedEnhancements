@@ -21,13 +21,13 @@ public final class AelisCycleRuntimeController {
      * Use {@link #withCyclePhase(AelisCycleExecutionPlan)} for the complete phase protocol.
      */
     public AelisCycleRuntimeController(AelisCycleExecutionPlan plan) {
-        this(plan, new State(0, plan.steps().getFirst().crafts()), false);
+        this(plan, new State(0, plan.steps().get(0).crafts()), false);
     }
 
     /** Opts into prerequisite scheduling and waiting for the cyclic outputs to return. */
     public static AelisCycleRuntimeController withCyclePhase(AelisCycleExecutionPlan plan) {
         Objects.requireNonNull(plan, "plan");
-        return withCyclePhase(plan, new State(0, plan.steps().getFirst().crafts()));
+        return withCyclePhase(plan, new State(0, plan.steps().get(0).crafts()));
     }
 
     /** Restores the complete phase protocol, including outputs that are still in flight. */

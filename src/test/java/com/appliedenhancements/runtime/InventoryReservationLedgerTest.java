@@ -59,7 +59,8 @@ class InventoryReservationLedgerTest {
         var ready = new CountDownLatch(2);
         var start = new CountDownLatch(1);
         var acquired = new AtomicInteger();
-        try (var executor = Executors.newFixedThreadPool(2)) {
+        var executor = Executors.newFixedThreadPool(2);
+        try {
             for (int index = 0; index < 2; index++) {
                 executor.submit(() -> {
                     ready.countDown();
@@ -75,6 +76,9 @@ class InventoryReservationLedgerTest {
             start.countDown();
             executor.shutdown();
             assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
         }
 
         assertEquals(1, acquired.get());
