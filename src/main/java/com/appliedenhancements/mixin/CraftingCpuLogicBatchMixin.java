@@ -19,6 +19,7 @@ import com.llamalad7.mixinextras.sugar.Local;
 import com.appliedenhancements.runtime.MolecularBalancedBatchScope;
 import com.appliedenhancements.api.AelisCycleExecutionApi;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
+import com.appliedenhancements.runtime.AelisCycleDispatch;
 import com.appliedenhancements.runtime.AelisCycleDispatchScope;
 import com.appliedenhancements.runtime.AelisCycleRuntimePreparation;
 import com.appliedenhancements.runtime.DataEnergisticsOrderCompletion;
@@ -153,7 +154,8 @@ public abstract class CraftingCpuLogicBatchMixin {
                         .orElse(false)) {
             previousState = runtime.snapshot();
             runtime.patternDispatched(details.getDefinition(),
-                    AelisCycleExecutionApi.dispatchedCrafts(runtime, details.getDefinition(), inputHolder));
+                    AelisCycleDispatch.dispatchedProviderPush(
+                            runtime, details.getDefinition(), inputHolder));
         }
         boolean pushed;
         try {

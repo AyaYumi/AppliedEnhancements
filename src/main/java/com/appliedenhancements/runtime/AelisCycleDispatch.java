@@ -97,4 +97,26 @@ public final class AelisCycleDispatch {
         }
         return crafts;
     }
+
+    /**
+     * Counts one native AE2 provider push, including patterns without protected inputs.
+     * Native AE2 calls pushPattern once per task; scaled pushes still expose protected
+     * inputs and therefore use the strict aggregate-input calculation above.
+     */
+    public static long dispatchedProviderPush(AelisCycleRuntimeController runtime,
+            AEKey patternDefinition, KeyCounter[] inputs) {
+        Objects.requireNonNull(patternDefinition, "patternDefinition");
+        Objects.requireNonNull(inputs, "inputs");
+        for (var input : inputs) {
+            Objects.requireNonNull(input, "input holder");
+        }
+        if (runtime == null || runtime.currentStep()
+                .filter(step -> step.patternDefinition().equals(patternDefinition)).isEmpty()) {
+            return 0;
+        }
+        if (runtime.currentStep().orElseThrow().inputsPerCraft().isEmpty()) {
+            return 1;
+        }
+        return dispatchedCrafts(runtime, patternDefinition, inputs);
+    }
 }

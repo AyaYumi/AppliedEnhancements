@@ -18,6 +18,7 @@ import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.api.AelisCycleExecutionApi;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
 import com.appliedenhancements.runtime.AelisCycleDispatchScope;
+import com.appliedenhancements.runtime.AelisCycleDispatch;
 import com.appliedenhancements.runtime.AdvancedAeCycleRecovery;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -97,7 +98,8 @@ public abstract class AdvancedAeCraftingCycleMixin {
     private boolean appliedenhancements$advanceCycle(ICraftingProvider provider,
             IPatternDetails pattern, KeyCounter[] inputs, Operation<Boolean> original) {
         var runtime = appliedenhancements$cycleRuntime;
-        long crafts = AelisCycleExecutionApi.dispatchedCrafts(runtime, pattern.getDefinition(), inputs);
+        long crafts = AelisCycleDispatch.dispatchedProviderPush(
+                runtime, pattern.getDefinition(), inputs);
         var previous = crafts > 0 ? runtime.snapshot() : null;
         if (previous != null) {
             runtime.patternDispatched(pattern.getDefinition(), crafts);
