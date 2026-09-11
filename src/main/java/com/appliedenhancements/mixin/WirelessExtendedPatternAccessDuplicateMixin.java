@@ -16,6 +16,7 @@ import com.appliedenhancements.client.pattern.DuplicatePatternRows.InvalidSource
 import com.appliedenhancements.client.pattern.DuplicatePatternRows.PatternSource;
 import com.appliedenhancements.client.pattern.DuplicatePatternSourceDisplay;
 import com.appliedenhancements.client.pattern.DuplicatePatternToggleButton;
+import com.appliedenhancements.client.pattern.ExtendedPatternTerminalLayout;
 import com.appliedenhancements.client.pattern.InvalidPatternToggleButton;
 import com.appliedenhancements.client.pattern.PatternHeaderActionButton;
 import com.appliedenhancements.client.pattern.PatternHeaderActionButton.Action;
@@ -59,13 +60,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "com.glodblock.github.extendedae.client.gui.GuiExPatternTerminal", remap = false)
 public abstract class WirelessExtendedPatternAccessDuplicateMixin
         implements PatternQuickMoveScreenBridge, DuplicatePatternSourceScreenBridge {
-    @Unique
-    private static final String appliedenhancements$WIRED_SCREEN =
-            "com.glodblock.github.extendedae.client.gui.GuiExPatternTerminal";
-    @Unique
-    private static final String appliedenhancements$WIRELESS_SCREEN =
-            "com.glodblock.github.extendedae.xmod.wt.GuiWirelessExPAT";
-
     @Shadow
     @Final
     private HashMap<Long, PatternContainerRecord> byId;
@@ -429,21 +423,23 @@ public abstract class WirelessExtendedPatternAccessDuplicateMixin
             return true;
         }
 
+        var rowBounds = ExtendedPatternTerminalLayout.rows(
+                screen.getGuiLeft(), screen.getGuiTop(), visibleRows);
         if (ItemContextMenuKeyMapping.matchesPatternMouse(button)
-                && mouseX >= screen.getGuiLeft() + 8
-                && mouseX < screen.getGuiLeft() + 170
-                && mouseY >= screen.getGuiTop() + 30
-                && mouseY < screen.getGuiTop() + 30 + visibleRows * 18) {
+                && mouseX >= rowBounds.getX()
+                && mouseX < rowBounds.getX() + rowBounds.getWidth()
+                && mouseY >= rowBounds.getY()
+                && mouseY < rowBounds.getY() + rowBounds.getHeight()) {
             return true;
         }
 
         return button == 0 && appliedenhancements$quickMove.beginSelection(
                 mouseX,
                 mouseY,
-                screen.getGuiLeft() + 8,
-                screen.getGuiTop() + 30,
-                screen.getGuiLeft() + 170,
-                screen.getGuiTop() + 30 + visibleRows * 18,
+                rowBounds.getX(),
+                rowBounds.getY(),
+                rowBounds.getX() + rowBounds.getWidth(),
+                rowBounds.getY() + rowBounds.getHeight(),
                 false);
     }
 

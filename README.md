@@ -56,6 +56,7 @@ This branch is `1.20.1-forge`. Minecraft 1.21.1 support remains on [`1.21.1-neof
 | Java | Java 17 bytecode | JDK `17` build; Java `21.0.7` modpack run | Required |
 | Forge | `[47.4.10,)` | `47.4.20` | Required |
 | Applied Energistics 2 | `[15.4.10,16)` | `15.4.10` | Required |
+| GuideME | `[20.1.7,20.2.0)` (required by AE2) | `20.1.7` development runtime; `20.1.15` recorded modpack run | Required AE2 dependency |
 | ExtendedAE | `[1.20-1.4.12-forge,)` | `1.20-1.4.19-forge` | Optional; mod ID `expatternprovider` |
 | AE2WTLib | `[15.3.3,16)` | `15.3.3-forge` | Optional wireless-terminal integration |
 | Just Enough Items | `[15,16)` | `15.49.0.188` | Optional ingredient-list and bookmark menus |
@@ -66,7 +67,7 @@ The Forge modpack also loaded AdvancedAE `1.3.6-1.20.1`, ExtendedAE Plus `1.5.5`
 
 ## Installation
 
-Install the same Applied Enhancements release build on both the client and server, together with compatible Forge and AE2 versions.
+Install the same Applied Enhancements release build on both the client and server, together with compatible Forge, AE2 and GuideME versions. The Gradle development runtime includes GuideME explicitly because the Modrinth Maven dependency for AE2 does not supply transitive dependency metadata.
 
 ```text
 mods/appliedenhancements-1.0.6-forge.jar
@@ -142,7 +143,8 @@ The following terminals are supported:
 - AE2 Pattern Access Terminal;
 - AE2WTLib Wireless Pattern Access Terminal;
 - ExtendedAE Extended Pattern Access Terminal;
-- ExtendedAE Wireless Extended Pattern Access Terminal.
+- ExtendedAE Wireless Extended Pattern Access Terminal;
+- ExtendedAE Universal Wireless Extended Pattern Access Terminal via AE2WTLib (`GuiUWirelessExPAT`).
 
 AE2-family terminals place Duplicate, Invalid, and Quick Move controls together on a second toolbar row below the title and search field, preventing localized titles from being covered. ExtendedAE-family terminals retain their existing top-row layout.
 
@@ -299,9 +301,9 @@ build/libs/appliedenhancements-1.0.6-forge.jar
 
 ## Validation
 
-On 2026-09-08, the Forge build passed all `362` repository unit tests with JDK `17`: zero failures, errors or skipped tests. Run `cleanTest build --no-daemon --console=plain` with the Gradle Wrapper to repeat the suite and build the JAR. The release check used an external dependency mirror/cache because access to the default Maven repositories stalled; the mirror configuration is not part of this repository.
+On 2026-09-09, the Forge build passed all `370` repository unit tests with JDK `17`: zero failures, errors or skipped tests. These include regression checks for the Forge wireless-screen class and every row/column of the ExtendedAE selection area at multiple screen origins and row counts. Run `cleanTest build --no-daemon --console=plain` with the Gradle Wrapper to repeat the suite and build the JAR. Validation used an external dependency mirror/cache; the mirror configuration is not part of this repository.
 
-The unit suite covers quantity bounds, planner fallback and cycle/seed accounting, configuration and packet contracts, inventory reservations, pattern movement, and API boundaries. A separate Forge 47.4.20 / AE2 15.4.10 modpack record from the same date covers:
+The unit suite covers quantity bounds, planner fallback and cycle/seed accounting, configuration and packet contracts, inventory reservations, pattern movement, and API boundaries. A separate Forge 47.4.20 / AE2 15.4.10 modpack record from 2026-09-08 covers:
 
 | Runtime check | Recorded result |
 |---|---|
@@ -310,7 +312,7 @@ The unit suite covers quantity bounds, planner fallback and cycle/seed accountin
 | Pattern management | Duplicate/invalid filters were exercised; 4 patterns moved from an OmniSequence provider to an AE2 provider and back with server-side counts checked. |
 | Configured amount limit | `2147483648` was rejected with the existing limit of `2147483647`; execution above that limit was not tested. |
 
-These are recorded modpack checks, not the default GameTest task. No dedicated-server, large cyclic-order, Data Energistics virtual-order or long-running performance validation is claimed for this Forge release. The earlier NeoForge GameTest totals do not describe this port.
+These are recorded modpack checks, not the default GameTest task. On 2026-09-09, a separate server-side runtime probe loaded 21 targets, confirmed the crafting-menu bridge was injected, round-tripped cycle NBT with real item keys, and loaded the network handler successfully. The default `runServer` also reached the normal EULA prompt after GuideME was added. This is startup/integration evidence, not a connected multiplayer session or a large cyclic-order test; Data Energistics virtual orders and long-running performance remain unverified. The earlier NeoForge GameTest totals do not describe this port.
 
 ## Known limitations
 

@@ -117,7 +117,8 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
     api fg.deobf("maven.modrinth:ae2:${ae2_version}")
-
+    // Modrinth's Maven POM omits AE2's required GuideME runtime dependency.
+    runtimeOnly fg.deobf("org.appliedenergistics:guideme:${guideme_version}")
 
     compileOnly fg.deobf("mezz.jei:jei-1.20.1-forge:${jei_version}")
     if (!project.hasProperty('withoutJei')) {

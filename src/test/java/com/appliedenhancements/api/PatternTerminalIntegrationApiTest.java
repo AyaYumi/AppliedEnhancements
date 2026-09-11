@@ -9,6 +9,31 @@ import org.junit.jupiter.api.Test;
 
 class PatternTerminalIntegrationApiTest {
     @Test
+    void forgeUniversalWirelessExtendedTerminalIsRegistered() {
+        assertTrue(PatternTerminalIntegrationApi.supports(
+                "com.glodblock.github.extendedae.xmod.wt.GuiUWirelessExPAT",
+                Family.EXTENDEDAE_PATTERN_ACCESS));
+        assertFalse(PatternTerminalIntegrationApi.supports(
+                "com.glodblock.github.extendedae.xmod.wt.GuiUWirelessExPAT",
+                Family.AE2_PATTERN_ACCESS));
+    }
+
+    @Test
+    void forgeWirelessScreensUseTheirActualFamilies() {
+        assertTrue(PatternTerminalIntegrationApi.supports(
+                "de.mari_023.ae2wtlib.wat.WATScreen", Family.AE2_PATTERN_ACCESS));
+        assertTrue(PatternTerminalIntegrationApi.supports(
+                "com.glodblock.github.extendedae.client.gui.GuiWirelessExPAT",
+                Family.EXTENDEDAE_PATTERN_ACCESS));
+        assertFalse(PatternTerminalIntegrationApi.supports(
+                "com.glodblock.github.extendedae.client.gui.GuiWirelessExPAT",
+                Family.AE2_PATTERN_ACCESS));
+        assertFalse(PatternTerminalIntegrationApi.supports(
+                "com.glodblock.github.extendedae.xmod.wt.GuiWirelessExPAT",
+                Family.EXTENDEDAE_PATTERN_ACCESS));
+    }
+
+    @Test
     void builtInTerminalFamiliesAreRegisteredExactly() {
         assertTrue(PatternTerminalIntegrationApi.supports(
                 "appeng.client.gui.me.patternaccess.PatternAccessTermScreen",

@@ -31,7 +31,9 @@ public final class PatternTerminalIntegrationApi {
         registerBuiltin("extendedae_pattern_access", Family.EXTENDEDAE_PATTERN_ACCESS,
                 "com.glodblock.github.extendedae.client.gui.GuiExPatternTerminal");
         registerBuiltin("extendedae_wireless_pattern_access", Family.EXTENDEDAE_PATTERN_ACCESS,
-                "com.glodblock.github.extendedae.xmod.wt.GuiWirelessExPAT");
+                "com.glodblock.github.extendedae.client.gui.GuiWirelessExPAT");
+        registerBuiltin("extendedae_universal_wireless_pattern_access", Family.EXTENDEDAE_PATTERN_ACCESS,
+                "com.glodblock.github.extendedae.xmod.wt.GuiUWirelessExPAT");
     }
 
     private PatternTerminalIntegrationApi() {

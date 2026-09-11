@@ -38,12 +38,15 @@ com.appliedenhancements.api.client
 
 ```groovy
 repositories {
+    mavenCentral()
     maven { url = "https://api.modrinth.com/maven" }
     flatDir { dirs "libs" }
 }
 dependencies {
     // 接入方通常已经直接依赖 AE2；其类型出现在本模组的公共签名中。
     implementation fg.deobf("maven.modrinth:ae2:15.4.10")
+    // AE2 必需前置，Modrinth Maven 不会自动传递该依赖。
+    runtimeOnly fg.deobf("org.appliedenergistics:guideme:20.1.7")
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
     compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.6-forge")
@@ -53,7 +56,7 @@ dependencies {
 }
 ```
 
-也可以在 Applied Enhancements 源码目录执行 `./gradlew publish`，将完整模组发布到该目录的 `repo` 本地 Maven 仓库。消费坐标为 `com.appliedenhancements:appliedenhancements:1.0.6-forge`，POM 声明 AE2 编译依赖和 MixinExtras 运行依赖。接入方将 `flatDir` 替换为 `maven { url = uri("../AppliedEnhancements/repo") }`，按实际检出目录调整路径，并保留 Modrinth 与 Maven Central 仓库。此任务不上传到公共 Maven 服务。
+也可以在 Applied Enhancements 源码目录执行 `./gradlew publish`，将完整模组发布到该目录的 `repo` 本地 Maven 仓库。消费坐标为 `com.appliedenhancements:appliedenhancements:1.0.6-forge`，POM 声明 AE2 编译依赖及 GuideME／MixinExtras 运行依赖。接入方将 `flatDir` 替换为 `maven { url = uri("../AppliedEnhancements/repo") }`，按实际检出目录调整路径，并保留 Modrinth 与 Maven Central 仓库。此任务不上传到公共 Maven 服务。
 
 如果接入代码会无条件加载公共 API，应在 `mods.toml` 中声明硬依赖：
 
@@ -484,7 +487,8 @@ AE2 系列界面会继承内置样板管理终端的独立第二行工具栏，�
 - AE2 样板管理终端；
 - AE2WTLib 无线样板管理终端；
 - ExtendedAE 扩展样板管理终端；
-- ExtendedAE 无线扩展样板管理终端。
+- ExtendedAE 无线扩展样板管理终端；
+- ExtendedAE 与 AE2WTLib 接入的通用无线扩展样板终端（`GuiUWirelessExPAT`）。
 
 完全自定义的行模型不能仅靠注册自动获得功能，应直接使用 `PatternDuplicateApi`、`PatternBatchMoveApi` 和 `PatternQuickMoveSession` 实现自己的界面层。
 
@@ -669,7 +673,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 
 ## 发布前检查清单
 
-Forge 构建的 `362` 项单元测试及独立整合包中的普通合成、AELIS 和样板管理结果见 [发行验证范围](../README_ZH.md#验证范围)。此前 NeoForge 的 GameTest 不能视为本分支验证；独立 CPU 仍需验证循环、持久化、虚拟产物及专用服务端等接入边界。
+Forge 构建的 `370` 项单元测试、服务端启动／NBT 检查及独立整合包中的普通合成、AELIS 和样板管理结果见 [发行验证范围](../README_ZH.md#验证范围)。此前 NeoForge 的 GameTest 不能视为本分支验证；独立 CPU 仍需验证真实循环执行、持久化、虚拟产物及多人联机等接入边界。
 
 - [ ] 只从稳定 API 包导入类型。
 - [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。

@@ -38,6 +38,7 @@ Applied Enhancements does not yet publish a separate Maven API artifact. Place t
 
 ```groovy
 repositories {
+    mavenCentral()
     maven { url = "https://api.modrinth.com/maven" }
     flatDir { dirs "libs" }
 }
@@ -45,6 +46,8 @@ dependencies {
     // Integrations normally depend on AE2 directly because its types appear
     // in the public Applied Enhancements signatures.
     implementation fg.deobf("maven.modrinth:ae2:15.4.10")
+    // Required by AE2; Modrinth Maven does not declare it transitively.
+    runtimeOnly fg.deobf("org.appliedenergistics:guideme:20.1.7")
 
     // Compile against the API without embedding this mod in your own JAR.
     compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.6-forge")
@@ -54,7 +57,7 @@ dependencies {
 }
 ```
 
-Alternatively, run `./gradlew publish` in the Applied Enhancements checkout to publish the complete mod to its local `repo` Maven directory. The coordinate is `com.appliedenhancements:appliedenhancements:1.0.6-forge`; its POM declares AE2 as a compile dependency and MixinExtras as a runtime dependency. Replace `flatDir` in the consuming project with `maven { url = uri("../AppliedEnhancements/repo") }`, adjust the checkout path, and retain Modrinth and Maven Central repositories. This task does not upload to a public Maven service.
+Alternatively, run `./gradlew publish` in the Applied Enhancements checkout to publish the complete mod to its local `repo` Maven directory. The coordinate is `com.appliedenhancements:appliedenhancements:1.0.6-forge`; its POM declares AE2 as a compile dependency and GuideME/MixinExtras as runtime dependencies. Replace `flatDir` in the consuming project with `maven { url = uri("../AppliedEnhancements/repo") }`, adjust the checkout path, and retain Modrinth and Maven Central repositories. This task does not upload to a public Maven service.
 
 If your integration unconditionally loads Applied Enhancements API classes, declare a required dependency in `mods.toml`:
 
@@ -490,7 +493,8 @@ Built-in registrations already cover:
 - AE2 Pattern Access Terminal;
 - AE2WTLib Wireless Pattern Access Terminal;
 - ExtendedAE Extended Pattern Access Terminal;
-- ExtendedAE Wireless Extended Pattern Access Terminal.
+- ExtendedAE Wireless Extended Pattern Access Terminal;
+- ExtendedAE Universal Wireless Extended Pattern Access Terminal via AE2WTLib (`GuiUWirelessExPAT`).
 
 Registration IDs must be unique, and `screenClassName` must be the exact runtime class name rather than a superclass name.
 
@@ -689,7 +693,7 @@ These features require AE2 Java types, client UI integration, or server-authorit
 
 ## Pre-release integration checklist
 
-See the [release validation scope](../README.md#validation) for the Forge build, `362` unit tests, and separate modpack records for ordinary crafting, AELIS and pattern management. Earlier NeoForge GameTests do not validate this branch; custom CPUs must still verify cycle execution, persistence, virtual outputs and dedicated-server integration.
+See the [release validation scope](../README.md#validation) for the Forge build, `370` unit tests, server-side startup/NBT checks, and separate modpack records for ordinary crafting, AELIS and pattern management. Earlier NeoForge GameTests do not validate this branch; custom CPUs must still verify real cycle execution, persistence, virtual outputs and connected multiplayer integration.
 
 - [ ] Imports are limited to the stable API packages.
 - [ ] Optional compatibility classes cannot load when Applied Enhancements is absent.
