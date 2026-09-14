@@ -10,15 +10,23 @@ Applied Enhancements is a Forge quality-of-life and performance addon for Applie
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.6-forge`
+> Current version: `1.0.7-forge`
 >
 > Target: Minecraft `1.20.1` / Forge / Java `17`
+
+## What's new in 1.0.7-forge
+
+| Area | Update |
+|---|---|
+| Cyclic dispatch crash | Ports the 1.21.1 fix for native AE2 and AdvancedAE quantum CPU dispatches of cycle steps without protected inputs. A successful single provider push advances the step by one craft. |
+| Dispatch accounting | Steps with protected inputs retain strict batch counting. Rejected or failed provider pushes restore the previous cycle runtime state. |
+| Integration compatibility | Public Java API signatures and Forge SimpleChannel protocol `1.0.6-forge-1` are unchanged from `1.0.6-forge`. Custom CPUs must still supply their own verified dispatch count for steps without protected inputs. |
 
 ## Forge 1.20.1 port
 
 | Area | Update |
 |---|---|
-| Platform | Ports the 1.0.6 feature set to Minecraft 1.20.1, Forge and Java 17, with AE2 15.4.10. |
+| Platform | Ports the 1.0.7 feature set to Minecraft 1.20.1, Forge and Java 17, with AE2 15.4.10. |
 | Networking and persistence | Uses Forge SimpleChannel protocol `1.0.6-forge-1` and AE2 15 NBT serialization. Install the Forge build on both client and server. |
 | Client compatibility | Adapts vanilla and ExtendedAE pattern-terminal layouts, SRG Mixin targets and the final AELIS result title when ExtendedAE Plus is present. |
 | AELIS and CPU display | Retains planner provenance, requested-output seed accounting, cycle execution and the `9.2E` infinite-CPU display. |
@@ -70,7 +78,7 @@ The Forge modpack also loaded AdvancedAE `1.3.6-1.20.1`, ExtendedAE Plus `1.5.5`
 Install the same Applied Enhancements release build on both the client and server, together with compatible Forge, AE2 and GuideME versions. The Gradle development runtime includes GuideME explicitly because the Modrinth Maven dependency for AE2 does not supply transitive dependency metadata.
 
 ```text
-mods/appliedenhancements-1.0.6-forge.jar
+mods/appliedenhancements-1.0.7-forge.jar
 ```
 
 ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
@@ -296,12 +304,14 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 17.
 Build output (includes MixinExtras; the `-slim.jar` is not the installation artifact):
 
 ```text
-build/libs/appliedenhancements-1.0.6-forge.jar
+build/libs/appliedenhancements-1.0.7-forge.jar
 ```
 
 ## Validation
 
-On 2026-09-09, the Forge build passed all `370` repository unit tests with JDK `17`: zero failures, errors or skipped tests. These include regression checks for the Forge wireless-screen class and every row/column of the ExtendedAE selection area at multiple screen origins and row counts. Run `cleanTest build --no-daemon --console=plain` with the Gradle Wrapper to repeat the suite and build the JAR. Validation used an external dependency mirror/cache; the mirror configuration is not part of this repository.
+On 2026-09-14, version `1.0.7-forge` built successfully and passed all `371` repository unit tests with Java `17` as the target: zero failures, errors or skipped tests. Run `cleanTest build --no-daemon --console=plain` with the Gradle Wrapper to repeat the suite and build the JAR. The distributable JAR was checked for Java 17 bytecode, both CPU dispatch integrations, Forge metadata, the Mixin refmap and bundled MixinExtras.
+
+The new regression test verifies that a native provider push advances a step without protected inputs by one craft. Existing tests cover strict batch counting, rejection by the public counting helper when protected inputs are absent, the Forge wireless-screen class, and every row/column of the ExtendedAE selection area at multiple screen origins and row counts. This release's cyclic-dispatch fix has not yet been validated in a live Forge modpack.
 
 The unit suite covers quantity bounds, planner fallback and cycle/seed accounting, configuration and packet contracts, inventory reservations, pattern movement, and API boundaries. A separate Forge 47.4.20 / AE2 15.4.10 modpack record from 2026-09-08 covers:
 

@@ -112,4 +112,14 @@ class AelisCycleDispatchTest {
                 runtime, pattern, new KeyCounter[0]));
         assertTrue(failure.getMessage().contains("actual pattern inputs"));
     }
+
+    @Test
+    void nativeProviderPushAdvancesOneCraftWithoutProtectedInputs() {
+        var runtime = new AelisCycleRuntimeController(new AelisCycleExecutionPlan(List.of(
+                new AelisCycleExecutionPlan.Step(pattern, 2, Map.of(), Set.of())), Map.of(), Set.of()));
+        assertEquals(1, AelisCycleDispatch.dispatchedProviderPush(
+                runtime, pattern, new KeyCounter[0]));
+        runtime.patternDispatched(pattern, 1);
+        assertEquals(1, runtime.remainingCrafts());
+    }
 }

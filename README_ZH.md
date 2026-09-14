@@ -6,15 +6,23 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 Forge 功
 
 项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 AELIS 合成规划器。
 
-> 当前版本：`1.0.6-forge`
+> 当前版本：`1.0.7-forge`
 >
 > 目标平台：Minecraft `1.20.1` / Forge / Java `17`
+
+## 1.0.7-forge 更新
+
+| 项目 | 更新说明 |
+|---|---|
+| 循环派发崩溃 | 同步 1.21.1 的修复，处理原生 AE2 和 AdvancedAE 量子 CPU 派发无受保护输入循环步骤时的崩溃；成功的单次 Provider 派发按一次合成推进 |
+| 派发计数 | 有受保护输入的步骤继续严格校验批量次数；Provider 拒绝或派发失败时恢复之前的循环运行状态 |
+| 接入兼容性 | 相比 `1.0.6-forge`，公共 Java API 签名及 Forge SimpleChannel 协议 `1.0.6-forge-1` 均保持不变；独立 CPU 对无受保护输入步骤仍需自行确定真实派发次数 |
 
 ## Forge 1.20.1 移植
 
 | 项目 | 更新说明 |
 |---|---|
-| 平台 | 将 1.0.6 功能移植到 Minecraft 1.20.1、Forge 与 Java 17，基于 AE2 15.4.10 |
+| 平台 | 将 1.0.7 功能移植到 Minecraft 1.20.1、Forge 与 Java 17，基于 AE2 15.4.10 |
 | 网络与持久化 | 使用 Forge SimpleChannel，协议为 `1.0.6-forge-1`；适配 AE2 15 的 NBT 序列化，客户端与服务端均须安装 Forge 构建 |
 | 客户端兼容 | 适配原版与 ExtendedAE 样板终端布局、SRG Mixin 目标，以及存在 ExtendedAE Plus 时的最终 AELIS 结果标题 |
 | AELIS 与 CPU 显示 | 保留规划来源标记、目标物种子记账、循环执行及无限 CPU 的 `9.2E` 显示 |
@@ -67,7 +75,7 @@ Forge 测试整合包同时加载了 AdvancedAE `1.3.6-1.20.1`、ExtendedAE Plus
 目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
 
 ```text
-build/libs/appliedenhancements-1.0.6-forge.jar
+build/libs/appliedenhancements-1.0.7-forge.jar
 ```
 
 同时需要安装匹配版本的 Forge、AE2 与 GuideME。Gradle 开发运行环境已显式添加 GuideME，因为 Modrinth Maven 的 AE2 依赖不提供传递依赖元数据。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
@@ -281,12 +289,14 @@ ServerEvents.tags('item', event => {
 用于安装的完整产物位于以下路径，已内嵌 MixinExtras；`-slim.jar` 不是安装用产物：
 
 ```text
-build/libs/appliedenhancements-1.0.6-forge.jar
+build/libs/appliedenhancements-1.0.7-forge.jar
 ```
 
 ## 验证范围
 
-2026-09-09 使用 JDK `17` 验证 Forge 构建，仓库全部 `370` 项单元测试通过，失败、错误、跳过均为零。新增回归覆盖 Forge 无线界面实际类名，以及不同界面原点和可见行数下 ExtendedAE 槽区各行各列的选择与边界排除。使用 Gradle Wrapper 执行 `cleanTest build --no-daemon --console=plain` 可重跑测试并生成 JAR。验证使用了外部依赖镜像与缓存；该镜像配置不属于仓库。
+2026-09-14，`1.0.7-forge` 以 Java `17` 为目标构建成功，仓库全部 `371` 项单元测试通过，失败、错误、跳过均为零。使用 Gradle Wrapper 执行 `cleanTest build --no-daemon --console=plain` 可重跑测试并生成 JAR。已检查发行 JAR 的 Java 17 字节码、两类 CPU 的派发接入、Forge 元数据、Mixin 映射及内嵌 MixinExtras。
+
+新增回归测试验证原生 Provider 派发将无受保护输入的步骤推进一次。已有测试覆盖严格批量计数、公共计数辅助方法对无受保护输入步骤的拒绝、Forge 无线界面实际类名，以及不同界面原点和可见行数下 ExtendedAE 槽区各行各列的选择与边界排除。本次循环派发修复尚未在真实 Forge 整合包中实测。
 
 单元测试覆盖数量边界、规划回退与循环／种子记账、配置与网络包约定、库存预留、样板移动及公共 API 边界。2026-09-08 的 Forge 47.4.20／AE2 15.4.10 独立整合包记录包含：
 

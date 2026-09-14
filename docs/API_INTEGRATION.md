@@ -2,7 +2,7 @@
 
 [中文文档](API_INTEGRATION_ZH.md)
 
-This guide is intended for Forge mod authors integrating with Applied Enhancements `1.0.6-forge`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+This guide is intended for Forge mod authors integrating with Applied Enhancements `1.0.7-forge`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 ## Compatibility baseline
 
@@ -12,9 +12,11 @@ This guide is intended for Forge mod authors integrating with Applied Enhancemen
 | Java | `17` | Compilation and runtime target |
 | Forge | `47.4.20` | Build/runtime validation version; currently declared range: `[47.4.10,)` |
 | Applied Energistics 2 | `15.4.10` | Declared range: `[15.4.10,16)`; public signatures directly reference AE2 types |
-| Applied Enhancements | `1.0.6-forge` | Version covered by this guide |
+| Applied Enhancements | `1.0.7-forge` | Version covered by this guide |
 
 The Forge build preserves the public planner/provider APIs while adapting AE2 dependencies to 15.4.10. The network uses Forge SimpleChannel with protocol `1.0.6-forge-1`; client and server must use this Forge build. Minecraft 1.21.1 jars are not binary compatible with this port.
+
+Version `1.0.7-forge` preserves the public Java API signatures and SimpleChannel protocol from `1.0.6-forge`. Integrations that submit cycle plans to native AE2 or AdvancedAE quantum CPUs should require `1.0.7-forge` or newer for the fix to dispatching steps without protected inputs, as in the dependency examples below.
 
 Only the following packages are part of the stable integration surface:
 
@@ -50,14 +52,14 @@ dependencies {
     runtimeOnly fg.deobf("org.appliedenergistics:guideme:20.1.7")
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.6-forge")
+    compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.7-forge")
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.6-forge")
+    runtimeOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.7-forge")
 }
 ```
 
-Alternatively, run `./gradlew publish` in the Applied Enhancements checkout to publish the complete mod to its local `repo` Maven directory. The coordinate is `com.appliedenhancements:appliedenhancements:1.0.6-forge`; its POM declares AE2 as a compile dependency and GuideME/MixinExtras as runtime dependencies. Replace `flatDir` in the consuming project with `maven { url = uri("../AppliedEnhancements/repo") }`, adjust the checkout path, and retain Modrinth and Maven Central repositories. This task does not upload to a public Maven service.
+Alternatively, run `./gradlew publish` in the Applied Enhancements checkout to publish the complete mod to its local `repo` Maven directory. The coordinate is `com.appliedenhancements:appliedenhancements:1.0.7-forge`; its POM declares AE2 as a compile dependency and GuideME/MixinExtras as runtime dependencies. Replace `flatDir` in the consuming project with `maven { url = uri("../AppliedEnhancements/repo") }`, adjust the checkout path, and retain Modrinth and Maven Central repositories. This task does not upload to a public Maven service.
 
 If your integration unconditionally loads Applied Enhancements API classes, declare a required dependency in `mods.toml`:
 
@@ -65,7 +67,7 @@ If your integration unconditionally loads Applied Enhancements API classes, decl
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 mandatory=true
-versionRange="[1.0.6-forge,1.1)"
+versionRange="[1.0.7-forge,1.1)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -76,7 +78,7 @@ If all API references are isolated behind an optional compatibility layer, decla
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 mandatory=false
-versionRange="[1.0.6-forge,1.1)"
+versionRange="[1.0.7-forge,1.1)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -125,7 +127,7 @@ There are 17 public top-level API types: 16 current types plus one deprecated co
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.6-forge` uses SimpleChannel protocol `1.0.6-forge-1`. Built-in packets synchronize selected server feature settings, calculation progress and planner-path display, but not third-party registrations or custom CPU state. Payload classes are internal.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.7-forge` uses SimpleChannel protocol `1.0.6-forge-1`. Built-in packets synchronize selected server feature settings, calculation progress and planner-path display, but not third-party registrations or custom CPU state. Payload classes are internal.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 
@@ -322,6 +324,8 @@ External CPU integrations can perform normalization, guarded input access and pe
 Forge/AE2 15 serializes keys through static item/fluid registries. Prefer the overloads above without a registry parameter. The `HolderLookup.Provider` overloads remain available, reject a null provider and delegate to the same implementation.
 
 Call `preparePlan` before constructing the CPU's task map; reading `getPlan` alone does not replace that map. A guarded inventory belongs to one extraction attempt and cannot be cached across pattern changes or runtime advancement. `dispatchedCrafts` does not advance the controller. A step with no protected inputs is valid, but this helper cannot infer its actual firing count; the host must provide a verified count bounded by `remainingCrafts()` before calling `patternDispatched`.
+
+Since `1.0.7-forge`, the built-in native AE2 and AdvancedAE quantum CPU integrations count a single provider push as one craft when the active step has no protected inputs. They retain strict counting when protected inputs are present and restore cycle runtime state when the provider rejects or fails the push. This fix does not change the public `dispatchedCrafts` contract: custom CPUs must determine their own actual count for such steps, including any batching they perform. An empty protected-input map does not necessarily mean the pattern itself has no ingredients.
 
 ```java
 plan = AelisCycleExecutionApi.preparePlan(plan);
@@ -693,7 +697,7 @@ These features require AE2 Java types, client UI integration, or server-authorit
 
 ## Pre-release integration checklist
 
-See the [release validation scope](../README.md#validation) for the Forge build, `370` unit tests, server-side startup/NBT checks, and separate modpack records for ordinary crafting, AELIS and pattern management. Earlier NeoForge GameTests do not validate this branch; custom CPUs must still verify real cycle execution, persistence, virtual outputs and connected multiplayer integration.
+See the [release validation scope](../README.md#validation) for the `1.0.7-forge` build and `371` unit tests, including the regression test for provider pushes without protected inputs, plus earlier server-side startup/NBT checks and separate modpack records for ordinary crafting, AELIS and pattern management. Earlier NeoForge GameTests do not validate this branch; custom CPUs must still verify real cycle execution, persistence, virtual outputs and connected multiplayer integration.
 
 - [ ] Imports are limited to the stable API packages.
 - [ ] Optional compatibility classes cannot load when Applied Enhancements is absent.
