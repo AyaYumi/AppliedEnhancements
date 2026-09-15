@@ -2,7 +2,7 @@
 
 [English documentation](API_INTEGRATION.md)
 
-本文面向希望接入 Applied Enhancements `1.0.7-forge` 的 Forge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+本文面向希望接入 Applied Enhancements `1.0.8-forge` 的 Forge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -12,11 +12,11 @@
 | Java | `17` | 编译与运行目标 |
 | Forge | `47.4.20` | 构建与运行验证版本；当前声明范围：`[47.4.10,)` |
 | Applied Energistics 2 | `15.4.10` | 声明范围：`[15.4.10,16)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.0.7-forge` | 本文档对应版本 |
+| Applied Enhancements | `1.0.8-forge` | 本文档对应版本 |
 
 Forge 构建保留公开的规划器和提供者 API，并适配 AE2 15.4.10。网络使用 Forge SimpleChannel，协议为 `1.0.6-forge-1`；客户端和服务端必须同时使用 Forge 构建，不能混用 Minecraft 1.21.1 的 JAR。
 
-`1.0.7-forge` 保留 `1.0.6-forge` 的公共 Java API 签名和 SimpleChannel 协议。向原生 AE2 或 AdvancedAE 量子 CPU 提交循环计划的接入方，应按下方示例将最低版本设为 `1.0.7-forge`，以包含无受保护输入步骤的派发修复。
+`1.0.8-forge` 保留 `1.0.7-forge` 的公共 Java API 签名和 SimpleChannel 协议。向原生 AE2 或 AdvancedAE 量子 CPU 提交循环计划的接入方，应按下方示例将最低版本设为 `1.0.8-forge`，以包含针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 顺序调整。
 
 稳定兼容范围仅包括以下包：
 
@@ -51,14 +51,14 @@ dependencies {
     runtimeOnly fg.deobf("org.appliedenergistics:guideme:20.1.7")
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.7-forge")
+    compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.8-forge")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.7-forge")
+    runtimeOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.8-forge")
 }
 ```
 
-也可以在 Applied Enhancements 源码目录执行 `./gradlew publish`，将完整模组发布到该目录的 `repo` 本地 Maven 仓库。消费坐标为 `com.appliedenhancements:appliedenhancements:1.0.7-forge`，POM 声明 AE2 编译依赖及 GuideME／MixinExtras 运行依赖。接入方将 `flatDir` 替换为 `maven { url = uri("../AppliedEnhancements/repo") }`，按实际检出目录调整路径，并保留 Modrinth 与 Maven Central 仓库。此任务不上传到公共 Maven 服务。
+也可以在 Applied Enhancements 源码目录执行 `./gradlew publish`，将完整模组发布到该目录的 `repo` 本地 Maven 仓库。消费坐标为 `com.appliedenhancements:appliedenhancements:1.0.8-forge`，POM 声明 AE2 编译依赖及 GuideME／MixinExtras 运行依赖。接入方将 `flatDir` 替换为 `maven { url = uri("../AppliedEnhancements/repo") }`，按实际检出目录调整路径，并保留 Modrinth 与 Maven Central 仓库。此任务不上传到公共 Maven 服务。
 
 如果接入代码会无条件加载公共 API，应在 `mods.toml` 中声明硬依赖：
 
@@ -66,7 +66,7 @@ dependencies {
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 mandatory=true
-versionRange="[1.0.7-forge,1.1)"
+versionRange="[1.0.8-forge,1.1)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -77,7 +77,7 @@ side="BOTH"
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 mandatory=false
-versionRange="[1.0.7-forge,1.1)"
+versionRange="[1.0.8-forge,1.1)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -126,7 +126,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.7-forge` 的 SimpleChannel 协议为 `1.0.6-forge-1`。内置网络只同步部分服务端功能配置、计算进度和规划路径显示，不同步第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.8-forge` 的 SimpleChannel 协议为 `1.0.6-forge-1`。内置网络只同步部分服务端功能配置、计算进度和规划路径显示，不同步第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
@@ -321,7 +321,7 @@ Forge／AE2 15 使用静态物品与流体注册表进行 NBT 序列化，优先
 
 从 `1.0.7-forge` 起，内置原生 AE2 和 AdvancedAE 量子 CPU 接入在当前步骤没有受保护输入时，将单次 Provider 派发按一次合成计数；存在受保护输入时仍严格计数，Provider 拒绝或派发失败时恢复循环运行状态。此修复不改变公共 `dispatchedCrafts` 的约定：独立 CPU 对此类步骤仍需自行确定实际次数，包括自身执行的批量。受保护输入表为空并不一定表示样板本身没有原料。
 
-原生和 AdvancedAE CPU Mixin 特意排在普通观察类 Mixin 之后，使 AE2 Crafting Time `1.2.5` 等附属模组可以保留对 `executeCrafting` 局部变量、Provider 迭代器、功率和 `pushPattern` 的观察注入；Applied Enhancements 再围绕已经完成观察注入的方法增加循环、完成和批次包装。
+`1.0.8-forge` 针对 AE2 Crafting Time 兼容反馈，将原生和 AdvancedAE CPU Mixin 优先级从 1100 改为 900，排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
 
 ```java
 plan = AelisCycleExecutionApi.preparePlan(plan);
@@ -679,7 +679,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 
 ## 发布前检查清单
 
-`1.0.7-forge` 构建与 `371` 项单元测试（含无受保护输入 Provider 派发的回归测试）、此前服务端启动／NBT 检查及独立整合包中的普通合成、AELIS 和样板管理结果见 [发行验证范围](../README_ZH.md#验证范围)。此前 NeoForge 的 GameTest 不能视为本分支验证；独立 CPU 仍需验证真实循环执行、持久化、虚拟产物及多人联机等接入边界。
+`1.0.8-forge` 构建与 `371` 项单元测试（含无受保护输入 Provider 派发的回归测试）、此前服务端启动／NBT 检查及独立整合包中的普通合成、AELIS 和样板管理结果见 [发行验证范围](../README_ZH.md#验证范围)。此前 NeoForge 的 GameTest 不能视为本分支验证；独立 CPU 仍需验证真实循环执行、持久化、虚拟产物及多人联机等接入边界。
 
 - [ ] 只从稳定 API 包导入类型。
 - [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。
