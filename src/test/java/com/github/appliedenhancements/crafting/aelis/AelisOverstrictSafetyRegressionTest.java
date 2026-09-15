@@ -25,6 +25,23 @@ class AelisOverstrictSafetyRegressionTest {
     }
 
     @Test
+    void deterministicDamageInputsStayInsideTheAggregatedGraph()
+            throws IOException {
+        String source = plannerSource();
+
+        // A deterministic-damage input must not turn its pattern into a native
+        // boundary: the pattern would leave the graph, its consumable children
+        // would lose their aggregation and large orders would die in
+        // "oversized_recursive_consumable_input" before AE2 replays them item by
+        // item. The tool side is batched by allocateDeterministicDamageInputs
+        // instead.
+        assertFalse(source.contains("throw new Barrier(\"recursive_durability_input\")"));
+        assertTrue(source.contains("allocateDeterministicDamageInputs("));
+        assertTrue(source.contains(
+                "throw new Fallback(\"deterministic_damage_input_unavailable\")"));
+    }
+
+    @Test
     void everyNativeBoundaryUsesTheLinearWorkGuard() throws IOException {
         String source = plannerSource();
 

@@ -87,6 +87,8 @@
   "message.appliedenhancements.crafting_amount_unsafe": "Crafting request %s was rejected because this recipe would overflow AE2's native 64-bit planner.",
   "message.appliedenhancements.ordered_choice_native_too_large": "Crafting request %s requires AE2's per-item ordered recipe planner and exceeds the safe native limit of %s. Reduce the amount or simplify this item's recipe choices.",
   "message.appliedenhancements.long_range_disabled": "Long-range crafting is disabled on this server.",
+  "message.appliedenhancements.crafting_target_unavailable": "Could not start the crafting calculation: the target grid node is currently unavailable. Check that this terminal is connected and powered.",
+  "message.appliedenhancements.crafting_plan_stalled": "The crafting calculation never started, so the crafting plan screen was closed.",
   "appliedenhancements.config.max_crafting_order_amount": "Maximum Crafting Order Amount",
   "appliedenhancements.config.enable_pattern_caching": "Enable Pattern Caching",
   "appliedenhancements.config.pattern_cache_size": "Pattern Cache Entries per Pattern",

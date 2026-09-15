@@ -87,6 +87,8 @@
   "message.appliedenhancements.crafting_amount_unsafe": "已拒绝数量为 %s 的合成请求：该配方会导致 AE2 原生规划器的 64 位计数溢出。",
   "message.appliedenhancements.ordered_choice_native_too_large": "合成请求 %s 需要 AE2 逐件尝试有序配方，超过原生安全上限 %s。请减少数量或精简该物品的候选配方。",
   "message.appliedenhancements.long_range_disabled": "服务器已禁用超大数量合成。",
+  "message.appliedenhancements.crafting_target_unavailable": "无法开始合成计算：目标网络节点当前不可用，请检查该终端是否已连接并通电。",
+  "message.appliedenhancements.crafting_plan_stalled": "合成计算未能启动，已退出合成计划界面。",
   "appliedenhancements.config.max_crafting_order_amount": "单次合成订单最大数量",
   "appliedenhancements.config.enable_pattern_caching": "启用样板缓存",
   "appliedenhancements.config.pattern_cache_size": "每张样板的缓存条目上限",
