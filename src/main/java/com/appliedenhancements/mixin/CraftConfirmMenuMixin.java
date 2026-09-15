@@ -63,6 +63,10 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Unique
     private static final AtomicLong appliedenhancements$nextProgressGeneration = new AtomicLong();
 
+    /** How long a confirm menu may stay open without any planning job before it is closed. */
+    @Unique
+    private static final int APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS = 100;
+
     @Shadow
     private ICraftingPlan result;
 
@@ -74,6 +78,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
     @Shadow
     private Future<ICraftingPlan> job;
+
+    @Shadow
+    private appeng.menu.me.crafting.CraftingPlanSummary plan;
 
     @Unique
     private final CraftingProgressTaskBinding appliedenhancements$progressBinding =
@@ -110,6 +117,10 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
     @Unique
     private ICraftingPlan appliedenhancements$reservedPlan;
+
+    /** Server ticks this menu spent without a planning job and without a plan. */
+    @Unique
+    private int appliedenhancements$idleTicksWithoutPlanning;
 
     @Override
     public AelisCalculationPath molecularmanipulator$getCalculationPath() {
@@ -156,9 +167,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         boolean newGeneration = CraftingProgressSnapshotOrder.startsNewGeneration(
                 current, snapshot);
         appliedenhancements$calculationProgress = snapshot;
-        var menu = (CraftConfirmMenu) (Object) this;
         if (newGeneration) {
-            menu.setPlan(null);
+            appliedenhancements$clearDisplayedPlan();
         }
         return true;
     }
@@ -186,6 +196,25 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Unique
     private void appliedenhancements$cancelProgress() {
         appliedenhancements$progressBinding.clear();
+    }
+
+    /**
+     * Clears the plan displayed by this confirmation menu without calling
+     * {@code CraftConfirmMenu#setPlan(CraftingPlanSummary)} with {@code null}.
+     *
+     * <p>Third-party mixins may inject into {@code setPlan} and dereference its
+     * argument, for example AE2 Crafting Time 1.2.5 iterates
+     * {@code plan.getEntries()} without a null check. Passing {@code null} makes
+     * such a listener throw while the menu is about to start planning, which
+     * aborts the whole plan request (the exception is swallowed by the packet
+     * handler) and leaves the screen on "calculating" forever. Writing the field
+     * keeps AE2's own behaviour while skipping those listeners.</p>
+     */
+    @Unique
+    private void appliedenhancements$clearDisplayedPlan() {
+        if (this.plan != null) {
+            this.plan = null;
+        }
     }
 
     @Inject(method = "planJob", at = @At("HEAD"))
@@ -235,7 +264,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         IGrid grid = gridNode.getGrid();
 
         this.result = null;
-        menu.setPlan(null);
+        appliedenhancements$clearDisplayedPlan();
         menu.clearError();
         this.whatToCraft = what;
         this.amount = (int) Math.min(requestedAmount, Integer.MAX_VALUE);
@@ -557,7 +586,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     private void appliedenhancements$restartAfterReservationConflict() {
         var menu = (CraftConfirmMenu) (Object) this;
         this.result = null;
-        menu.setPlan(null);
+        appliedenhancements$clearDisplayedPlan();
         boolean replanned = this.whatToCraft != null
                 && (appliedenhancements$requestedAmount > Integer.MAX_VALUE
                         ? appliedenhancements$planLong(
@@ -611,6 +640,41 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                 new CraftingCalculationProgressPayload(menu.containerId, snapshot));
         if (snapshot.phase().terminal()) {
             appliedenhancements$terminalProgressSentGeneration = snapshot.generation();
+        }
+    }
+
+    /**
+     * AE2 leaves the plan screen open forever when a confirmation menu never
+     * receives a planning job, for example when another mod mixes into the plan
+     * bookkeeping and fails. Close such a screen instead of showing an endless
+     * "calculating" dialog.
+     */
+    @Inject(method = "broadcastChanges", at = @At("RETURN"))
+    private void appliedenhancements$closeStalledPlanScreen(CallbackInfo callback) {
+        var menu = (CraftConfirmMenu) (Object) this;
+        if (menu.isClientSide()
+                || !(menu.getPlayer() instanceof ServerPlayer player)
+                || player.containerMenu != menu) {
+            return;
+        }
+        if (this.job != null || this.result != null || menu.getPlan() != null) {
+            appliedenhancements$idleTicksWithoutPlanning = 0;
+            return;
+        }
+        if (++appliedenhancements$idleTicksWithoutPlanning
+                < APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS) {
+            return;
+        }
+        appliedenhancements$idleTicksWithoutPlanning = 0;
+        AppliedEnhancements.LOGGER.warn(
+                "Crafting plan screen #{} had no planning job for {} ticks; closing it (what={}, amount={})",
+                menu.containerId, APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS,
+                this.whatToCraft, this.amount);
+        player.sendSystemMessage(Component.translatable(
+                "message.appliedenhancements.crafting_plan_stalled"));
+        menu.goBack();
+        if (player.containerMenu == menu) {
+            player.closeContainer();
         }
     }
 

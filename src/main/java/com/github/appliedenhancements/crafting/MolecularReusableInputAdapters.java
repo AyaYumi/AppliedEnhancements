@@ -3,8 +3,14 @@ package com.github.appliedenhancements.crafting;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
-import net.minecraft.core.registries.Registries;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.Level;
@@ -69,18 +75,26 @@ public final class MolecularReusableInputAdapters {
             }
 
             if (firstRemainder.equals(initialKey)) {
-                // A damageable item can return the same key due to an Unbreaking
-                // roll or another contextual rule. Never cache that random result
-                // as an infinite catalyst. Minecraft 1.21 also reports stacks with
-                // MAX_DAMAGE=0 as damageable; reusable recipe items such as the
-                // Master Infusion Crystal intentionally use that representation.
-                // An explicit UNBREAKABLE component is likewise a stable invariant.
-                if (!(initialKey instanceof AEItemKey itemKey)
-                        || hasFiniteMutableDurability(itemKey.toStack())) {
+                if (!(initialKey instanceof AEItemKey itemKey)) {
                     return unsupported(initialKey);
                 }
-                return new Analysis(Mode.INVARIANT_REUSABLE, initialKey,
-                        Long.MAX_VALUE, initialKey);
+                ItemStack template = itemKey.toStack();
+                if (!hasFiniteMutableDurability(template)) {
+                    // A non-damageable item returning its own key is a stable catalyst.
+                    return new Analysis(Mode.INVARIANT_REUSABLE, initialKey,
+                            Long.MAX_VALUE, initialKey);
+                }
+                // A damageable item can return the same key due to an Unbreaking roll
+                // or another contextual rule. Never cache that random result as an
+                // infinite catalyst: the remainder has to be proven to be an
+                // unconditional identity first. ProjectE's Philosopher's Stone stores
+                // its charge in the damage value and returns stack.copy() for every
+                // state, so the proof accepts it while random remainders stay rejected.
+                if (hasStableSelfRemainder(input, itemKey, template, level)) {
+                    return new Analysis(Mode.INVARIANT_REUSABLE, initialKey,
+                            Long.MAX_VALUE, initialKey);
+                }
+                return unsupported(initialKey);
             }
 
             if (!isDeterministicDamageCandidate(initialKey, level)
@@ -142,6 +156,126 @@ public final class MolecularReusableInputAdapters {
         return hasFiniteMutableDurability(stack)
                 && stack.hasCraftingRemainingItem()
                 && !hasUnbreaking(stack, level);
+    }
+
+    /**
+     * Damage states an identity probe may visit. The state in use is always probed
+     * first, so a bounded sweep never leaves the actually crafted state unproven.
+     */
+    static final int MAX_IDENTITY_PROBES = 256;
+
+    private static final int MAX_CACHED_IDENTITY_PROBES = 256;
+    private static final Map<IPatternDetails.IInput, Map<IdentityProbeKey, Boolean>>
+            IDENTITY_PROBES = Collections.synchronizedMap(new IdentityHashMap<>());
+
+    private record IdentityProbeKey(AEKey key, int damage, int maxDamage,
+            ResourceKey<Level> dimension) {
+    }
+
+    /**
+     * Proves that a damageable input returns itself unconditionally: every probed
+     * valid damage state must remain unchanged and must resolve to the same
+     * remainder twice in a row, which rules out Unbreaking rolls and other
+     * per-call randomness. The result is memoized per pattern input, key, damage
+     * state and dimension, because planning retries analyze the same input
+     * repeatedly.
+     */
+    private static boolean hasStableSelfRemainder(IPatternDetails.IInput input,
+            AEItemKey itemKey, ItemStack template, Level level) {
+        if (hasUnbreaking(template, level)) {
+            return false;
+        }
+        var probeKey = new IdentityProbeKey(itemKey, template.getDamageValue(),
+                template.getMaxDamage(), level.dimension());
+        synchronized (IDENTITY_PROBES) {
+            Map<IdentityProbeKey, Boolean> cached = IDENTITY_PROBES.get(input);
+            if (cached != null) {
+                Boolean known = cached.get(probeKey);
+                if (known != null) {
+                    return known;
+                }
+            }
+        }
+
+        boolean stable = probeSelfRemainder(input, itemKey, template, level);
+        synchronized (IDENTITY_PROBES) {
+            if (IDENTITY_PROBES.size() >= MAX_CACHED_IDENTITY_PROBES
+                    && !IDENTITY_PROBES.containsKey(input)) {
+                IDENTITY_PROBES.clear();
+            }
+            IDENTITY_PROBES.computeIfAbsent(input, ignored -> new HashMap<>())
+                    .put(probeKey, stable);
+        }
+        return stable;
+    }
+
+    private static boolean probeSelfRemainder(IPatternDetails.IInput input,
+            AEItemKey itemKey, ItemStack template, Level level) {
+        int maxDamage = Math.max(0, template.getMaxDamage() - 1);
+        int[] states = identityProbeDamageStates(
+                template.getDamageValue(), maxDamage, MAX_IDENTITY_PROBES);
+        int probed = 0;
+        for (int damage : states) {
+            ItemStack state = template.copy();
+            state.setCount(1);
+            state.setDamageValue(damage);
+            AEItemKey stateKey = AEItemKey.of(state);
+            if (stateKey == null || !input.isValid(stateKey, level)) {
+                continue;
+            }
+            if (!isSelfRemainder(stateKey, input.getRemainingKey(stateKey))
+                    || !isSelfRemainder(stateKey, input.getRemainingKey(stateKey))) {
+                return false;
+            }
+            probed++;
+        }
+        return probed > 0;
+    }
+
+    private static boolean isSelfRemainder(AEKey state, AEKey remainder) {
+        if (!(state instanceof AEItemKey stateItem)
+                || !(remainder instanceof AEItemKey remainderItem)) {
+            return false;
+        }
+        ItemStack stateStack = stateItem.toStack();
+        ItemStack remainderStack = remainderItem.toStack();
+        return stateStack.getDamageValue() == remainderStack.getDamageValue()
+                && ItemStack.isSameItemSameComponents(stateStack, remainderStack);
+    }
+
+    /**
+     * Damage states visited by an identity probe: the state in use first, then the
+     * whole usable range when it fits into {@code limit}, otherwise an evenly
+     * spaced sample including both ends. Duplicates collapse and the result never
+     * exceeds {@code limit}.
+     */
+    static int[] identityProbeDamageStates(int currentDamage, int maxDamage, int limit) {
+        if (limit <= 0 || maxDamage < 0) {
+            return new int[0];
+        }
+        var seen = new LinkedHashSet<Integer>();
+        seen.add(Math.max(0, Math.min(currentDamage, maxDamage)));
+        if (maxDamage + 1 <= limit) {
+            for (int damage = 0; damage <= maxDamage; damage++) {
+                seen.add(damage);
+            }
+        } else {
+            seen.add(0);
+            seen.add(maxDamage);
+            int samples = limit - seen.size();
+            for (int step = 1; step <= samples; step++) {
+                seen.add((int) ((long) maxDamage * step / (samples + 1)));
+            }
+        }
+        int[] result = new int[Math.min(limit, seen.size())];
+        int index = 0;
+        for (int damage : seen) {
+            if (index == result.length) {
+                break;
+            }
+            result[index++] = damage;
+        }
+        return result;
     }
 
     private static boolean hasFiniteMutableDurability(ItemStack stack) {

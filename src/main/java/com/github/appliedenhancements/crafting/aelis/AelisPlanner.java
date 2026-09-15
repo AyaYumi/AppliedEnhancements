@@ -12,6 +12,7 @@ import appeng.crafting.CraftingTreeProcess;
 import appeng.crafting.execution.InputTemplate;
 import appeng.crafting.inv.ChildCraftingSimulationState;
 import appeng.crafting.inv.CraftingSimulationState;
+import appeng.crafting.inv.ICraftingInventory;
 import appeng.crafting.pattern.AECraftingPattern;
 import appeng.crafting.pattern.AEProcessingPattern;
 import appeng.crafting.pattern.AESmithingTablePattern;
@@ -20,6 +21,7 @@ import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.api.AelisCycleExecutionPlan;
 import com.appliedenhancements.api.AelisCycleSeedPolicy;
+import com.appliedenhancements.mixin.AelisChildSimulationStateAccessor;
 import com.github.appliedenhancements.crafting.MolecularReusableInputAdapters;
 import com.github.appliedenhancements.integration.ae2.AelisCraftingTreeNodeBridge;
 import com.github.appliedenhancements.integration.ae2.AelisCraftingTreeProcessBridge;
@@ -416,6 +418,8 @@ public final class AelisPlanner {
                 throw new Fallback("invalid_output_per_pattern");
             }
             long patternTimes = ceilDiv(totalRequestedItems, effectiveOutputPerPattern);
+            allocateDeterministicDamageInputs(
+                    node, inventory, patternTimes, pauseCheckpoint);
             for (Edge edge : node.edges) {
                 long childRequests = checkedMultiply(edge.requestMultiplier, patternTimes,
                         "child_request_overflow");
@@ -1458,7 +1462,13 @@ public final class AelisPlanner {
             checkpoint(pauseCheckpoint);
             if (orderedInput.reusable()) {
                 GraphReusableInput reusableInput = orderedInput.reusableInput;
-                if (reusableInput.mode != BoundaryInputMode.INVARIANT_REUSABLE
+                if (reusableInput.mode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
+                    if (!allocateDeterministicDamageInput(
+                            inventory, reusableInput.input, reusableInput.child,
+                            reusableInput.multiplier, patternTimes, pauseCheckpoint)) {
+                        throw new Fallback("deterministic_damage_input_unavailable");
+                    }
+                } else if (reusableInput.mode != BoundaryInputMode.INVARIANT_REUSABLE
                         || !leaseInvariantReusableInput(
                                 inventory, reusableInput, patternTimes,
                                 returnedReusableInputs, pauseCheckpoint)) {
@@ -4691,15 +4701,30 @@ public final class AelisPlanner {
         for (BoundaryInputPlan inputPlan : inputPlans) {
             if (inputPlan.mode != BoundaryInputMode.DETERMINISTIC_DAMAGE) {
                 if (inputPlan.mode == BoundaryInputMode.INVARIANT_REUSABLE) {
+                    // AE2 records both missing and returned container items in
+                    // the same counter, so prove the batch can actually start
+                    // before treating its contents as returns. Otherwise a
+                    // network without any catalyst would be planned as if the
+                    // recipe handed one back.
+                    if (!catalystAvailableAtRoot(
+                            attempt, inputPlan.child, inputPlan.requestedAmount,
+                            pauseCheckpoint)) {
+                        return rejectReusableBoundary(node, details,
+                                "insufficient_reusable_input", null);
+                    }
                     var returnedByInput = new KeyCounter();
-                    inputPlan.child.molecularmanipulator$request(
-                            attempt, inputPlan.requestedAmount, returnedByInput);
-                    for (var stack : returnedByInput) {
-                        long mergedAmount = checkedAdd(
-                                containerItems.get(stack.getKey()),
-                                stack.getLongValue(),
-                                "reusable_return_count_overflow");
-                        containerItems.set(stack.getKey(), mergedAmount);
+                    if (reusableInputAvailable(
+                            attempt, inputPlan.child,
+                            inputPlan.requestedAmount, pauseCheckpoint)) {
+                        inputPlan.child.molecularmanipulator$request(
+                                attempt, inputPlan.requestedAmount, returnedByInput);
+                        for (var stack : returnedByInput) {
+                            long mergedAmount = checkedAdd(
+                                    containerItems.get(stack.getKey()),
+                                    stack.getLongValue(),
+                                    "reusable_return_count_overflow");
+                            containerItems.set(stack.getKey(), mergedAmount);
+                        }
                     }
                     try {
                         long additionalInputUses =
@@ -4766,6 +4791,41 @@ public final class AelisPlanner {
                     node.barrierReason, describePattern(details));
         }
         return true;
+    }
+
+    /**
+     * Proves that the requested catalyst amount is really available in the
+     * single-item states the boundary classified as invariant reusable.
+     */
+    private static boolean reusableInputAvailable(
+            CraftingSimulationState inventory, AelisCraftingTreeNodeBridge child,
+            long requestedAmount, PauseCheckpoint pauseCheckpoint)
+            throws InterruptedException {
+        if (requestedAmount <= 0 || child.molecularmanipulator$getAmount() != 1) {
+            return false;
+        }
+        long remaining = requestedAmount;
+        var selected = new KeyCounter();
+        for (InputTemplate template
+                : child.molecularmanipulator$getValidItemTemplates(inventory)) {
+            checkpoint(pauseCheckpoint);
+            if (remaining == 0) {
+                return true;
+            }
+            if (template == null || template.key() == null || template.amount() != 1) {
+                return false;
+            }
+            long available = inventory.extract(
+                    template.key(), Long.MAX_VALUE, Actionable.SIMULATE);
+            available = Math.max(0, available - selected.get(template.key()));
+            long selectedAmount = Math.min(remaining, available);
+            if (selectedAmount == 0) {
+                continue;
+            }
+            selected.add(template.key(), selectedAmount);
+            remaining -= selectedAmount;
+        }
+        return remaining == 0;
     }
 
     private static boolean canSatisfyConsumableBoundaryInputFromStock(
@@ -4890,6 +4950,31 @@ public final class AelisPlanner {
      * returns every exact remainder produced by the recipe. Input and remainder
      * byte costs are nevertheless recorded for every logical use.</p>
      */
+    /**
+     * Reserves the deterministic-damage tools a node needs for
+     * {@code patternTimes} executions.
+     *
+     * <p>Patterns with a deterministic-damage input stay part of the aggregated
+     * graph so their consumable children are planned by AELIS instead of AE2's
+     * per-item native loop; the tool side is batched here, exactly like the
+     * reusable-boundary path does for the same pattern shape.</p>
+     */
+    private static void allocateDeterministicDamageInputs(Node node,
+            CraftingSimulationState inventory, long patternTimes,
+            PauseCheckpoint pauseCheckpoint)
+            throws CraftBranchFailure, InterruptedException, Fallback {
+        for (GraphReusableInput reusable : node.reusableInputs) {
+            if (reusable.mode != BoundaryInputMode.DETERMINISTIC_DAMAGE) {
+                continue;
+            }
+            if (!allocateDeterministicDamageInput(
+                    inventory, reusable.input, reusable.child,
+                    reusable.multiplier, patternTimes, pauseCheckpoint)) {
+                throw new Fallback("deterministic_damage_input_unavailable");
+            }
+        }
+    }
+
     private static boolean allocateDeterministicDamageInput(
             CraftingSimulationState inventory, IPatternDetails.IInput input,
             AelisCraftingTreeNodeBridge child, long inputMultiplier,
@@ -5181,6 +5266,18 @@ public final class AelisPlanner {
         }
 
         long freshlyRequested = remaining;
+        if (freshlyRequested > 0
+                && catalystAvailableAtRoot(
+                        inventory, reusableInput.child, freshlyRequested,
+                        pauseCheckpoint)) {
+            // A proven self-returning catalyst only has to exist once. Nested
+            // leases of one batch can hold it in flight inside the simulated
+            // child states, and asking AE2 for it again would make
+            // CraftingTreeNode.request record a phantom missing entry (or, in
+            // the real attempt, throw CraftBranchFailure) for a catalyst the
+            // network still owns.
+            freshlyRequested = 0;
+        }
         if (freshlyRequested > 0) {
             if (!AelisExecutionPolicy.mayExecuteNativeBoundary(
                     reusableInput.child.molecularmanipulator$getAmount(),
@@ -5202,6 +5299,49 @@ public final class AelisPlanner {
                     additionalLogicalUses);
         }
         return true;
+    }
+
+    /**
+     * Checks whether the whole planning batch, not just the current child
+     * state, can supply {@code needed} units of a reusable catalyst. Nested
+     * transactional leases hand a returning catalyst between child states, so
+     * only the calculation root shows whether the network really owns it.
+     */
+    private static boolean catalystAvailableAtRoot(
+            CraftingSimulationState inventory,
+            AelisCraftingTreeNodeBridge child, long needed,
+            PauseCheckpoint pauseCheckpoint) throws InterruptedException {
+        if (needed <= 0) {
+            return true;
+        }
+        ICraftingInventory root = inventory;
+        while (root instanceof ChildCraftingSimulationState childState) {
+            root = ((AelisChildSimulationStateAccessor) childState)
+                    .appliedenhancements$getParent();
+        }
+        long remaining = needed;
+        var selected = new KeyCounter();
+        for (InputTemplate template
+                : child.molecularmanipulator$getValidItemTemplates(root)) {
+            checkpoint(pauseCheckpoint);
+            if (remaining == 0) {
+                return true;
+            }
+            if (template == null || template.key() == null
+                    || template.amount() != 1) {
+                return false;
+            }
+            long available = root.extract(
+                    template.key(), Long.MAX_VALUE, Actionable.SIMULATE);
+            available = Math.max(0, available - selected.get(template.key()));
+            long selectedAmount = Math.min(remaining, available);
+            if (selectedAmount == 0) {
+                continue;
+            }
+            selected.add(template.key(), selectedAmount);
+            remaining -= selectedAmount;
+        }
+        return remaining == 0;
     }
 
     private static long extractTemplateMultipliers(CraftingSimulationState inventory,
@@ -6334,9 +6474,13 @@ public final class AelisPlanner {
                             || node.key.equals(childBridge.molecularmanipulator$getWhat())) {
                         throw new Barrier("unsupported_reusable_input");
                     }
-                    if (inputMode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
-                        throw new Barrier("recursive_durability_input");
-                    }
+                    // Both INVARIANT_REUSABLE and DETERMINISTIC_DAMAGE inputs stay in
+                    // the graph. Deterministic damage variants are batched by
+                    // allocateDeterministicDamageInput during execution, and the
+                    // single-unit selected input with a positive multiplier checked
+                    // above is exactly the shape that batcher accepts. Keeping the
+                    // pattern inside the graph is what lets its consumable children be
+                    // aggregated instead of forcing a native linear boundary.
                     hasReusableInput = true;
                 }
                 boolean quantityFeedbackInput = quantityFeedbackCandidate
