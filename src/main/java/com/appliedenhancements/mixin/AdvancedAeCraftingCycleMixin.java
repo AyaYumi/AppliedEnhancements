@@ -38,8 +38,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Pseudo
-// Keep the guarded inventory outside batching wrappers, including their extractions after original.call.
-@Mixin(targets = "net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic", remap = false, priority = 1100)
+// Apply after default-priority CPU observers, matching the Forge integration.
+@Mixin(targets = "net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic", remap = false, priority = 900)
 public abstract class AdvancedAeCraftingCycleMixin {
     @Shadow public abstract ListCraftingInventory getInventory();
     @Shadow public abstract GenericStack getFinalJobOutput();

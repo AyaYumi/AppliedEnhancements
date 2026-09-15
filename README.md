@@ -10,17 +10,18 @@ Applied Enhancements is a NeoForge quality-of-life and performance addon for App
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.7`
+> Current version: `1.0.8`
 >
 > Target: Minecraft `1.21.1` / NeoForge / Java `21`
 
-## What's new in 1.0.7
+## What's new in 1.0.8
 
 | Area | Update |
 |---|---|
+| CPU observer compatibility | Native AE2 and AdvancedAE CPU Mixin priorities change from 1100 to 900, matching the Forge adjustment for the AE2 Crafting Time report. Runtime compatibility remains to be verified. |
 | Cyclic dispatch crash | Fixed a server crash when native AE2 or AdvancedAE quantum CPUs dispatch a cycle step with no protected inputs. A successful single provider push now advances that step by one craft. |
 | Dispatch accounting | Steps with protected inputs retain strict batch counting. Rejected or failed provider pushes restore the previous cycle runtime state. |
-| Integration compatibility | Public Java API signatures and internal payload protocol `3` are unchanged from `1.0.6`. Custom CPUs must still supply their own verified dispatch count for steps without protected inputs. |
+| Integration compatibility | Public Java API signatures and internal payload protocol `3` are unchanged from `1.0.7`. Custom CPUs must still supply their own verified dispatch count for steps without protected inputs. |
 
 ## Features
 
@@ -65,7 +66,7 @@ Quantum CPU, smart-doubling and order-package integration additionally use the o
 Install the same Applied Enhancements release build on both the client and server, together with compatible NeoForge and AE2 versions.
 
 ```text
-mods/appliedenhancements-1.0.7.jar
+mods/appliedenhancements-1.0.8.jar
 ```
 
 ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
@@ -290,14 +291,14 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
 Build output:
 
 ```text
-build/libs/appliedenhancements-1.0.7.jar
+build/libs/appliedenhancements-1.0.8.jar
 ```
 
 ## Validation
 
-Version `1.0.7` builds successfully with Java `21` and passes all `363` repository unit tests, with zero failures, errors, or skipped tests. Run `cleanTest build --no-configuration-cache` with the Gradle Wrapper to repeat the unit suite and build the JAR.
+Version `1.0.8` builds successfully with Java `21` and passes all `363` repository unit tests, with zero failures, errors, or skipped tests. Run `cleanTest build --no-configuration-cache` with the Gradle Wrapper to repeat the unit suite and build the JAR.
 
-The new regression test verifies that a native provider push advances a step without protected inputs by one craft. Existing tests continue to check strict batch counting and rejection by the public counting helper when protected inputs are absent. The reported modpack crash has not been replayed with this release.
+The regression test added in `1.0.7` verifies that a native provider push advances a step without protected inputs by one craft. Existing tests continue to check strict batch counting and rejection by the public counting helper when protected inputs are absent. The reported modpack crash has not been replayed with this release.
 
 The four seed-scope tests added in `1.0.6` cover borrowing only the proven amount with real extraction accounting, rejected-branch rollback, rollback of an accepted inner lease after outer failure, and prevention of invented stock or borrowing from another transaction.
 

@@ -49,8 +49,8 @@ import net.minecraft.world.level.Level;
 /**
  * Brackets all pushes to an opted-in provider during one CPU scheduling pass.
  */
-// Keep the guarded inventory outside batching wrappers, including their extractions after original.call.
-@Mixin(value = CraftingCpuLogic.class, remap = false, priority = 1100)
+// Apply after default-priority CPU observers, matching the Forge integration.
+@Mixin(value = CraftingCpuLogic.class, remap = false, priority = 900)
 public abstract class CraftingCpuLogicBatchMixin {
     @Shadow
     private ExecutingCraftingJob job;

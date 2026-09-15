@@ -6,17 +6,18 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 AELIS 合成规划器。
 
-> 当前版本：`1.0.7`
+> 当前版本：`1.0.8`
 >
 > 目标平台：Minecraft `1.21.1` / NeoForge / Java `21`
 
-## 1.0.7 更新
+## 1.0.8 更新
 
 | 项目 | 更新说明 |
 |---|---|
+| CPU 观察逻辑兼容 | 同步 Forge 分支针对 AE2 Crafting Time 反馈的调整，将原生 AE2 和 AdvancedAE CPU Mixin 优先级从 1100 改为 900；联用效果仍待实测 |
 | 循环派发崩溃 | 修复原生 AE2 和 AdvancedAE 量子 CPU 派发无受保护输入的循环步骤时导致服务器崩溃的问题；成功的单次 Provider 派发现在按一次合成推进 |
 | 派发计数 | 有受保护输入的步骤继续严格校验批量次数；Provider 拒绝或派发失败时恢复之前的循环运行状态 |
-| 接入兼容性 | 相比 `1.0.6`，公共 Java API 签名及内部载荷协议 `3` 均保持不变；独立 CPU 对无受保护输入步骤仍需自行确定真实派发次数 |
+| 接入兼容性 | 相比 `1.0.7`，公共 Java API 签名及内部载荷协议 `3` 均保持不变；独立 CPU 对无受保护输入步骤仍需自行确定真实派发次数 |
 
 ## 功能概览
 
@@ -62,7 +63,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
 
 ```text
-build/libs/appliedenhancements-1.0.7.jar
+build/libs/appliedenhancements-1.0.8.jar
 ```
 
 同时需要安装匹配版本的 NeoForge 与 AE2。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
@@ -275,7 +276,7 @@ ServerEvents.tags('item', event => {
 构建产物位于：
 
 ```text
-build/libs/appliedenhancements-1.0.7.jar
+build/libs/appliedenhancements-1.0.8.jar
 ```
 
 ## 验证范围
@@ -292,9 +293,9 @@ build/libs/appliedenhancements-1.0.7.jar
 - 手动计划库存预留的全有或全无、并发防超卖、提交所有权与幂等释放；
 - Mixin 所属包和目标源码的结构性保护。
 
-`1.0.7` 使用 Java `21` 构建成功，仓库全部 `363` 项单元测试通过，失败、错误、跳过均为零。使用 Gradle Wrapper 执行 `cleanTest build --no-configuration-cache` 可重新运行单元测试并构建 JAR。
+`1.0.8` 使用 Java `21` 构建成功，仓库全部 `363` 项单元测试通过，失败、错误、跳过均为零。使用 Gradle Wrapper 执行 `cleanTest build --no-configuration-cache` 可重新运行单元测试并构建 JAR。
 
-新增回归测试验证原生 Provider 派发将无受保护输入的步骤推进一次。已有测试继续覆盖严格批量计数，以及公共计数辅助方法对无受保护输入步骤的拒绝行为。本次发行尚未在报错整合包中重放崩溃场景。
+`1.0.7` 新增的回归测试验证原生 Provider 派发将无受保护输入的步骤推进一次。已有测试继续覆盖严格批量计数，以及公共计数辅助方法对无受保护输入步骤的拒绝行为。本次发行尚未在报错整合包中重放崩溃场景。
 
 `1.0.6` 新增的 4 项种子作用域测试覆盖：只借用已证明需要的种子并计入真实提取、被拒绝分支回滚、内层已接受借用在外层失败后回滚，以及禁止凭空生成库存或跨事务借用。
 

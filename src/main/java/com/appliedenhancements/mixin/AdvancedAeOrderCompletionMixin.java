@@ -33,7 +33,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Quantum counterpart of Data Energistics' native COMPLETE_WITHOUT_OUTPUT handling. */
 @Pseudo
-@Mixin(targets = "net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic", remap = false, priority = 1100)
+// Apply after default-priority CPU observers, matching the Forge integration.
+@Mixin(targets = "net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic", remap = false, priority = 900)
 public abstract class AdvancedAeOrderCompletionMixin {
     @Shadow public abstract GenericStack getFinalJobOutput();
     @Shadow public abstract ICraftingLink getLastLink();
