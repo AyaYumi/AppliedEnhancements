@@ -38,7 +38,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Pseudo
 // Keep the guarded inventory outside batching wrappers, including their extractions after original.call.
-@Mixin(targets = "net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic", remap = false, priority = 1100)
+// Apply after optional observer mixins such as AE2 Crafting Time so their
+// executeCrafting hooks remain visible inside this cycle wrapper.
+@Mixin(targets = "net.pedroksl.advanced_ae.common.logic.AdvCraftingCPULogic", remap = false, priority = 900)
 public abstract class AdvancedAeCraftingCycleMixin {
     @Shadow public abstract ListCraftingInventory getInventory();
     @Shadow public abstract GenericStack getFinalJobOutput();

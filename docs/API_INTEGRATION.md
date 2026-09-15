@@ -327,6 +327,8 @@ Call `preparePlan` before constructing the CPU's task map; reading `getPlan` alo
 
 Since `1.0.7-forge`, the built-in native AE2 and AdvancedAE quantum CPU integrations count a single provider push as one craft when the active step has no protected inputs. They retain strict counting when protected inputs are present and restore cycle runtime state when the provider rejects or fails the push. This fix does not change the public `dispatchedCrafts` contract: custom CPUs must determine their own actual count for such steps, including any batching they perform. An empty protected-input map does not necessarily mean the pattern itself has no ingredients.
 
+The native and AdvancedAE CPU mixins are intentionally ordered after ordinary observer mixins. This allows addons such as AE2 Crafting Time `1.2.5` to keep their `executeCrafting` locals, provider iterator, power, and `pushPattern` observation hooks while Applied Enhancements adds its cycle, completion, and batch wrappers around the resulting methods.
+
 ```java
 plan = AelisCycleExecutionApi.preparePlan(plan);
 var runtime = AelisCycleExecutionApi.getPlan(plan)

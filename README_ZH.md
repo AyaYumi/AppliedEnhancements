@@ -17,6 +17,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 Forge 功
 | 循环派发崩溃 | 同步 1.21.1 的修复，处理原生 AE2 和 AdvancedAE 量子 CPU 派发无受保护输入循环步骤时的崩溃；成功的单次 Provider 派发按一次合成推进 |
 | 派发计数 | 有受保护输入的步骤继续严格校验批量次数；Provider 拒绝或派发失败时恢复之前的循环运行状态 |
 | 接入兼容性 | 相比 `1.0.6-forge`，公共 Java API 签名及 Forge SimpleChannel 协议 `1.0.6-forge-1` 均保持不变；独立 CPU 对无受保护输入步骤仍需自行确定真实派发次数 |
+| AE2 Crafting Time 兼容 | 原生和 AdvancedAE CPU 包装器改为在普通观察类 Mixin（包括 AE2 Crafting Time 1.2.5）之后运行，保留其 Provider 与样板观察注入。 |
 
 ## Forge 1.20.1 移植
 

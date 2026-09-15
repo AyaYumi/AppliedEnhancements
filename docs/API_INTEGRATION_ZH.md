@@ -321,6 +321,8 @@ Forge／AE2 15 使用静态物品与流体注册表进行 NBT 序列化，优先
 
 从 `1.0.7-forge` 起，内置原生 AE2 和 AdvancedAE 量子 CPU 接入在当前步骤没有受保护输入时，将单次 Provider 派发按一次合成计数；存在受保护输入时仍严格计数，Provider 拒绝或派发失败时恢复循环运行状态。此修复不改变公共 `dispatchedCrafts` 的约定：独立 CPU 对此类步骤仍需自行确定实际次数，包括自身执行的批量。受保护输入表为空并不一定表示样板本身没有原料。
 
+原生和 AdvancedAE CPU Mixin 特意排在普通观察类 Mixin 之后，使 AE2 Crafting Time `1.2.5` 等附属模组可以保留对 `executeCrafting` 局部变量、Provider 迭代器、功率和 `pushPattern` 的观察注入；Applied Enhancements 再围绕已经完成观察注入的方法增加循环、完成和批次包装。
+
 ```java
 plan = AelisCycleExecutionApi.preparePlan(plan);
 var runtime = AelisCycleExecutionApi.getPlan(plan)

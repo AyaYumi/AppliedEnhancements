@@ -21,6 +21,7 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 | Cyclic dispatch crash | Ports the 1.21.1 fix for native AE2 and AdvancedAE quantum CPU dispatches of cycle steps without protected inputs. A successful single provider push advances the step by one craft. |
 | Dispatch accounting | Steps with protected inputs retain strict batch counting. Rejected or failed provider pushes restore the previous cycle runtime state. |
 | Integration compatibility | Public Java API signatures and Forge SimpleChannel protocol `1.0.6-forge-1` are unchanged from `1.0.6-forge`. Custom CPUs must still supply their own verified dispatch count for steps without protected inputs. |
+| AE2 Crafting Time compatibility | Native and AdvancedAE CPU wrappers run after ordinary observer mixins, including AE2 Crafting Time 1.2.5, so dispatch timing observers can retain their provider and pattern hooks. |
 
 ## Forge 1.20.1 port
 

@@ -49,7 +49,9 @@ import net.minecraft.world.level.Level;
  * Brackets all pushes to an opted-in provider during one CPU scheduling pass.
  */
 // Keep the guarded inventory outside batching wrappers, including their extractions after original.call.
-@Mixin(value = CraftingCpuLogic.class, remap = false, priority = 1100)
+// Let observer mixins from addons such as AE2 Crafting Time transform the native
+// method first; this wrapper then composes around the already-observed dispatch.
+@Mixin(value = CraftingCpuLogic.class, remap = false, priority = 900)
 public abstract class CraftingCpuLogicBatchMixin {
     @Shadow
     private ExecutingCraftingJob job;
