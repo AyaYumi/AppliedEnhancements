@@ -16,12 +16,17 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 
 ## What's new in 1.0.8
 
-| Area | Update |
-|---|---|
-| CPU observer compatibility | Native AE2 and AdvancedAE CPU Mixin priorities change from 1100 to 900, matching the Forge adjustment for the AE2 Crafting Time report. Runtime compatibility remains to be verified. |
-| Cyclic dispatch crash | Fixed a server crash when native AE2 or AdvancedAE quantum CPUs dispatch a cycle step with no protected inputs. A successful single provider push now advances that step by one craft. |
-| Dispatch accounting | Steps with protected inputs retain strict batch counting. Rejected or failed provider pushes restore the previous cycle runtime state. |
-| Integration compatibility | Public Java API signatures and internal payload protocol `3` are unchanged from `1.0.7`. Custom CPUs must still supply their own verified dispatch count for steps without protected inputs. |
+Compared with 1.0.7:
+
+- Fixed reusable-catalyst accounting across nested AELIS batch planning. A catalyst that is already reserved within the batch is no longer reported as missing; an absent catalyst is not counted as a returned item.
+- Expanded recognition of stable self-returning damageable inputs, including ProjectE-style charge items. Inputs with Unbreaking remain excluded from this classification.
+- Kept supported deterministic-durability tool recipes inside the aggregated AELIS graph, with batched tool allocation instead of forcing their consumable ingredients through per-item native planning.
+- Avoided passing a null plan to third-party confirmation-menu listeners, addressing the AE2 Crafting Time 1.2.5 interaction that could prevent a calculation from starting.
+- Added native-planner fallback for eligible failed requests up to `Integer.MAX_VALUE`, target-node checks, and automatic closure after 100 server ticks when a confirmation menu has no planning job or result. Active calculations are not subject to this timeout.
+- Adjusted native AE2 and AdvancedAE CPU Mixin priorities from 1100 to 900 to accommodate CPU observers. Full modpack compatibility still requires runtime validation.
+- Added English and Chinese messages for unavailable targets and calculations that never started.
+
+Public Java API signatures and network protocol `3` remain unchanged from 1.0.7. The cyclic dispatch crash fix was already included in 1.0.7.
 
 ## Features
 
@@ -296,25 +301,9 @@ build/libs/appliedenhancements-1.0.8.jar
 
 ## Validation
 
-Version `1.0.8` builds successfully with Java `21` and passes all `363` repository unit tests, with zero failures, errors, or skipped tests. Run `cleanTest build --no-configuration-cache` with the Gradle Wrapper to repeat the unit suite and build the JAR.
+The repository unit tests cover quantity boundaries, AELIS planning, cyclic execution, inventory reservations, public API compatibility, localization, and platform integration contracts. Run `cleanTest build --no-daemon --console=plain` with the Gradle Wrapper to rebuild and rerun the suite.
 
-The regression test added in `1.0.7` verifies that a native provider push advances a step without protected inputs by one craft. Existing tests continue to check strict batch counting and rejection by the public counting helper when protected inputs are absent. The reported modpack crash has not been replayed with this release.
-
-The four seed-scope tests added in `1.0.6` cover borrowing only the proven amount with real extraction accounting, rejected-branch rollback, rollback of an accepted inner lease after outer failure, and prevention of invented stock or borrowing from another transaction.
-
-Existing separate integration records report six smithing-template duplication scenarios, submission and completion through the game UI, and regression checks with an existing API caller. The `1.0.5` split-keybinding implementation also passed a separate client check covering default right-click versus Alt + right-click, GUI-only activation, independent keyboard routing and unbinding, custom modifiers, options save/reload, and migration of the old shared binding. These external checks are not part of the repository's default unit-test task.
-
-The earlier `1.0.4` crafting/API runtime validation snapshot is retained below:
-
-| Scope | Result | Interpretation |
-|---|---:|---|
-| Repository unit tests | `358` passed | Zero failures, errors or skipped tests |
-| Isolated runtime with Data Energistics | `186` required GameTests passed | `35` Applied Enhancements scenarios plus `151` dependency tests |
-| Isolated runtime without Data Energistics | `175` required GameTests passed | `24` Applied Enhancements scenarios plus `151` dependency tests; verifies the optional integration can be absent |
-
-The targeted scenarios covered native and quantum CPU cycling, reinvested outputs, seed retention, actual smart batches, virtual order-package completion, saved state, public API compatibility and Quick Move boundaries. These runtime results came from a maintainer's separate integration harness with optional mod dependencies; that harness is not part of the standard checked-in test source set. A fresh checkout's plain `runGameTestServer` does not reproduce all 35 scenarios, and dependency GameTests are not this mod's own tests. A no-tests GameTest exit is not a successful scenario run.
-
-Use `test` for repository unit tests. Client screens and complete modpack behavior still require runtime checks, including ordinary/large/invalid quantities, progress display, configuration toggles and the automatic-planner-off path.
+The default GameTest task does not reproduce the separate historical integration harness. Client/server behavior and optional-mod compatibility still require real modpack checks; unit-test success does not establish full runtime compatibility.
 
 ## Known limitations
 
