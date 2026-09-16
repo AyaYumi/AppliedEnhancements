@@ -16,12 +16,17 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 
 ## What's new in 1.0.8-forge
 
-| Area | Update |
-|---|---|
-| Cyclic dispatch crash | Ports the 1.21.1 fix for native AE2 and AdvancedAE quantum CPU dispatches of cycle steps without protected inputs. A successful single provider push advances the step by one craft. |
-| Dispatch accounting | Steps with protected inputs retain strict batch counting. Rejected or failed provider pushes restore the previous cycle runtime state. |
-| Integration compatibility | Public Java API signatures and Forge SimpleChannel protocol `1.0.6-forge-1` are unchanged from `1.0.7-forge`. Custom CPUs must still supply their own verified dispatch count for steps without protected inputs. |
-| AE2 Crafting Time compatibility | Native and AdvancedAE CPU Mixin priorities change from 1100 to 900 to address the AE2 Crafting Time 1.2.5 report. Runtime compatibility remains to be verified. |
+Compared with 1.0.7-forge:
+
+- Fixed reusable-catalyst accounting across nested AELIS batch planning. A catalyst that is already reserved within the batch is no longer reported as missing; an absent catalyst is not counted as a returned item.
+- Expanded recognition of stable self-returning damageable inputs, including ProjectE-style charge items. Inputs with Unbreaking remain excluded from this classification.
+- Kept supported deterministic-durability tool recipes inside the aggregated AELIS graph, with batched tool allocation instead of forcing their consumable ingredients through per-item native planning.
+- Avoided passing a null plan to third-party confirmation-menu listeners, addressing the AE2 Crafting Time 1.2.5 interaction that could prevent a calculation from starting.
+- Added native-planner fallback for eligible failed requests up to `Integer.MAX_VALUE`, target-node checks, and automatic closure after 100 server ticks when a confirmation menu has no planning job or result. Active calculations are not subject to this timeout.
+- Adjusted native AE2 and AdvancedAE CPU Mixin priorities from 1100 to 900 to accommodate CPU observers. Full modpack compatibility still requires runtime validation.
+- Added English and Chinese messages for unavailable targets and calculations that never started.
+
+Public Java API signatures and network protocol `1.0.6-forge-1` remain unchanged from 1.0.7-forge. The cyclic dispatch crash fix was already included in 1.0.7-forge.
 
 ## Forge 1.20.1 port
 
@@ -310,20 +315,9 @@ build/libs/appliedenhancements-1.0.8-forge.jar
 
 ## Validation
 
-On 2026-09-15, version `1.0.8-forge` built successfully and passed all `371` repository unit tests with Java `17` as the target: zero failures, errors or skipped tests. Run `cleanTest build --no-daemon --console=plain` with the Gradle Wrapper to repeat the suite and build the JAR. The distributable JAR was checked for Java 17 bytecode, both CPU dispatch integrations, Forge metadata, the Mixin refmap and bundled MixinExtras.
+The repository unit tests cover quantity boundaries, AELIS planning, cyclic execution, inventory reservations, public API compatibility, localization, and platform integration contracts. Run `cleanTest build --no-daemon --console=plain` with the Gradle Wrapper to rebuild and rerun the suite.
 
-The regression test added in `1.0.7-forge` verifies that a native provider push advances a step without protected inputs by one craft. Existing tests cover strict batch counting, rejection by the public counting helper when protected inputs are absent, the Forge wireless-screen class, and every row/column of the ExtendedAE selection area at multiple screen origins and row counts. This release's cyclic-dispatch fix has not yet been validated in a live Forge modpack.
-
-The unit suite covers quantity bounds, planner fallback and cycle/seed accounting, configuration and packet contracts, inventory reservations, pattern movement, and API boundaries. A separate Forge 47.4.20 / AE2 15.4.10 modpack record from 2026-09-08 covers:
-
-| Runtime check | Recorded result |
-|---|---|
-| Ordinary crafting | Requested 64 planks through an ME terminal; 16 logs consumed and 64 planks produced. |
-| AELIS crafting | A 1024-plank order and subsequent 64-plank orders completed with matching inventory changes; client and server reported `AELIS`, and the final title displayed the AELIS result. |
-| Pattern management | Duplicate/invalid filters were exercised; 4 patterns moved from an OmniSequence provider to an AE2 provider and back with server-side counts checked. |
-| Configured amount limit | `2147483648` was rejected with the existing limit of `2147483647`; execution above that limit was not tested. |
-
-These are recorded modpack checks, not the default GameTest task. On 2026-09-09, a separate server-side runtime probe loaded 21 targets, confirmed the crafting-menu bridge was injected, round-tripped cycle NBT with real item keys, and loaded the network handler successfully. The default `runServer` also reached the normal EULA prompt after GuideME was added. This is startup/integration evidence, not a connected multiplayer session or a large cyclic-order test; Data Energistics virtual orders and long-running performance remain unverified. The earlier NeoForge GameTest totals do not describe this port.
+The default GameTest task does not reproduce the separate historical integration harness. Client/server behavior and optional-mod compatibility still require real modpack checks; unit-test success does not establish full runtime compatibility.
 
 ## Known limitations
 
