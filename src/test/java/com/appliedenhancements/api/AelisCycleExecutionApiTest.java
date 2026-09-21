@@ -18,9 +18,12 @@ import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.inv.ListCraftingInventory;
+import appeng.crafting.CraftingPlan;
 import com.appliedenhancements.test.TestAEKey;
+import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier;
 import com.github.appliedenhancements.integration.ae2.AelisCycleExecutionPlanCarrier;
 import com.github.appliedenhancements.integration.ae2.AelisCyclicCraftAmountsCarrier;
+import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,9 +131,65 @@ class AelisCycleExecutionApiTest {
         assertFalse(AelisCycleExecutionApi.requiresCycleAwareCpu(cleared));
     }
 
+    @Test
+    void exactOutputTotalsAloneDoNotMakeRepresentableTasksPreviewOnly() {
+        var outputKey = new TestAEKey("projected_output");
+        var exact = BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE);
+        var source = new TestPlan(null, Map.of(), Map.of(outputKey, exact));
+        var nativePlan = new CraftingPlan(
+                new GenericStack(outputKey, 1), 1, false, false,
+                new KeyCounter(), new KeyCounter(), new KeyCounter(), Map.of());
+
+        var projected = AelisCycleExecutionApi.copyMetadata(source, nativePlan);
+
+        assertFalse(projected.simulation());
+        assertEquals(Map.of(outputKey, exact),
+                ((AelisBigIntegerCraftAmountsCarrier) projected)
+                        .appliedenhancements$getBigIntegerCraftAmounts());
+    }
+
     private record PlainPlan(GenericStack finalOutput, long bytes, boolean simulation,
             boolean multiplePaths, KeyCounter usedItems, KeyCounter emittedItems,
             KeyCounter missingItems, Map<IPatternDetails, Long> patternTimes) implements ICraftingPlan {}
+
+    @Test void projectedPatternCountsDoNotVetoSubmissionAndMetadataSurvivesCopy() {
+        var key = new TestAEKey("projected_pattern");
+        var exact = BigInteger.TEN.pow(21);
+        var nativePlan = new CraftingPlan(new GenericStack(key, 1), 1, false, false,
+                new KeyCounter(), new KeyCounter(), new KeyCounter(), Map.of());
+        var source = AelisCycleExecutionApi.copyMetadata(new TestPlan(null, Map.of(), Map.of(key, exact)), nativePlan);
+        var metadata = (AelisBigIntegerCraftAmountsCarrier) source;
+        metadata.appliedenhancements$setPreviewOnly(true);
+        metadata.appliedenhancements$setBigIntegerMissingAmounts(Map.of(key, exact.multiply(BigInteger.TEN)));
+        metadata.appliedenhancements$setBigIntegerStoredAmounts(Map.of(key, exact.multiply(BigInteger.valueOf(1024))));
+        metadata.appliedenhancements$setBigIntegerInfiniteAmounts(Map.of(key, exact));
+        var pattern = (IPatternDetails) java.lang.reflect.Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[] {IPatternDetails.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> throw new AssertionError(method.getName());
+                });
+        metadata.appliedenhancements$setBigIntegerPatternTimes(Map.of(pattern, exact));
+        metadata.appliedenhancements$setBigIntegerBytes(exact.add(BigInteger.ONE));
+        var copied = AelisCycleExecutionApi.copyMetadata(source, nativePlan);
+        assertFalse(copied.simulation());
+        assertEquals(exact.add(BigInteger.ONE),
+                ((AelisBigIntegerCraftAmountsCarrier) copied).appliedenhancements$getBigIntegerBytes());
+        assertTrue(((AelisBigIntegerCraftAmountsCarrier) copied).appliedenhancements$isPreviewOnly());
+        assertEquals(metadata.appliedenhancements$getBigIntegerMissingAmounts(),
+                ((AelisBigIntegerCraftAmountsCarrier) copied).appliedenhancements$getBigIntegerMissingAmounts());
+        assertEquals(metadata.appliedenhancements$getBigIntegerStoredAmounts(),
+                ((AelisBigIntegerCraftAmountsCarrier) copied).appliedenhancements$getBigIntegerStoredAmounts());
+        assertEquals(metadata.appliedenhancements$getBigIntegerInfiniteAmounts(),
+                ((AelisBigIntegerCraftAmountsCarrier) copied).appliedenhancements$getBigIntegerInfiniteAmounts());
+        assertEquals(Map.of(pattern, exact),
+                ((AelisBigIntegerCraftAmountsCarrier) copied).appliedenhancements$getBigIntegerPatternTimes());
+        var missingPlan = new PlainPlan(nativePlan.finalOutput(), 1, true, false,
+                new KeyCounter(), new KeyCounter(), new KeyCounter(), Map.of());
+        assertTrue(AelisCycleExecutionApi.copyMetadata(copied, missingPlan).simulation(),
+                "An actual simulation must remain a simulation");
+    }
 
     @Test
     void exposesPlanMetadataAndRequiresExplicitCpuCapability() {
@@ -149,12 +208,27 @@ class AelisCycleExecutionApiTest {
         assertFalse(AelisCycleExecutionApi.supports(new PlainCpu()));
     }
 
-    private record TestPlan(AelisCycleExecutionPlan cyclePlan, Map<AEKey, Long> amounts)
-            implements ICraftingPlan, AelisCycleExecutionPlanCarrier, AelisCyclicCraftAmountsCarrier {
-        TestPlan(AelisCycleExecutionPlan cyclePlan) { this(cyclePlan, Map.of()); }
+    private record TestPlan(AelisCycleExecutionPlan cyclePlan,
+            Map<AEKey, Long> amounts, Map<AEKey, BigInteger> exactAmounts)
+            implements ICraftingPlan, AelisCycleExecutionPlanCarrier,
+            AelisCyclicCraftAmountsCarrier, AelisBigIntegerCraftAmountsCarrier {
+        TestPlan(AelisCycleExecutionPlan cyclePlan) {
+            this(cyclePlan, Map.of(), Map.of());
+        }
+
+        TestPlan(AelisCycleExecutionPlan cyclePlan, Map<AEKey, Long> amounts) {
+            this(cyclePlan, amounts, Map.of());
+        }
 
         @Override public Map<AEKey, Long> appliedenhancements$getCyclicCraftAmounts() { return amounts; }
         @Override public void appliedenhancements$setCyclicCraftAmounts(Map<AEKey, Long> values) {
+            throw new UnsupportedOperationException();
+        }
+        @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerCraftAmounts() {
+            return exactAmounts;
+        }
+        @Override public void appliedenhancements$setBigIntegerCraftAmounts(
+                Map<AEKey, BigInteger> values) {
             throw new UnsupportedOperationException();
         }
         @Override

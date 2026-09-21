@@ -78,6 +78,17 @@ public final class PatternQuickMoveController {
             int guiTop,
             Collection<Slot> menuSlots,
             Map<PatternSlotRef, PatternSlotRef> displayToSource) {
+        return finishSelection(mouseX, mouseY, guiLeft, guiTop, menuSlots, displayToSource, 0);
+    }
+
+    public boolean finishSelection(
+            double mouseX,
+            double mouseY,
+            int guiLeft,
+            int guiTop,
+            Collection<Slot> menuSlots,
+            Map<PatternSlotRef, PatternSlotRef> displayToSource,
+            int slotOffsetY) {
         if (!selecting) {
             return false;
         }
@@ -106,7 +117,7 @@ public final class PatternQuickMoveController {
                 continue;
             }
             int slotX = guiLeft + patternSlot.x;
-            int slotY = guiTop + patternSlot.y;
+            int slotY = guiTop + patternSlot.y + slotOffsetY;
             if (slotX < maxX && slotX + 16 > minX
                     && slotY < maxY && slotY + 16 > minY) {
                 PatternSlotRef source = resolve(patternSlot, displayToSource);
@@ -147,6 +158,14 @@ public final class PatternQuickMoveController {
             GuiGraphics graphics,
             Collection<Slot> menuSlots,
             Map<PatternSlotRef, PatternSlotRef> displayToSource) {
+        renderSelectedSlots(graphics, menuSlots, displayToSource, 0);
+    }
+
+    public void renderSelectedSlots(
+            GuiGraphics graphics,
+            Collection<Slot> menuSlots,
+            Map<PatternSlotRef, PatternSlotRef> displayToSource,
+            int slotOffsetY) {
         if (!enabled) {
             return;
         }
@@ -156,11 +175,11 @@ public final class PatternQuickMoveController {
             }
             PatternSlotRef source = resolve(patternSlot, displayToSource);
             if (cut.contains(source)) {
-                graphics.fill(patternSlot.x, patternSlot.y,
-                        patternSlot.x + 16, patternSlot.y + 16, 0x66FFAA33);
+                graphics.fill(patternSlot.x, patternSlot.y + slotOffsetY,
+                        patternSlot.x + 16, patternSlot.y + slotOffsetY + 16, 0x66FFAA33);
             } else if (selected.contains(source)) {
-                graphics.fill(patternSlot.x, patternSlot.y,
-                        patternSlot.x + 16, patternSlot.y + 16, 0x6655AAFF);
+                graphics.fill(patternSlot.x, patternSlot.y + slotOffsetY,
+                        patternSlot.x + 16, patternSlot.y + slotOffsetY + 16, 0x6655AAFF);
             }
         }
     }

@@ -24,6 +24,7 @@ class ConfigDefaultsTest {
     @Test
     void aelisDefaultsRemainConservative() {
         assertFalse(Config.ENABLE_AUTOMATIC_AELIS_PLANNER.getDefault());
+        assertTrue(Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.getDefault());
         assertFalse(Config.AELIS_DIAGNOSTICS.getDefault());
         assertEquals(100000, Config.AELIS_MAX_NODES.getDefault());
         assertEquals(2000, Config.AELIS_COMPILE_BUDGET_MS.getDefault());
@@ -52,6 +53,7 @@ class ConfigDefaultsTest {
         assertTrue(values.contains("crafting.enable_progress_display"));
         assertTrue(values.contains("crafting.enable_enhanced_material_calculation"));
         assertTrue(values.contains("crafting.aelis.enable_automatic_planner"));
+        assertTrue(values.contains("crafting.aelis.enable_big_integer_planning"));
         assertTrue(values.contains("crafting.aelis.max_nodes"));
         assertTrue(values.contains("crafting.aelis.compile_budget_ms"));
         assertTrue(values.contains("crafting.aelis.enable_diagnostics"));

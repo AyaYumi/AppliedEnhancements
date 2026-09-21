@@ -23,6 +23,7 @@ import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.runtime.CraftingProgressSnapshotOrder;
 import com.appliedenhancements.runtime.CraftingProgressTaskBinding;
+import com.appliedenhancements.runtime.DataEnergisticsMenuCompat;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.appliedenhancements.runtime.TerminalAwareFuture;
@@ -33,6 +34,7 @@ import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgres
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
+import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathMenuBridge;
 import com.github.appliedenhancements.integration.ae2.AelisCyclicCraftAmountsCarrier;
 import com.github.appliedenhancements.network.CraftingCalculationPathPayload;
@@ -53,13 +55,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Objects;
 import java.util.Map;
+import java.math.BigInteger;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Mixin(value = CraftConfirmMenu.class, remap = false)
 public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgressMenuBridge,
-        LongCraftingConfirmMenuBridge, AelisCalculationPathMenuBridge {
+        LongCraftingConfirmMenuBridge, AelisCalculationPathMenuBridge, com.appliedenhancements.ae2.ExactCraftingMenuBridge {
+    @Unique private BigInteger appliedenhancements$exactRequestedAmount;
+
+    @Override public boolean appliedenhancements$planExact(AEKey what, BigInteger requested) {
+        var request = new com.appliedenhancements.api.AelisExactRequest(requested);
+        if (!Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return false;
+        return appliedenhancements$planRequested(what, request.projection(), CalculationStrategy.REPORT_MISSING_ITEMS, requested);
+    }
     @Unique
     private static final AtomicLong appliedenhancements$nextProgressGeneration = new AtomicLong();
 
@@ -106,6 +116,31 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     private Map<AEKey, Long> appliedenhancements$cyclicCraftAmounts = Map.of();
 
     @Unique
+    private Map<AEKey, BigInteger> appliedenhancements$bigIntegerCraftAmounts = Map.of();
+    @Unique private Map<AEKey, BigInteger> appliedenhancements$bigIntegerMissingAmounts = Map.of();
+    @Unique private Map<AEKey, BigInteger> appliedenhancements$bigIntegerStoredAmounts = Map.of();
+    @Unique private BigInteger appliedenhancements$bigIntegerBytes;
+    @Unique private BigInteger appliedenhancements$bigIntegerFinalAmount;
+    @Override public BigInteger appliedenhancements$getBigIntegerFinalAmount() { return appliedenhancements$bigIntegerFinalAmount; }
+    @Override public void appliedenhancements$setBigIntegerFinalAmount(BigInteger value) { appliedenhancements$bigIntegerFinalAmount = value; }
+    @Override public BigInteger appliedenhancements$getBigIntegerBytes() { return appliedenhancements$bigIntegerBytes; }
+    @Override public void appliedenhancements$setBigIntegerBytes(BigInteger bytes) { appliedenhancements$bigIntegerBytes = bytes; }
+    @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerStoredAmounts() {
+        return appliedenhancements$bigIntegerStoredAmounts;
+    }
+    @Override public void appliedenhancements$setBigIntegerStoredAmounts(Map<AEKey, BigInteger> amounts) {
+        appliedenhancements$bigIntegerStoredAmounts = Map.copyOf(amounts);
+    }
+
+    @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerMissingAmounts() {
+        return appliedenhancements$bigIntegerMissingAmounts;
+    }
+
+    @Override public void appliedenhancements$setBigIntegerMissingAmounts(Map<AEKey, BigInteger> amounts) {
+        appliedenhancements$bigIntegerMissingAmounts = Map.copyOf(amounts);
+    }
+
+    @Unique
     private long appliedenhancements$requestedAmount;
 
     @Unique
@@ -140,6 +175,18 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Override
     public void appliedenhancements$setCyclicCraftAmounts(Map<AEKey, Long> amounts) {
         appliedenhancements$cyclicCraftAmounts = Map.copyOf(
+                Objects.requireNonNull(amounts, "amounts"));
+    }
+
+    @Override
+    public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerCraftAmounts() {
+        return appliedenhancements$bigIntegerCraftAmounts;
+    }
+
+    @Override
+    public void appliedenhancements$setBigIntegerCraftAmounts(
+            Map<AEKey, BigInteger> amounts) {
+        appliedenhancements$bigIntegerCraftAmounts = Map.copyOf(
                 Objects.requireNonNull(amounts, "amounts"));
     }
 
@@ -223,9 +270,12 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             CallbackInfoReturnable<Boolean> callback) {
         if (!((CraftConfirmMenu) (Object) this).isClientSide()) {
             appliedenhancements$requestedAmount = amount;
+            appliedenhancements$exactRequestedAmount = null;
             appliedenhancements$calculationStrategy = strategy;
             appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
             appliedenhancements$cyclicCraftAmounts = Map.of();
+            appliedenhancements$bigIntegerCraftAmounts = Map.of();
+            appliedenhancements$bigIntegerMissingAmounts = Map.of();
             appliedenhancements$releaseInventoryReservation();
             appliedenhancements$cancelProgress();
         }
@@ -234,6 +284,11 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Override
     public boolean appliedenhancements$planLong(
             AEKey what, long requestedAmount, CalculationStrategy strategy) {
+        return appliedenhancements$planRequested(what, requestedAmount, strategy, null);
+    }
+
+    @Unique private boolean appliedenhancements$planRequested(AEKey what, long requestedAmount,
+            CalculationStrategy strategy, BigInteger exact) {
         var menu = (CraftConfirmMenu) (Object) this;
         if (menu.isClientSide() || what == null || requestedAmount <= 0 || strategy == null
                 || !Config.ENABLE_LONG_RANGE_CRAFTING.get()) {
@@ -269,6 +324,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         this.whatToCraft = what;
         this.amount = (int) Math.min(requestedAmount, Integer.MAX_VALUE);
         this.appliedenhancements$requestedAmount = requestedAmount;
+        this.appliedenhancements$exactRequestedAmount = exact;
         this.appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
         this.appliedenhancements$cyclicCraftAmounts = Map.of();
 
@@ -292,7 +348,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             effectiveRequester = new CraftingCalculationProgressRequester(requester, progress);
         }
         try {
-            Future<ICraftingPlan> rawJob = grid.getCraftingService().beginCraftingCalculation(
+            Future<ICraftingPlan> rawJob = exact != null
+                    ? com.appliedenhancements.api.AelisExactCraftingService.begin(menu.getLevel(), effectiveRequester, what, exact)
+                    : grid.getCraftingService().beginCraftingCalculation(
                     menu.getLevel(),
                     effectiveRequester,
                     what,
@@ -310,6 +368,10 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Inject(method = "replan", at = @At("HEAD"), cancellable = true)
     private void appliedenhancements$replanLong(CallbackInfo callback) {
         var menu = (CraftConfirmMenu) (Object) this;
+        if (!menu.isClientSide() && appliedenhancements$exactRequestedAmount != null && whatToCraft != null) {
+            if (!appliedenhancements$planExact(whatToCraft, appliedenhancements$exactRequestedAmount)) menu.goBack();
+            callback.cancel(); return;
+        }
         if (menu.isClientSide() || appliedenhancements$requestedAmount <= Integer.MAX_VALUE
                 || this.whatToCraft == null) {
             return;
@@ -329,8 +391,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         if (!menu.isClientSide()) {
             appliedenhancements$releaseInventoryReservation();
         }
+        long requestedAmount = appliedenhancements$effectiveRequestedAmount(menu);
         if (!(menu.getPlayer() instanceof ServerPlayer player)
-                || appliedenhancements$requestedAmount <= Integer.MAX_VALUE
+                || requestedAmount <= Integer.MAX_VALUE
                 || this.whatToCraft == null
                 || menu.getLocator() == null) {
             return;
@@ -341,10 +404,25 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         if (player.containerMenu instanceof CraftAmountMenu amountMenu
                 && amountMenu instanceof LongCraftingAmountMenuBridge bridge) {
             bridge.appliedenhancements$setWhatToCraftLong(
-                    this.whatToCraft, appliedenhancements$requestedAmount);
+                    this.whatToCraft, requestedAmount);
+            DataEnergisticsMenuCompat.restoreAmountScreen(
+                    menu, amountMenu, requestedAmount);
             amountMenu.broadcastChanges();
+            if (appliedenhancements$exactRequestedAmount != null) {
+                PacketDistributor.sendToPlayer(player, new com.appliedenhancements.network.ExactCraftingAmountPayload(
+                        amountMenu.containerId, appliedenhancements$exactRequestedAmount.toString(), false, false));
+            }
         }
         callback.cancel();
+    }
+
+    @Unique
+    private long appliedenhancements$effectiveRequestedAmount(CraftConfirmMenu menu) {
+        if (appliedenhancements$requestedAmount > 0) {
+            return appliedenhancements$requestedAmount;
+        }
+        return DataEnergisticsMenuCompat.requestedAmount(menu)
+                .orElse(this.amount > 0 ? this.amount : 0L);
     }
 
     @WrapOperation(method = "planJob", at = @At(value = "INVOKE",
@@ -387,7 +465,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         Objects.requireNonNull(rawJob, "Crafting service returned a null planning future");
         return new TerminalAwareFuture<>(
                 rawJob,
-                NativeCraftingLongSafety::validatePlan,
                 plan -> {
                     if (!appliedenhancements$progressBinding.isCurrent(progressTask)) {
                         return;
@@ -406,7 +483,10 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                     appliedenhancements$finishFailedProgress(progressTask, failure);
                     var orderedChoiceRejection =
                             AelisOrderedChoicePlanningRejectedException.find(failure);
-                    if (orderedChoiceRejection != null) {
+                    if (com.github.appliedenhancements.crafting.aelis.AelisPlanningLimitException.causedBy(failure)) {
+                        ((CraftConfirmMenu) (Object) this).getPlayer().sendSystemMessage(
+                                Component.translatable("message.appliedenhancements.planning_path_limit"));
+                    } else if (orderedChoiceRejection != null) {
                         ((CraftConfirmMenu) (Object) this).getPlayer().sendSystemMessage(
                                 Component.translatable(
                                         "message.appliedenhancements.ordered_choice_native_too_large",
@@ -484,12 +564,30 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                 this.result instanceof AelisCyclicCraftAmountsCarrier carrier
                         ? carrier.appliedenhancements$getCyclicCraftAmounts()
                         : Map.of();
+        Map<AEKey, BigInteger> bigIntegerCraftAmounts =
+                this.result instanceof AelisBigIntegerCraftAmountsCarrier carrier
+                        ? carrier.appliedenhancements$getBigIntegerCraftAmounts()
+                        : Map.of();
+        Map<AEKey, BigInteger> bigIntegerMissingAmounts =
+                this.result instanceof AelisBigIntegerCraftAmountsCarrier carrier
+                        ? carrier.appliedenhancements$getBigIntegerMissingAmounts() : Map.of();
+        Map<AEKey, BigInteger> bigIntegerStoredAmounts =
+                this.result instanceof AelisBigIntegerCraftAmountsCarrier carrier
+                        ? carrier.appliedenhancements$getBigIntegerStoredAmounts() : Map.of();
+        BigInteger bigIntegerBytes = this.result instanceof AelisBigIntegerCraftAmountsCarrier carrier
+                ? carrier.appliedenhancements$getBigIntegerBytes() : null;
         PacketDistributor.sendToPlayer(
                 player,
                 new CraftingCalculationPathPayload(
-                        menu.containerId, path, cyclicCraftAmounts));
+                        menu.containerId, path, cyclicCraftAmounts,
+                        bigIntegerCraftAmounts, bigIntegerMissingAmounts, bigIntegerStoredAmounts, bigIntegerBytes,
+                        com.appliedenhancements.api.AelisExactCraftingPlanApi.getFinalOutputAmount(result)));
         appliedenhancements$calculationPath = path;
         appliedenhancements$cyclicCraftAmounts = cyclicCraftAmounts;
+        appliedenhancements$bigIntegerCraftAmounts = bigIntegerCraftAmounts;
+        appliedenhancements$bigIntegerMissingAmounts = bigIntegerMissingAmounts;
+        appliedenhancements$bigIntegerStoredAmounts = bigIntegerStoredAmounts;
+        appliedenhancements$bigIntegerBytes = bigIntegerBytes;
         appliedenhancements$sendCalculationProgress(player, menu);
     }
 
@@ -528,6 +626,13 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         if (!appliedenhancements$tryReserveInventory(this.result)) {
             appliedenhancements$restartAfterReservationConflict();
         }
+    }
+
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(method = "startJob")
+    private void appliedenhancements$ownReservationThroughoutStart(Operation<Void> original) {
+        var reservation = this.result == appliedenhancements$reservedPlan ? appliedenhancements$inventoryReservation : null;
+        if (reservation == null) { original.call(); return; }
+        reservation.submit(() -> { original.call(); return null; });
     }
 
     @WrapOperation(method = "startJob", at = @At(value = "INVOKE",
@@ -588,7 +693,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         this.result = null;
         appliedenhancements$clearDisplayedPlan();
         boolean replanned = this.whatToCraft != null
-                && (appliedenhancements$requestedAmount > Integer.MAX_VALUE
+                && (appliedenhancements$exactRequestedAmount != null
+                        ? appliedenhancements$planExact(this.whatToCraft, appliedenhancements$exactRequestedAmount)
+                        : appliedenhancements$requestedAmount > Integer.MAX_VALUE
                         ? appliedenhancements$planLong(
                                 this.whatToCraft,
                                 appliedenhancements$requestedAmount,

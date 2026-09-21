@@ -10,6 +10,7 @@ public final class NetworkHandler {
     }
 
     public static void register(PayloadRegistrar registrar) {
+        registrar.playBidirectional(ExactCraftingAmountPayload.TYPE, ExactCraftingAmountPayload.STREAM_CODEC, ExactCraftingAmountPayload::handle);
         registrar.playToServer(
                 LongCraftingRequestPayload.TYPE,
                 LongCraftingRequestPayload.STREAM_CODEC,

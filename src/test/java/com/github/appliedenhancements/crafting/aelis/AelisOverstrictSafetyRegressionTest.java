@@ -99,7 +99,8 @@ class AelisOverstrictSafetyRegressionTest {
         String source = plannerSource();
 
         int globalSolver = source.indexOf("tryExecuteGlobalCyclicPlan(");
-        int recursiveExecution = source.indexOf("executeTransactionalNode(");
+        // The explicit BigInteger root path precedes the native long graph path.
+        int recursiveExecution = source.indexOf("executeTransactionalNode(", globalSolver);
         assertTrue(globalSolver >= 0);
         assertTrue(recursiveExecution > globalSolver);
         assertTrue(source.contains("Config.CYCLE_SOLVER_MAX_SCC_NODES"));

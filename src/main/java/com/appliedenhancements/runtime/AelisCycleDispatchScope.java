@@ -28,12 +28,22 @@ public final class AelisCycleDispatchScope implements AutoCloseable {
             IPatternDetails pattern, Iterable<ICraftingProvider> providers) {
         var current = CURRENT.get();
         var runtime = current == null ? null : current.get();
-        if (runtime == null || runtime.currentStep()
-                .filter(step -> step.patternDefinition().equals(pattern.getDefinition())).isEmpty()) {
+        if (current == null) {
             return providers;
         }
+        boolean cycleBatching = runtime != null && runtime.currentStep()
+                .filter(step -> step.patternDefinition()
+                        .equals(pattern.getDefinition()))
+                .isPresent();
         var wrapped = new ArrayList<ICraftingProvider>();
-        for (var provider : providers) wrapped.add(AelisSmartCycleBatchProvider.wrap(provider, pattern));
+        for (var provider : providers) {
+            // Exact-count capabilities are resolved through Omni's adapter
+            // registry. Preserve the published provider object outside an
+            // active cycle so identity-based provider registries remain valid.
+            wrapped.add(cycleBatching
+                    ? AelisSmartCycleBatchProvider.wrap(provider, pattern)
+                    : provider);
+        }
         return wrapped;
     }
 

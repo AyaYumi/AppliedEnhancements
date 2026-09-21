@@ -2,7 +2,7 @@
 
 [English documentation](API_INTEGRATION.md)
 
-本文面向希望接入 Applied Enhancements `1.0.8` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+本文面向希望接入 Applied Enhancements `1.0.9` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -12,9 +12,13 @@
 | Java | `21` | 编译与运行目标 |
 | NeoForge | `21.1.220` | 构建与运行验证版本；当前声明范围：`[21.1.220,)` |
 | Applied Energistics 2 | `19.2.17` | 声明范围：`[19.2.17,)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.0.8` | 本文档对应版本 |
+| Applied Enhancements | `1.0.9` | 本文档对应版本 |
 
-`1.0.8` 保留 `1.0.7` 的公共 Java API 签名和载荷协议 `3`，已有接入方升级时无须修改 API 调用。向原生 AE2 或 AdvancedAE 量子 CPU 提交循环计划的接入方，应按下方示例将最低版本设为 `1.0.8`，以包含针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 顺序调整。
+`1.0.9` 保留 `1.0.8` 的公共 Java API 签名，并为精确 BigInteger 待合成、缺失、库存供应总量及存储字节估计同步将内部载荷协议提升到 `7`。已有接入方升级时无须修改 API 调用，但联网的客户端与服务端必须使用同一发行版。向原生 AE2 或 AdvancedAE 量子 CPU 提交循环计划的接入方，应按下方示例将最低版本设为 `1.0.9`。
+
+BigInteger 计划不做统一 CPU 能力预检。long 投影饱和不会强制 `simulation()`，也不会改写 CPU 的提交结果。服务端接入方可通过 `AelisBigIntegerCraftAmountsCarrier.appliedenhancements$getBigIntegerPatternTimes()` 读取精确样板执行次数，通过 `appliedenhancements$getBigIntegerStoredAmounts()` 读取精确库存供应量；`AelisCycleExecutionApi.copyMetadata` 会保留这些字段。旧名 `isPreviewOnly` 现在只表示投影发生饱和。标准 long 字段仍是投影，未适配 CPU 接受订单不代表已支持完整 BigInteger 执行。
+
+`appliedenhancements$getBigIntegerBytes()` 返回整份计划向上取整后的存储字节估计；仅有原生字节数时返回 null。状态累计保留精确小数字节，`copyMetadata` 保留最终整数。该字段同步到确认页标题，不新增 CPU 能力检查。
 
 稳定兼容范围仅包括以下包：
 
@@ -42,10 +46,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly files("libs/appliedenhancements-1.0.8.jar")
+    compileOnly files("libs/appliedenhancements-1.0.9.jar")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly files("libs/appliedenhancements-1.0.8.jar")
+    runtimeOnly files("libs/appliedenhancements-1.0.9.jar")
 }
 ```
 
@@ -55,7 +59,7 @@ dependencies {
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.8,)"
+versionRange="[1.0.9,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -66,7 +70,7 @@ side="BOTH"
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.8,)"
+versionRange="[1.0.9,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -115,7 +119,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.8` 的内部载荷协议为 `3`。内置网络只同步部分服务端功能配置、计算进度和规划路径显示，不同步第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.9` 的内部载荷协议为 `7`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
@@ -304,7 +308,7 @@ if (cyclePlan != null) {
 
 应在构造 CPU 任务表之前调用 `preparePlan`；仅调用 `getPlan` 不会替换该任务表。受保护库存只属于本次提取尝试，不能跨样板或跨运行时推进缓存复用。`dispatchedCrafts` 本身不推进控制器。没有受保护输入的步骤是合法的，但该辅助方法无法推导其实际执行次数；宿主必须自己确定次数，将其限制在 `remainingCrafts()` 内，再调用 `patternDispatched`。
 
-`1.0.8` 同步 Forge 分支针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 优先级调整（1100 改为 900），将原生和 AdvancedAE 接入排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
+`1.0.9` 保留 Forge 分支针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 优先级调整（1100 改为 900），将原生和 AdvancedAE 接入排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
 
 从 `1.0.7` 起，内置原生 AE2 和 AdvancedAE 量子 CPU 接入在当前步骤没有受保护输入时，将单次 Provider 派发按一次合成计数；存在受保护输入时仍严格计数，Provider 拒绝或派发失败时恢复循环运行状态。此修复不改变公共 `dispatchedCrafts` 的约定：独立 CPU 对此类步骤仍需自行确定实际次数，包括自身执行的批量。受保护输入表为空并不一定表示样板本身没有原料。
 
@@ -392,7 +396,7 @@ public final class ExampleInfiniteInventory
 }
 ```
 
-标记只告诉 Applied Enhancements：这个实现本身已经提供无限内容，应使用无限数量哨兵和 `9.2E` 显示。它不会把有限磁盘改造成真正的无限来源。
+开启 `storage.infinite.enable_listing_limit_bypass` 后，标记使元件允许取出的物品成为无限供应，规划也按无限材料处理。取出前通过当前挂载包装器模拟检查物品和操作来源，实际取出不消耗被标记元件的库存；列表继续使用 `9.2E` 哨兵。关闭配置恢复原行为，未标记的有限元件不会因为数量很大而被识别为无限。
 
 ## 4. 第三方编码样板与样板筛选
 
@@ -663,7 +667,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 
 ## 发布前检查清单
 
-`1.0.8` 构建与 `363` 项单元测试（含无受保护输入 Provider 派发的回归测试）、已有 API 和种子接入验证记录，以及此前按键和合成运行结果见 [发行验证范围](../README_ZH.md#验证范围)。独立运行验证环境和依赖模组自带的 GameTest 不属于仓库默认单元测试；独立 CPU 仍需验证自己的接入边界。
+`1.0.9` 构建与仓库单元测试（含无受保护输入 Provider 派发的回归测试）、已有 API 和种子接入验证记录，以及此前按键和合成运行结果见 [发行验证范围](../README_ZH.md#验证范围)。独立运行验证环境和依赖模组自带的 GameTest 不属于仓库默认单元测试；独立 CPU 仍需验证自己的接入边界。
 
 - [ ] 只从稳定 API 包导入类型。
 - [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。
@@ -678,3 +682,6 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 - [ ] `PatternQuickMoveSession` 在关闭界面时清除。
 - [ ] 网络物品菜单的自定义服务端动作重新验证所有客户端字段。
 - [ ] 已在 AE2 `19.2.17` 和目标整合包中完成客户端与服务端验证。
+## 大整数执行扩展
+
+CPU 的通用大整数计划、交付账本和存档接入见 [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md)。没有 Omni 专用白名单，也不以本 API 统一拒绝其他 CPU。

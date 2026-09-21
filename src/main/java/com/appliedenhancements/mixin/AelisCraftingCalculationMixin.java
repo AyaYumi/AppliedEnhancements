@@ -116,7 +116,7 @@ public abstract class AelisCraftingCalculationMixin
     @WrapMethod(method = "run")
     private ICraftingPlan molecularmanipulator$trackAelisCalculation(
             Operation<ICraftingPlan> original) {
-        var aelisEnabled = molecularmanipulator$aelisEnabled;
+        var aelisEnabled = molecularmanipulator$aelisEnabled || com.appliedenhancements.runtime.ExactRequestScope.current() != null;
         var progress = molecularmanipulator$calculationProgress;
         if (!aelisEnabled) {
             if (progress != null) {
@@ -249,7 +249,7 @@ public abstract class AelisCraftingCalculationMixin
         molecularmanipulator$aelisNodeCount = -1;
         molecularmanipulator$calculationPath = AelisCalculationPath.AE2_NATIVE;
         var progress = molecularmanipulator$calculationProgress;
-        var aelisEnabled = molecularmanipulator$aelisEnabled;
+        var aelisEnabled = molecularmanipulator$aelisEnabled || com.appliedenhancements.runtime.ExactRequestScope.current() != null;
 
         if (!aelisEnabled || containerItems != null) {
             if (progress != null) {
@@ -299,7 +299,8 @@ public abstract class AelisCraftingCalculationMixin
         }
 
         if (result.error() != null) {
-            com.appliedenhancements.AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warning(
+                    "internal_compatibility_error",
                     "AELIS encountered an internal compatibility error and fell back to AE2",
                     result.error());
         } else if (Config.AELIS_DIAGNOSTICS.get()) {
@@ -310,6 +311,12 @@ public abstract class AelisCraftingCalculationMixin
                     result.mergedOccurrences(), result.barrierCount(),
                     result.compileNanos() / 1_000_000.0,
                     result.executionNanos() / 1_000_000.0);
+        }
+        if (com.appliedenhancements.runtime.ExactRequestScope.current() != null
+                || Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                && com.github.appliedenhancements.crafting.aelis.AelisPlanningLimitException
+                        .rejectsNativeFallback(result.fallbackReason(), requestedAmount)) {
+            throw new com.github.appliedenhancements.crafting.aelis.AelisPlanningLimitException(result.fallbackReason());
         }
         molecularmanipulator$calculationPath = AelisCalculationPath.AE2_FALLBACK;
         if (progress != null) {

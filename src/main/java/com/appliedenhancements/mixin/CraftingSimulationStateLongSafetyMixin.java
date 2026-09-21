@@ -10,6 +10,10 @@ import appeng.crafting.CraftingCalculation;
 import appeng.crafting.CraftingPlan;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
+import com.appliedenhancements.Config;
+import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftingTracker;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -64,10 +68,8 @@ abstract class CraftingSimulationStateLongSafetyMixin {
             IPatternDetails details, long count, CallbackInfo callback) {
         long aggregatedCrafts = NativeCraftingLongSafety.addNonNegative(
                 this.crafts.getOrDefault(details, 0L), count, "pattern craft total");
-        for (var output : details.getOutputs()) {
-            NativeCraftingLongSafety.multiplyNonNegative(
-                    output.amount(), aggregatedCrafts, "aggregated pattern output total");
-        }
+        ((AelisBigIntegerCraftingTracker) this)
+                .appliedenhancements$recordBigIntegerCrafting(details, count);
     }
 
     /**
@@ -82,8 +84,11 @@ abstract class CraftingSimulationStateLongSafetyMixin {
             long calculatedAmount,
             CallbackInfoReturnable<CraftingPlan> callback) {
         var stateAccess = (CraftingSimulationStateLongSafetyAccessor) (Object) state;
+        boolean allowBigIntegerOutputs = Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                && state instanceof AelisCalculationPathCarrier path
+                && path.molecularmanipulator$getCalculationPath() == AelisCalculationPath.AELIS;
         NativeCraftingLongSafety.validatePatternOutputs(
-                stateAccess.appliedenhancements$getCrafts());
+                stateAccess.appliedenhancements$getCrafts(), allowBigIntegerOutputs);
     }
 
     /**

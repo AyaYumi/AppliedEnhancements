@@ -2,7 +2,9 @@
 
 [中文文档](API_INTEGRATION_ZH.md)
 
-This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.8`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+Exact CPU execution: see [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md) for CPU-independent exact plans, output progress and persistence. OmniSequence is one consumer, not an execution whitelist.
+
+This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.9`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 ## Compatibility baseline
 
@@ -12,9 +14,13 @@ This guide is intended for NeoForge mod authors integrating with Applied Enhance
 | Java | `21` | Compilation and runtime target |
 | NeoForge | `21.1.220` | Build/runtime validation version; currently declared range: `[21.1.220,)` |
 | Applied Energistics 2 | `19.2.17` | Declared range: `[19.2.17,)`; public signatures directly reference AE2 types |
-| Applied Enhancements | `1.0.8` | Version covered by this guide |
+| Applied Enhancements | `1.0.9` | Version covered by this guide |
 
-Version `1.0.8` preserves the public Java API signatures and payload protocol `3` from `1.0.7`. Existing callers can adopt this release without changing API calls. Integrations that submit cycle plans to native AE2 or AdvancedAE quantum CPUs should require `1.0.8` or newer for the CPU Mixin ordering changes intended to address the AE2 Crafting Time compatibility report, as in the dependency examples below.
+Version `1.0.9` preserves the public Java API signatures from `1.0.8` and advances the internal payload protocol to `7` for exact BigInteger crafted, missing, supplied-from-storage totals and storage byte estimates. Existing callers can adopt this release without changing API calls, but networked clients and servers must use the same release. Integrations that submit cycle plans to native AE2 or AdvancedAE quantum CPUs should require `1.0.9` or newer, as in the dependency examples below.
+
+BigInteger plans are submitted without a universal CPU capability precheck. A saturated long projection does not force `simulation()` or override the CPU's submission result. Server-side integrations can read exact task counts with `AelisBigIntegerCraftAmountsCarrier.appliedenhancements$getBigIntegerPatternTimes()` and exact supplied amounts with `appliedenhancements$getBigIntegerStoredAmounts()`; `AelisCycleExecutionApi.copyMetadata` preserves both. The legacy `isPreviewOnly` marker now only indicates a saturated projection. The standard long fields remain projections, so acceptance by an unadapted CPU does not establish exact BigInteger execution support.
+
+`appliedenhancements$getBigIntegerBytes()` provides the whole plan's rounded-up storage estimate, or null when only native bytes are available. State accumulation retains exact fractional byte costs, and `copyMetadata` preserves the resulting integer. It is synchronized for the confirmation title without adding a CPU capability gate.
 
 Only the following packages are part of the stable integration surface:
 
@@ -43,10 +49,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly files("libs/appliedenhancements-1.0.8.jar")
+    compileOnly files("libs/appliedenhancements-1.0.9.jar")
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly files("libs/appliedenhancements-1.0.8.jar")
+    runtimeOnly files("libs/appliedenhancements-1.0.9.jar")
 }
 ```
 
@@ -56,7 +62,7 @@ If your integration unconditionally loads Applied Enhancements API classes, decl
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.8,)"
+versionRange="[1.0.9,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -67,7 +73,7 @@ If all API references are isolated behind an optional compatibility layer, decla
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.8,)"
+versionRange="[1.0.9,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -116,7 +122,7 @@ There are 17 public top-level API types: 16 current types plus one deprecated co
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.8` uses internal payload protocol `3`. Built-in packets synchronize selected server feature settings, calculation progress and planner-path display, but not third-party registrations or custom CPU state. Payload classes are internal.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.9` uses internal payload protocol `7`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 
@@ -310,7 +316,7 @@ External CPU integrations can perform normalization, guarded input access and pe
 
 Call `preparePlan` before constructing the CPU's task map; reading `getPlan` alone does not replace that map. A guarded inventory belongs to one extraction attempt and cannot be cached across pattern changes or runtime advancement. `dispatchedCrafts` does not advance the controller. A step with no protected inputs is valid, but this helper cannot infer its actual firing count; the host must provide a verified count bounded by `remainingCrafts()` before calling `patternDispatched`.
 
-Version `1.0.8` synchronizes the Forge CPU Mixin priority adjustment (1100 to 900) for the AE2 Crafting Time compatibility report. This orders the native and AdvancedAE integrations after default-priority mixins; successful builds and unit tests do not establish runtime compatibility with other addons.
+Version `1.0.9` retains the Forge CPU Mixin priority adjustment (1100 to 900) for the AE2 Crafting Time compatibility report. This orders the native and AdvancedAE integrations after default-priority mixins; successful builds and unit tests do not establish runtime compatibility with other addons.
 
 Since `1.0.7`, the built-in native AE2 and AdvancedAE quantum CPU integrations count a single provider push as one craft when the active step has no protected inputs. They retain strict counting when protected inputs are present and restore cycle runtime state when the provider rejects or fails the push. This fix does not change the public `dispatchedCrafts` contract: custom CPUs must determine their own actual count for such steps, including any batching they perform. An empty protected-input map does not necessarily mean the pattern itself has no ingredients.
 
@@ -398,7 +404,7 @@ public final class ExampleInfiniteInventory
 }
 ```
 
-The marker tells Applied Enhancements that the implementation already provides infinite contents and should use the infinite quantity sentinel and compact `9.2E` display. It does not turn a finite cell into an actual infinite source.
+With `storage.infinite.enable_listing_limit_bypass` enabled, the marker opts the cell into unlimited extraction and infinite planning supply for keys it permits extracting. A simulation probe through the mounted wrapper preserves key and source checks; actual extraction does not deplete the marked backing cell. Listings retain the compact `9.2E` sentinel. Disabling the option restores original behavior; unmarked finite cells are never inferred to be infinite from their amounts.
 
 ## 4. Third-party encoded patterns and pattern filters
 
@@ -683,7 +689,7 @@ These features require AE2 Java types, client UI integration, or server-authorit
 
 ## Pre-release integration checklist
 
-See the [release validation scope](../README.md#validation) for the `1.0.8` build and `363` unit tests, including the regression test for provider pushes without protected inputs, existing API/seed integration records, and earlier keybinding and crafting runtime results. The separate runtime harness and dependency-provided GameTests are not the repository's default unit suite; a custom CPU must still verify its own integration boundaries.
+See the [release validation scope](../README.md#validation) for the `1.0.9` build and repository unit suite, including the regression test for provider pushes without protected inputs, existing API/seed integration records, and earlier keybinding and crafting runtime results. The separate runtime harness and dependency-provided GameTests are not the repository's default unit suite; a custom CPU must still verify its own integration boundaries.
 
 - [ ] Imports are limited to the stable API packages.
 - [ ] Optional compatibility classes cannot load when Applied Enhancements is absent.

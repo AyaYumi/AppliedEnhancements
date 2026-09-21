@@ -24,6 +24,10 @@ public abstract class NetworkCraftingSimulationStateInventoryLockMixin {
             IStorageService storage,
             IActionSource source,
             CallbackInfo callback) {
+        var infinite = (com.appliedenhancements.storage.InfinitePlanningInventory) this;
+        infinite.appliedenhancements$infiniteKeys().addAll(
+                com.appliedenhancements.storage.InfiniteStorageSupport.snapshot(storage.getInventory(), source));
+        for (var key : infinite.appliedenhancements$infiniteKeys()) this.list.set(key, Long.MAX_VALUE);
         ManualCraftingInventoryLock.subtractReservations(
                 storage.getInventory(), this.list);
     }

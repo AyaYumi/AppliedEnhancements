@@ -6,23 +6,20 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 AELIS 合成规划器。
 
-> 当前版本：`1.0.8`
+> 当前版本：`1.0.9`
 >
 > 目标平台：Minecraft `1.21.1` / NeoForge / Java `21`
 
-## 1.0.8 更新
+## 1.0.9 更新
 
-相对 1.0.7：
+相对 1.0.8：
 
-- 修复 AELIS 嵌套批量规划中的可复用催化剂记账：已在同一批次中预留的催化剂不再被重复报为缺料，缺失的催化剂也不会被误计为配方返还物。
-- 扩展对稳定自返还耐久物品的识别，包括 ProjectE 一类以耐久值记录充能的物品；带“耐久”附魔的输入仍不归入此类。
-- 让受支持的确定性耐久工具配方保留在 AELIS 聚合图中，批量分配工具，避免其消耗材料被迫转入原生逐次规划。
-- 清空合成计划时不再向第三方确认菜单监听器传入空计划，处理 AE2 Crafting Time 1.2.5 联用时可能导致计算无法启动的问题。
-- 对符合条件且不超过 `Integer.MAX_VALUE` 的失败请求尝试原生规划器回退；增加目标节点检查；确认界面没有计算任务或结果持续 100 个服务端 tick 时自动退出。正在运行的计算不受该超时限制。
-- 将原生 AE2 和 AdvancedAE CPU Mixin 优先级从 1100 调整为 900，以适配 CPU 观察逻辑。完整整合包兼容性仍需实机验证。
-- 增加目标不可用及计算未能启动的中英文提示。
+- AELIS 新增可配置的 BigInteger 中间需求与分支合并计算，默认开启。
+- 在 AE2 仍使用 long 的摘要和 CPU 边界加入饱和与溢出保护，同时为确认界面保留精确的 AELIS 待合成总量。
+- 加入与 DataEnergistics 一致的 `E` 以上十进制单位：`Z`、`Y`、`B` 一直到 `Att`，再往上使用科学计数法。
+- 为精确 BigInteger 待合成、缺失、库存供应总量及存储字节估计加入有界网络同步，内部载荷协议为 `7`。
 
-公共 Java API 签名及网络协议 `3` 与 1.0.7 保持一致。循环派发崩溃修复已包含在 1.0.7，不属于本次新增内容。
+公共 Java API 签名与 1.0.8 保持一致。内部载荷协议已提升到 `7`，客户端与服务端必须使用同一 1.0.9 构建。
 
 ## 功能概览
 
@@ -68,7 +65,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
 
 ```text
-build/libs/appliedenhancements-1.0.8.jar
+build/libs/appliedenhancements-1.0.9.jar
 ```
 
 同时需要安装匹配版本的 NeoForge 与 AE2。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
@@ -104,6 +101,10 @@ build/libs/appliedenhancements-1.0.8.jar
 ## AELIS 规划器
 
 AELIS（Applied Enhancements Lattice Integer Solver）会在单次合成计算会话中分析配方树，并尝试把可证明安全的节点聚合执行。存在容器物品、复杂候选、可复用输入或其他兼容边界时，规划器会保留局部原生语义，或把整次尝试交回 AE2。
+
+开启 `crafting.aelis.enable_big_integer_planning` 后，AELIS 会用精确的 `BigInteger` 保存无环中间需求、多分支合并总量和样板执行次数。AE2 只能使用 `long` 的任务表与摘要采用饱和兼容投影，确认界面仍保留 AELIS 的精确待合成总量，并使用 `E`、`Z`、`Y`、`B` 一直到 `Att` 的扩展十进制单位，之后转为科学计数法。需要投影样板次数的计划只能预览，因为原生 AE2 CPU 无法执行超过 `Long.MAX_VALUE` 次的样板；网络中存在合格的 Trinity Data Core CPU 时，Data Energistics 仍可执行其自己的 Trinity 计划。
+
+带可复用催化剂的事务规划路径也会保留精确的大整数材料需求，并按输入顺序借还实际催化剂；超大缺失数量会同步到确认界面。原生边界、有限耐久工具分配、有序候选选择和循环执行调度仍受部分 `long` 限制。无法支持的溢出或超大回退会结束并提示原因，避免重新逐次遍历整个订单。各路径的检查范围与剩余限制见[规划路径检查记录](docs/BIG_INTEGER_PLANNING_AUDIT.md)。开发环境可用 `gradlew runServer -PplanningSmoke -PwithoutJei` 执行真实 AE2 集成检查，测试类不包含在常规构建中。
 
 当 AELIS 实际采用循环 SCC 或数量反馈求解时，合成确认界面的对应材料格会增加“循环合成数量”。该数值按循环样板的实际执行次数乘以样板产量统计，是普通“合成数量”的子集，只随当前确认菜单同步。
 
@@ -221,6 +222,7 @@ AELIS 受节点数和编译时间预算约束。编译图仅在当前合成计�
 | `crafting.enable_progress_display` | `false` | 布尔值 | 启用合成计算进度和路径显示 |
 | `crafting.enable_enhanced_material_calculation` | `false` | 布尔值 | 启用增强的存储、合成和缺失材料统计 |
 | `crafting.aelis.enable_automatic_planner` | `false` | 布尔值 | 允许自动接入 AE2 原生规划，并启用手动计划库存锁 |
+| `crafting.aelis.enable_big_integer_planning` | `true` | 布尔值 | 对 AELIS 中间需求使用精确 BigInteger 算术，并显示精确的超大待合成总量 |
 | `crafting.aelis.max_nodes` | `100000` | `1000` ～ `1000000` | 单次分析允许的最大节点数 |
 | `crafting.aelis.compile_budget_ms` | `2000` | `100` ～ `30000` | 单次配方树分析的时间预算，单位为毫秒 |
 | `crafting.aelis.enable_diagnostics` | `false` | 布尔值 | 输出详细的编译、执行与回退诊断日志 |
@@ -232,7 +234,7 @@ AELIS 受节点数和编译时间预算约束。编译图仅在当前合成计�
 | `performance.pattern_cache.max_entries_per_pattern` | `32` | `8` ～ `256` | 每张样板保留的多键缓存最大条目数 |
 | `performance.storage_bus.enable_slot_index` | `true` | 布尔值 | 为物品存储总线启用候选槽位索引 |
 | `performance.io_bus.enable_slot_routing` | `true` | 布尔值 | 为输入与输出总线启用经过验证的槽位提示 |
-| `storage.infinite.enable_listing_limit_bypass` | `false` | 布尔值 | 将无限磁盘网络数量提升到 `Long.MAX_VALUE` 并显示为 `9.2E` |
+| `storage.infinite.enable_listing_limit_bypass` | `false` | 布尔值 | 显式无限元件可无限取出，规划中作为无限材料来源，列表显示 `9.2E` |
 
 AELIS 之前的规划器配置会自动迁移到 `crafting.aelis.*`。原 common 文件会以 `.pre-aelis.bak` 后缀备份，旧拆分规划器文件会改名为 `.migrated.bak`，已有自定义值会被保留。
 
@@ -251,7 +253,7 @@ AELIS 之前的规划器配置会自动迁移到 `crafting.aelis.*`。原 common
 | 其他 Mod / 数据包 | 物品标签 `#appliedenhancements:infinite_storage_cells` |
 | Java 接入 | 运行时 `StorageCell` 实现 `InfiniteStorageCellMarker` |
 
-启用 `storage.infinite.enable_listing_limit_bypass` 时，被识别的磁盘会在物品内容提示和 ME 网络数量中使用 `Long.MAX_VALUE` 哨兵，并紧凑显示为 `9.2E`；关闭后保留磁盘原实现报告的数量。标记只声明磁盘本身已经提供无限内容，不会把普通有限磁盘变成真正的无限物品来源。
+启用 `storage.infinite.enable_listing_limit_bypass` 时，显式无限元件允许取出的物品可无限供应，规划中也不会因这些材料数量超过 long 而产生缺料。取出时仍检查当前挂载元件的物品配置与来源限制；列表使用 `Long.MAX_VALUE` 哨兵并显示 `9.2E`，不会仅凭库存数量误判无限。关闭后恢复元件原实现。主动给有限元件添加无限标记，也会使其在此开关开启时提供无限材料。
 
 KubeJS 可以直接向公共物品标签添加磁盘：
 
@@ -281,7 +283,7 @@ ServerEvents.tags('item', event => {
 构建产物位于：
 
 ```text
-build/libs/appliedenhancements-1.0.8.jar
+build/libs/appliedenhancements-1.0.9.jar
 ```
 
 ## 验证范围

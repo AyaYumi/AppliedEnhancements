@@ -58,14 +58,20 @@ public abstract class CraftConfirmScreenMixin {
                 return Component.translatable(
                         "gui.appliedenhancements.calculation_result.title_timed",
                         pathLabel,
-                        CraftingStorageFormatter.formatBytes(plan.getUsedBytes()),
+                        appliedenhancements$formatPlanBytes(plan.getUsedBytes(), bridge),
                         appliedenhancements$formatDuration(progress.elapsedMillis()));
             }
         }
         return Component.translatable(
                 "gui.appliedenhancements.calculation_result.title",
                 pathLabel,
-                CraftingStorageFormatter.formatBytes(plan.getUsedBytes()));
+                appliedenhancements$formatPlanBytes(plan.getUsedBytes(), bridge));
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private static String appliedenhancements$formatPlanBytes(long fallback, AelisCalculationPathMenuBridge bridge) {
+        var exact = bridge.appliedenhancements$getBigIntegerBytes();
+        return exact == null ? CraftingStorageFormatter.formatBytes(fallback) : CraftingStorageFormatter.formatBytes(exact);
     }
 
     @Inject(method = "drawFG", at = @At("TAIL"))

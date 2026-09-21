@@ -16,7 +16,10 @@ public record ServerConfigSyncPayload(
         long maxCraftingOrderAmount,
         boolean longRangeCraftingEnabled,
         boolean progressDisplayEnabled,
-        boolean infiniteStorageLimitBypassEnabled) implements CustomPacketPayload {
+        boolean infiniteStorageLimitBypassEnabled, boolean bigIntegerEnabled) implements CustomPacketPayload {
+    public ServerConfigSyncPayload(long max, boolean longRange, boolean progress, boolean infinite) {
+        this(max, longRange, progress, infinite, true);
+    }
     public static final Type<ServerConfigSyncPayload> TYPE =
             new Type<>(AppliedEnhancements.id("server_config"));
 
@@ -26,6 +29,7 @@ public record ServerConfigSyncPayload(
                     ByteBufCodecs.BOOL, ServerConfigSyncPayload::longRangeCraftingEnabled,
                     ByteBufCodecs.BOOL, ServerConfigSyncPayload::progressDisplayEnabled,
                     ByteBufCodecs.BOOL, ServerConfigSyncPayload::infiniteStorageLimitBypassEnabled,
+                    ByteBufCodecs.BOOL, ServerConfigSyncPayload::bigIntegerEnabled,
                     ServerConfigSyncPayload::new);
 
     public ServerConfigSyncPayload {
@@ -39,7 +43,7 @@ public record ServerConfigSyncPayload(
                 Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
                 Config.ENABLE_LONG_RANGE_CRAFTING.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
-                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get());
+                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(), Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get());
     }
 
     public static void register(PayloadRegistrar registrar) {
@@ -48,6 +52,7 @@ public record ServerConfigSyncPayload(
 
     private static void handle(ServerConfigSyncPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
+            ServerConfigSyncState.acceptExact(payload.bigIntegerEnabled);
             ServerConfigSyncState.accept(
                     payload.maxCraftingOrderAmount,
                     payload.longRangeCraftingEnabled,

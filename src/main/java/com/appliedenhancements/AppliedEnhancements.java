@@ -8,6 +8,7 @@ import com.github.appliedenhancements.network.CraftingCalculationPathPayload;
 import com.appliedenhancements.network.NetworkHandler;
 import com.appliedenhancements.network.ServerConfigSyncEvents;
 import com.appliedenhancements.network.ServerConfigSyncPayload;
+import com.appliedenhancements.runtime.AelisSmartCycleBatchProvider;
 import com.mojang.logging.LogUtils;
 
 import net.neoforged.bus.api.IEventBus;
@@ -47,15 +48,17 @@ public class AppliedEnhancements {
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
+        event.enqueueWork(AelisSmartCycleBatchProvider::registerOmniAdapters);
         LOGGER.info(
-                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, longRangeCrafting={}, progressDisplay={}, automaticAelis={}",
+                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, longRangeCrafting={}, progressDisplay={}, automaticAelis={}, aelisBigIntegerPlanning={}",
                 Config.ENABLE_PATTERN_CACHING.get(),
                 Config.ENABLE_STORAGE_BUS_SLOT_INDEX.get(),
                 Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
                 Config.ENABLE_IO_BUS_OPTIMIZATION.get(),
                 Config.ENABLE_LONG_RANGE_CRAFTING.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
-                Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get());
+                Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get(),
+                Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get());
     }
 
     public static net.minecraft.resources.ResourceLocation id(String path) {
@@ -63,7 +66,7 @@ public class AppliedEnhancements {
     }
 
     private void registerPayloads(final RegisterPayloadHandlersEvent event) {
-        final PayloadRegistrar registrar = event.registrar("3");
+        final PayloadRegistrar registrar = event.registrar("9");
         NetworkHandler.register(registrar);
         ServerConfigSyncPayload.register(registrar);
         CraftingCalculationProgressPayload.register(registrar);

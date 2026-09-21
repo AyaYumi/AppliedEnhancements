@@ -17,7 +17,8 @@ public final class AelisCraftingPlanRewrite {
             ICraftingPlan plan, UnaryOperator<ICraftingPlan> rewrite) {
         var cycle = AelisCycleExecutionApi.getPlan(plan).orElse(null);
         if (cycle == null) {
-            return rewrite.apply(plan);
+            var rewritten = rewrite.apply(plan);
+            return rewritten == plan ? plan : AelisCycleExecutionApi.copyMetadata(plan, rewritten);
         }
         var definitions = cycle.patternDefinitions();
         var ordinary = new LinkedHashMap<IPatternDetails, Long>();

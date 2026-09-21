@@ -16,4 +16,7 @@ public interface LongNumberEntryWidgetBridge {
     void appliedenhancements$setInputMaxLength(int maxLength);
 
     OptionalLong appliedenhancements$getExactLongValue();
+    java.util.Optional<java.math.BigInteger> appliedenhancements$getExactValue();
+    void appliedenhancements$setExactValue(java.math.BigInteger value);
+    void appliedenhancements$enableExactInput();
 }

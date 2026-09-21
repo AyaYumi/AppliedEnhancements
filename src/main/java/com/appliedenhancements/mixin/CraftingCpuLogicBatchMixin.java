@@ -23,6 +23,7 @@ import com.appliedenhancements.runtime.AelisCycleDispatch;
 import com.appliedenhancements.runtime.AelisCycleDispatchScope;
 import com.appliedenhancements.runtime.AelisCycleRuntimePreparation;
 import com.appliedenhancements.runtime.DataEnergisticsOrderCompletion;
+import com.appliedenhancements.runtime.NativeCraftingLongSafety;
 import com.appliedenhancements.AppliedEnhancements;
 
 import appeng.api.config.Actionable;
@@ -38,6 +39,7 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.execution.ExecutingCraftingJob;
 import appeng.crafting.execution.CraftingCpuLogic;
+import appeng.crafting.execution.CraftingCpuHelper;
 import appeng.crafting.inv.ICraftingInventory;
 import appeng.crafting.inv.ListCraftingInventory;
 import appeng.me.cluster.implementations.CraftingCPUCluster;
@@ -188,8 +190,104 @@ public abstract class CraftingCpuLogicBatchMixin {
             Operation<KeyCounter[]> original) {
         var guarded = AelisCycleExecutionApi.guardInputs(
                 appliedenhancements$cycleRuntime, details.getDefinition(), sourceInventory);
-        return guarded == null ? null : original.call(
+        if (guarded == null) {
+            return null;
+        }
+        KeyCounter[] extracted = original.call(
                 details, guarded, level, expectedOutputs, expectedContainerItems);
+        if (extracted != null
+                && job != null
+                && !appliedenhancements$canTrackExpectedOutputs(
+                        ((ExecutingCraftingJobCycleAccessor) job)
+                                .appliedenhancements$getWaitingFor().list,
+                        expectedOutputs,
+                        expectedContainerItems)) {
+            CraftingCpuHelper.reinjectPatternInputs(guarded, extracted);
+            return null;
+        }
+        return extracted;
+    }
+
+    @Unique
+    private static boolean appliedenhancements$canTrackExpectedOutputs(
+            KeyCounter waitingFor, KeyCounter outputs, KeyCounter containers) {
+        var additions = new KeyCounter();
+        for (var entry : outputs) {
+            additions.set(entry.getKey(), entry.getLongValue());
+        }
+        for (var entry : containers) {
+            long current = additions.get(entry.getKey());
+            if (current < 0 || entry.getLongValue() < 0
+                    || current > Long.MAX_VALUE - entry.getLongValue()) {
+                return false;
+            }
+            additions.set(entry.getKey(), current + entry.getLongValue());
+        }
+        for (var entry : additions) {
+            long current = waitingFor.get(entry.getKey());
+            if (current < 0 || entry.getLongValue() < 0
+                    || current > Long.MAX_VALUE - entry.getLongValue()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Inject(method = "getPendingOutputs", at = @At("HEAD"), cancellable = true)
+    private void appliedenhancements$saturatePendingOutputs(
+            AEKey template, CallbackInfoReturnable<Long> callback) {
+        if (job == null) {
+            callback.setReturnValue(0L);
+            return;
+        }
+        long count = 0;
+        for (var task : ((ExecutingCraftingJobCycleAccessor) job)
+                .appliedenhancements$getTasks().entrySet()) {
+            long taskCount = ((ExecutingCraftingTaskProgressAccessor) task.getValue())
+                    .appliedenhancements$getValue();
+            for (var output : task.getKey().getOutputs()) {
+                if (template.matches(output)) {
+                    count = NativeCraftingLongSafety.saturatingAddNonNegative(
+                            count,
+                            NativeCraftingLongSafety.saturatingMultiplyNonNegative(
+                                    output.amount(), taskCount));
+                }
+            }
+        }
+        callback.setReturnValue(count);
+    }
+
+    @Inject(method = "getAllItems", at = @At("HEAD"), cancellable = true)
+    private void appliedenhancements$saturateAllDisplayedItems(
+            KeyCounter output, CallbackInfo callback) {
+        appliedenhancements$mergeDisplayedItems(output, inventory.list);
+        if (job == null) {
+            callback.cancel();
+            return;
+        }
+        var jobAccess = (ExecutingCraftingJobCycleAccessor) job;
+        appliedenhancements$mergeDisplayedItems(
+                output, jobAccess.appliedenhancements$getWaitingFor().list);
+        for (var task : jobAccess.appliedenhancements$getTasks().entrySet()) {
+            long taskCount = ((ExecutingCraftingTaskProgressAccessor) task.getValue())
+                    .appliedenhancements$getValue();
+            for (var stack : task.getKey().getOutputs()) {
+                long amount = NativeCraftingLongSafety.saturatingMultiplyNonNegative(
+                        stack.amount(), taskCount);
+                output.set(stack.what(), NativeCraftingLongSafety.saturatingAddNonNegative(
+                        output.get(stack.what()), amount));
+            }
+        }
+        callback.cancel();
+    }
+
+    @Unique
+    private static void appliedenhancements$mergeDisplayedItems(
+            KeyCounter target, KeyCounter source) {
+        for (var entry : source) {
+            target.set(entry.getKey(), NativeCraftingLongSafety.saturatingAddNonNegative(
+                    target.get(entry.getKey()), entry.getLongValue()));
+        }
     }
 
     @WrapMethod(method = "insert")

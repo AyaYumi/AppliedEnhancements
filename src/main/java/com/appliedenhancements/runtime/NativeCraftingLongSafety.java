@@ -68,6 +68,10 @@ public final class NativeCraftingLongSafety {
      * external planners that never pass through CraftingSimulationState.
      */
     public static void validatePlan(ICraftingPlan plan) {
+        validatePlan(plan, false);
+    }
+
+    public static void validatePlan(ICraftingPlan plan, boolean allowBigIntegerOutputs) {
         plan = requirePresent(plan, "crafting plan");
         addNonNegative(plan.bytes(), 0, "crafting plan byte total");
 
@@ -83,21 +87,28 @@ public final class NativeCraftingLongSafety {
         for (var used : usedItems) {
             AEKey key = requirePresent(used.getKey(), "used item key");
             long amount = addNonNegative(used.getLongValue(), 0, "used item amount");
-            merge(summaryStored, key, amount, "summary stored item total");
-            merge(cpuTrackedItems, key, amount, "CPU tracked item total");
+            mergeProjected(summaryStored, key, amount,
+                    "summary stored item total", allowBigIntegerOutputs);
+            mergeProjected(cpuTrackedItems, key, amount,
+                    "CPU tracked item total", allowBigIntegerOutputs);
         }
         validateAndMergeCounter(
-                plan.missingItems(), summaryStored, "missing item", "summary stored item total");
+                plan.missingItems(), summaryStored, "missing item",
+                "summary stored item total", allowBigIntegerOutputs);
 
         KeyCounter emittedItems = requirePresent(plan.emittedItems(), "emitted item counter");
         for (var emitted : emittedItems) {
             AEKey key = requirePresent(emitted.getKey(), "emitted item key");
             long amount = addNonNegative(
                     emitted.getLongValue(), 0, "emitted item amount");
-            merge(summaryStored, key, amount, "summary stored item total");
-            merge(summaryCrafting, key, amount, "summary crafting item total");
-            merge(maximumWaitingItems, key, amount, "maximum waiting item total");
-            merge(cpuTrackedItems, key, amount, "CPU tracked item total");
+            mergeProjected(summaryStored, key, amount,
+                    "summary stored item total", allowBigIntegerOutputs);
+            mergeProjected(summaryCrafting, key, amount,
+                    "summary crafting item total", allowBigIntegerOutputs);
+            mergeProjected(maximumWaitingItems, key, amount,
+                    "maximum waiting item total", allowBigIntegerOutputs);
+            mergeProjected(cpuTrackedItems, key, amount,
+                    "CPU tracked item total", allowBigIntegerOutputs);
         }
 
         validatePatternOutputs(
@@ -105,17 +116,25 @@ public final class NativeCraftingLongSafety {
                 summaryCrafting,
                 maximumWaitingItems,
                 cpuTrackedItems,
-                true);
+                true,
+                allowBigIntegerOutputs);
     }
 
     /** Validates pattern output totals before they are exposed as a plan. */
     public static void validatePatternOutputs(Map<IPatternDetails, Long> patternTimes) {
+        validatePatternOutputs(patternTimes, false);
+    }
+
+    public static void validatePatternOutputs(
+            Map<IPatternDetails, Long> patternTimes,
+            boolean allowBigIntegerOutputs) {
         validatePatternOutputs(
                 patternTimes,
                 new KeyCounter(),
                 new KeyCounter(),
                 new KeyCounter(),
-                false);
+                false,
+                allowBigIntegerOutputs);
     }
 
     private static void validatePatternOutputs(
@@ -123,7 +142,8 @@ public final class NativeCraftingLongSafety {
             KeyCounter summaryCrafting,
             KeyCounter maximumWaitingItems,
             KeyCounter cpuTrackedItems,
-            boolean validateInputs) {
+            boolean validateInputs,
+            boolean allowBigIntegerOutputs) {
         patternTimes = requirePresent(patternTimes, "pattern task map");
         var grossOutputs = new KeyCounter();
         for (var task : patternTimes.entrySet()) {
@@ -148,33 +168,28 @@ public final class NativeCraftingLongSafety {
                         outputKey,
                         output.amount(),
                         "matching pattern output total");
-                long produced = multiplyNonNegative(
-                        output.amount(), crafts, "final pending pattern output");
-                multiplyNonNegative(
-                        produced,
-                        requirePositive(
-                                output.what().getAmountPerUnit(), "output amount per unit"),
-                        "crafting elapsed-time output amount");
-                merge(
-                        grossOutputs,
-                        outputKey,
-                        produced,
-                        "gross pending pattern output");
-                merge(
-                        summaryCrafting,
-                        outputKey,
-                        produced,
-                        "summary crafting item total");
-                merge(
-                        maximumWaitingItems,
-                        outputKey,
-                        produced,
-                        "maximum waiting item total");
-                merge(
-                        cpuTrackedItems,
-                        outputKey,
-                        produced,
-                        "CPU tracked item total");
+                long produced = allowBigIntegerOutputs
+                        ? saturatingMultiplyNonNegative(output.amount(), crafts)
+                        : multiplyNonNegative(
+                                output.amount(), crafts,
+                                "final pending pattern output");
+                long amountPerUnit = requirePositive(
+                        output.what().getAmountPerUnit(), "output amount per unit");
+                if (allowBigIntegerOutputs) {
+                    saturatingMultiplyNonNegative(produced, amountPerUnit);
+                } else {
+                    multiplyNonNegative(
+                            produced, amountPerUnit,
+                            "crafting elapsed-time output amount");
+                }
+                mergeProjected(grossOutputs, outputKey, produced,
+                        "gross pending pattern output", allowBigIntegerOutputs);
+                mergeProjected(summaryCrafting, outputKey, produced,
+                        "summary crafting item total", allowBigIntegerOutputs);
+                mergeProjected(maximumWaitingItems, outputKey, produced,
+                        "maximum waiting item total", allowBigIntegerOutputs);
+                mergeProjected(cpuTrackedItems, outputKey, produced,
+                        "CPU tracked item total", allowBigIntegerOutputs);
             }
         }
     }
@@ -216,18 +231,43 @@ public final class NativeCraftingLongSafety {
             KeyCounter source,
             KeyCounter target,
             String entryName,
-            String totalName) {
+            String totalName,
+            boolean saturating) {
         source = requirePresent(source, entryName + " counter");
         for (var entry : source) {
             AEKey key = requirePresent(entry.getKey(), entryName + " key");
             long amount = addNonNegative(entry.getLongValue(), 0, entryName + " amount");
-            merge(target, key, amount, totalName);
+            mergeProjected(target, key, amount, totalName, saturating);
         }
     }
 
     private static void merge(KeyCounter target, AEKey key, long amount, String operation) {
         long total = addNonNegative(target.get(key), amount, operation);
         target.set(key, total);
+    }
+
+    private static void mergeProjected(
+            KeyCounter target, AEKey key, long amount, String operation,
+            boolean saturating) {
+        if (!saturating) {
+            merge(target, key, amount, operation);
+            return;
+        }
+        target.set(key, saturatingAddNonNegative(target.get(key), amount));
+    }
+
+    public static long saturatingAddNonNegative(long left, long right) {
+        requireNonNegative(left, "saturating addition");
+        requireNonNegative(right, "saturating addition");
+        return left > Long.MAX_VALUE - right ? Long.MAX_VALUE : left + right;
+    }
+
+    public static long saturatingMultiplyNonNegative(long left, long right) {
+        requireNonNegative(left, "saturating multiplication");
+        requireNonNegative(right, "saturating multiplication");
+        return right != 0 && left > Long.MAX_VALUE / right
+                ? Long.MAX_VALUE
+                : left * right;
     }
 
     public static boolean causedByUnsafeArithmetic(Throwable failure) {

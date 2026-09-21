@@ -441,7 +441,8 @@ public abstract class PatternAccessTermScreenDuplicateMixin
         }
         var screen = (PatternAccessTermScreen<?>) (Object) this;
         appliedenhancements$quickMove.renderSelectedSlots(
-                graphics, screen.getMenu().slots, appliedenhancements$displayToSource);
+                graphics, screen.getMenu().slots, appliedenhancements$displayToSource,
+                appliedenhancements$TOOLBAR_ROW_HEIGHT);
         appliedenhancements$updateQuickMoveButton();
 
         if (appliedenhancements$isFilterActive()) {
@@ -611,7 +612,8 @@ public abstract class PatternAccessTermScreenDuplicateMixin
                 screen.getGuiLeft(),
                 screen.getGuiTop(),
                 screen.getMenu().slots,
-                appliedenhancements$displayToSource);
+                appliedenhancements$displayToSource,
+                appliedenhancements$TOOLBAR_ROW_HEIGHT);
         if (handled) {
             appliedenhancements$updateQuickMoveButton();
         }
@@ -664,12 +666,13 @@ public abstract class PatternAccessTermScreenDuplicateMixin
     @Unique
     private PatternSlot appliedenhancements$findPatternSlot(double mouseX, double mouseY) {
         var screen = (PatternAccessTermScreen<?>) (Object) this;
+        double logicalMouseY = mouseY - appliedenhancements$TOOLBAR_ROW_HEIGHT;
         for (Slot slot : screen.getMenu().slots) {
             if (slot instanceof PatternSlot patternSlot
                     && mouseX >= screen.getGuiLeft() + patternSlot.x
                     && mouseX < screen.getGuiLeft() + patternSlot.x + 16
-                    && mouseY >= screen.getGuiTop() + patternSlot.y
-                    && mouseY < screen.getGuiTop() + patternSlot.y + 16) {
+                    && logicalMouseY >= screen.getGuiTop() + patternSlot.y
+                    && logicalMouseY < screen.getGuiTop() + patternSlot.y + 16) {
                 return patternSlot;
             }
         }
