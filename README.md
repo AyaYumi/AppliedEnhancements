@@ -10,9 +10,18 @@ Applied Enhancements is a NeoForge quality-of-life and performance addon for App
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.9`
+> Current version: `1.0.9-fix`
 >
 > Target: Minecraft `1.21.1` / NeoForge / Java `21`
+
+## What's new in 1.0.9-fix
+
+- Removed the early overflow rejection for native AE2 pattern input-demand multiplication so these requests can continue through AE2.
+- Kept safety checks for pattern output multiplication and other native arithmetic boundaries.
+- When automatic AELIS planning is disabled, native AE2 crafting calculations now pass through unchanged; exact byte estimation and enhanced overflow checks only run when the planner intervenes.
+- Added the stable BigInteger request and plan metadata APIs, structured fallback categories, and exact execution requirement reporting while preserving the legacy entry points.
+- Reduced routine planner logging to diagnostics or rate-limited warnings; development runs now default to the normal `info` console level.
+- Removed the obsolete development harness source-set hook and refreshed the integration documentation for `1.0.9-fix`.
 
 ## What's new in 1.0.9
 
@@ -21,9 +30,9 @@ Compared with 1.0.8:
 - Added configurable BigInteger arithmetic for AELIS intermediate demand and branch totals, enabled by default.
 - Added guarded saturation at AE2's long-only summary and CPU boundaries while retaining exact AELIS crafted totals for confirmation screens.
 - Added DataEnergistics-compatible decimal units beyond `E`: `Z`, `Y`, `B` through `Att`, followed by scientific notation.
-- Added bounded network synchronization for exact BigInteger crafted, missing and supplied totals plus storage byte estimates; internal payload protocol is `7`.
+- Added bounded network synchronization for exact BigInteger crafted, missing and supplied totals plus storage byte estimates; internal payload protocol is `9`.
 
-Public Java API signatures remain unchanged from 1.0.8. Client and server must use the same 1.0.9 build because the internal payload protocol is now `7`.
+Legacy public Java API signatures remain compatible with 1.0.8. New integrations can use the stable exact APIs added in `1.0.9-fix`. Client and server must use the same release build; the current internal payload protocol is `9`.
 
 ## Features
 
@@ -68,14 +77,14 @@ Quantum CPU, smart-doubling and order-package integration additionally use the o
 Install the same Applied Enhancements release build on both the client and server, together with compatible NeoForge and AE2 versions.
 
 ```text
-mods/appliedenhancements-1.0.9.jar
+mods/appliedenhancements-1.0.9-fix.jar
 ```
 
 ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
 
 ## Long-range crafting
 
-The crafting amount field accepts exact integer input up to 20 characters. The server validates the feature switch and maximum order size again, so client configuration cannot bypass server restrictions.
+Long-range crafting is disabled by default. When enabled, ordinary long requests use exact integer parsing; exact BigInteger input supports up to 256 decimal digits. The server validates the feature switch and maximum order size again, so client configuration cannot bypass server restrictions.
 
 Default maximum order:
 
@@ -89,7 +98,7 @@ Maximum configurable value:
 9,223,372,036,854,775,807
 ```
 
-Overflowing, fractional, and negative input is rejected rather than truncated or wrapped. A valid `long` request may still be rejected when recipe multiplication, output aggregation, or an unproven native boundary cannot be processed safely.
+Fractional, non-positive and over-budget input is rejected. To enter orders above `Long.MAX_VALUE`, enable long-range crafting and BigInteger planning, and set the configured limit to `Long.MAX_VALUE`; a smaller configured limit remains enforced. Exact plans require a CPU implementation that reads their exact metadata. When AELIS intervenes, a valid request can still fail at unsupported recipe or native boundaries. With automatic planning disabled, ordinary AE2 calculations follow AE2's own behavior.
 
 ## AELIS planner
 
@@ -97,9 +106,9 @@ Useless Mod smart doubling rewrites only ordinary patterns in cyclic plans, pres
 
 AELIS (Applied Enhancements Lattice Integer Solver) analyzes one AE2 crafting calculation and aggregates recipe nodes whose behavior can be proven safe. Container items, complex alternatives, reusable inputs, random behavior, and other compatibility boundaries retain local native semantics or cause the attempt to roll back and fall back.
 
-With `crafting.aelis.enable_big_integer_planning` enabled, AELIS keeps acyclic intermediate demand, merged branch totals, and pattern firing counts as exact `BigInteger` values. Long-only AE2 task maps and summaries use a saturating compatibility projection, while the confirmation screen retains the exact AELIS crafted total and formats it with the extended decimal units `E`, `Z`, `Y`, `B` through `Att`, followed by scientific notation. A plan that needs a projected pattern count is preview-only because a native AE2 CPU cannot execute more than `Long.MAX_VALUE` firings; Data Energistics may execute its own Trinity plan when an eligible Trinity Data Core CPU is present.
+With `crafting.aelis.enable_big_integer_planning` enabled, AELIS keeps acyclic intermediate demand, merged branch totals, and pattern firing counts as exact `BigInteger` values. Long-only AE2 task maps and summaries use a saturating compatibility projection, while the confirmation screen retains the exact AELIS crafted total and formats it with the extended decimal units `E`, `Z`, `Y`, `B` through `Att`, followed by scientific notation. A saturated projection does not force preview-only mode or restrict submission to a CPU whitelist. The selected CPU decides acceptance and must implement exact quantities to execute the full order. Read the stable metadata through `AelisExactCraftingPlanApi.read(plan)`; see the [exact execution API](docs/EXACT_CRAFTING_API.md).
 
-The transactional path also preserves exact consumable demand through reusable-catalyst recipes, while borrowing and returning physical catalysts in input order. Exact missing totals reach the confirmation screen. Native boundaries, finite-durability allocation, ordered candidate selection and cyclic runtime schedules retain long limits; unsupported overflow or oversized fallback ends with an explanation instead of replaying the whole order one craft at a time. See [the path audit](docs/BIG_INTEGER_PLANNING_AUDIT.md) for coverage and remaining limits. Development-only integration checks run with `gradlew runServer -PplanningSmoke -PwithoutJei`; their classes are excluded from ordinary builds.
+The transactional path also preserves exact consumable demand through reusable-catalyst recipes, while borrowing and returning physical catalysts in input order. Exact missing totals reach the confirmation screen. Native boundaries, finite-durability allocation, ordered candidate selection and cyclic runtime schedules retain long limits; unsupported overflow or oversized fallback ends with an explanation instead of replaying the whole order one craft at a time. See [the path audit](docs/BIG_INTEGER_PLANNING_AUDIT.md) for coverage and remaining limits. Historical runtime checks used a separate development harness, which is not part of this checkout.
 
 When AELIS applies a cyclic or quantity-feedback plan, the confirmation grid shows `Cyclic Craft` for each material produced by those cyclic pattern firings. This value is a subset of the normal crafted amount and is transported only with the active confirmation menu.
 
@@ -200,7 +209,7 @@ One COMMON configuration file is generated on first launch: `config/appliedenhan
 
 | Key | Default | Description |
 |---|---:|---|
-| `crafting.enable_long_range_crafting` | `true` | Enables orders above `Integer.MAX_VALUE` |
+| `crafting.enable_long_range_crafting` | `false` | Enables orders above `Integer.MAX_VALUE` |
 | `crafting.max_crafting_order_amount` | `2147483647` | Maximum amount in one AE2 crafting order |
 | `crafting.enable_progress_display` | `false` | Enables calculation progress and path display |
 | `crafting.enable_enhanced_material_calculation` | `false` | Enables enhanced stored, craftable, and missing material statistics |
@@ -257,7 +266,7 @@ com.appliedenhancements.api
 com.appliedenhancements.api.client
 ```
 
-There are 17 public top-level API types: 16 current types and one deprecated compatibility entry point.
+The main public API types are listed below. Exact requests use `AelisCraftingRequest` and `AelisExactCraftingService`; read immutable `AelisPlanMetadata` and `AelisExecutionRequirement` through `AelisExactCraftingPlanApi`. The deprecated MaxFast entry point remains available for compatibility.
 
 | API | Purpose |
 |---|---|
@@ -298,7 +307,7 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
 Build output:
 
 ```text
-build/libs/appliedenhancements-1.0.9.jar
+build/libs/appliedenhancements-1.0.9-fix.jar
 ```
 
 ## Validation

@@ -19,22 +19,33 @@ public final class AelisExactCraftingService {
     /** Call on the server thread: the calculation constructor snapshots the network here. */
     public static Future<ICraftingPlan> begin(Level level, ICraftingSimulationRequester requester,
             AEKey output, BigInteger amount) {
-        var request = new AelisExactRequest(amount);
+        return begin(level, requester, new AelisCraftingRequest(
+                output, amount, CalculationStrategy.REPORT_MISSING_ITEMS));
+    }
+
+    /** Begins an exact calculation from the shared validated request object. */
+    public static Future<ICraftingPlan> begin(Level level, ICraftingSimulationRequester requester,
+            AelisCraftingRequest request) {
+        java.util.Objects.requireNonNull(request, "request");
+        java.util.Objects.requireNonNull(level, "level");
+        var exactRequest = new AelisExactRequest(request.amount());
         if (level.isClientSide || level.getServer() == null || !level.getServer().isSameThread())
             throw new IllegalStateException("Exact planning must begin on the server thread");
-        java.util.Objects.requireNonNull(output, "output");
         if (requester == null || requester.getGridNode() == null)
             throw new IllegalArgumentException("A connected crafting requester is required");
         if (!Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) throw new IllegalStateException("BigInteger planning is disabled");
-        var calculation = new CraftingCalculation(level, requester.getGridNode().getGrid(), requester,
-                new GenericStack(output, request.projection()), CalculationStrategy.REPORT_MISSING_ITEMS);
+        CraftingCalculation calculation;
+        try (var scope = new ExactRequestScope(exactRequest)) {
+            calculation = new CraftingCalculation(level, requester.getGridNode().getGrid(), requester,
+                    new GenericStack(request.output(), exactRequest.projection()), request.strategy());
+        }
         return EXECUTOR.submit(() -> {
-            try (var scope = new ExactRequestScope(request)) {
+            try (var scope = new ExactRequestScope(exactRequest)) {
                 var plan = calculation.run();
                 if (plan == null) throw new IllegalStateException("Exact calculation returned no plan");
                 var copy = AelisCycleExecutionApi.copyMetadata(plan, plan);
                 ((com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier) copy)
-                        .appliedenhancements$setBigIntegerFinalAmount(amount);
+                        .appliedenhancements$setBigIntegerFinalAmount(exactRequest.amount());
                 return copy;
             }
         });

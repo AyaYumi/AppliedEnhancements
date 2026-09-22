@@ -8,6 +8,7 @@ import appeng.menu.me.crafting.CraftingPlanSummary;
 import appeng.menu.me.crafting.CraftingPlanSummaryEntry;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.runtime.Ae2CraftingTreeCompat;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.appliedenhancements.util.SaturatingLongMath;
 import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
@@ -44,6 +45,7 @@ public abstract class CraftingPlanSummaryMixin {
     private static void appliedenhancements$projectBigIntegerPlanBeforeNativeOverflow(
             IGrid grid, IActionSource actionSource, ICraftingPlan job,
             CallbackInfoReturnable<CraftingPlanSummary> callback) {
+        if (!CraftingPlannerIntervention.enabledFor(job)) return;
         if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
                 && job instanceof AelisCalculationPathCarrier path
                 && path.molecularmanipulator$getCalculationPath()
@@ -63,7 +65,8 @@ public abstract class CraftingPlanSummaryMixin {
     private static void appliedenhancements$enhanceMaterialCalculation(
             IGrid grid, IActionSource actionSource, ICraftingPlan job,
             CallbackInfoReturnable<CraftingPlanSummary> callback) {
-        if (!Config.ENABLE_ENHANCED_MATERIAL_CALCULATION.get()) {
+        if (!CraftingPlannerIntervention.enabledFor(job)
+                || !Config.ENABLE_ENHANCED_MATERIAL_CALCULATION.get()) {
             return;
         }
 

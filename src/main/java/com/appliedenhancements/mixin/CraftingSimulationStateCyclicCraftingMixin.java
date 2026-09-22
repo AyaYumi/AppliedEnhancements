@@ -15,6 +15,7 @@ import com.appliedenhancements.api.AelisCycleExecutionPlan;
 import com.appliedenhancements.api.AelisCycleExecutionApi;
 import com.appliedenhancements.api.AelisCycleSeedPolicy;
 import com.github.appliedenhancements.crafting.aelis.AelisCyclicCraftingAmounts;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.github.appliedenhancements.integration.ae2.AelisCyclicCraftAmountsCarrier;
 import com.github.appliedenhancements.integration.ae2.AelisCyclicCraftingTracker;
 import com.github.appliedenhancements.integration.ae2.AelisCycleExecutionPlanCarrier;
@@ -52,6 +53,7 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
 
     @Inject(method = "ignore", at = @At("HEAD"))
     private void appliedenhancements$rememberIgnoredStock(AEKey key, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         long available = ((CraftingSimulationState) (Object) this).extract(key, Long.MAX_VALUE, Actionable.SIMULATE);
         appliedenhancements$ignoredSeeds.put(key, available);
     }
@@ -228,6 +230,11 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
     @WrapMethod(method = "applyDiff")
     private void appliedenhancements$transferExactCraftingOnce(
             CraftingSimulationState parent, Operation<Void> original) {
+        if (!CraftingPlannerIntervention.enabledFor(this)) {
+            original.call(parent);
+            return;
+        }
+        try (var scope = CraftingPlannerIntervention.openExplicit()) {
         var parentTracker = (AelisBigIntegerCraftingTracker) parent;
         parentTracker.appliedenhancements$beginProjectedCraftingTransfer();
         try {
@@ -247,12 +254,17 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
         if (appliedenhancements$apiPath == AelisCalculationPath.AELIS) {
             ((AelisCalculationPathCarrier) parent).molecularmanipulator$setCalculationPath(AelisCalculationPath.AELIS);
         }
+        }
     }
 
     @WrapOperation(method = "applyDiff", at = @At(value = "INVOKE",
             target = "Lappeng/crafting/inv/CraftingSimulationState;addCrafting(Lappeng/api/crafting/IPatternDetails;J)V"))
     private void appliedenhancements$projectMergedPatternCount(CraftingSimulationState parent,
             IPatternDetails pattern, long count, Operation<Void> original) {
+        if (!CraftingPlannerIntervention.enabled()) {
+            original.call(parent, pattern, count);
+            return;
+        }
         long current = ((CraftingSimulationStateLongSafetyAccessor) parent)
                 .appliedenhancements$getCrafts().getOrDefault(pattern, 0L);
         if (com.appliedenhancements.Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
@@ -268,6 +280,7 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
     @Inject(method = "applyDiff", at = @At("RETURN"))
     private void appliedenhancements$mergeCyclicCraftingIntoParent(
             CraftingSimulationState parent, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         ((AelisCyclicCraftingTracker) parent)
                 .appliedenhancements$mergeCyclicCraftAmounts(
                         appliedenhancements$getCyclicCraftAmounts());
@@ -282,6 +295,7 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
             CraftingCalculation calculation,
             long calculatedAmount,
             CallbackInfoReturnable<CraftingPlan> callback) {
+        if (!CraftingPlannerIntervention.enabledFor(state)) return;
         var tracker = (AelisCyclicCraftingTracker) state;
         if (tracker.appliedenhancements$getCycleExecutionPlan() != null
                 || ((AelisCalculationPathCarrier) state).molecularmanipulator$getCalculationPath() == AelisCalculationPath.AELIS) {

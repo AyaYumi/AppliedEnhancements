@@ -38,7 +38,7 @@ class ConfigDefaultsTest {
 
     @Test
     void validatedModpackPerformanceProfileIsTheDefault() {
-        assertTrue(Config.ENABLE_LONG_RANGE_CRAFTING.getDefault());
+        assertFalse(Config.ENABLE_LONG_RANGE_CRAFTING.getDefault());
         assertTrue(Config.ENABLE_PATTERN_CACHING.getDefault());
         assertEquals(32, Config.PATTERN_CACHE_SIZE.getDefault());
         assertTrue(Config.ENABLE_STORAGE_BUS_SLOT_INDEX.getDefault());

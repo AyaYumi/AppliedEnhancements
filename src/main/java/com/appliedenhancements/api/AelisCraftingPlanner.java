@@ -7,6 +7,7 @@ import appeng.crafting.CraftingTreeNode;
 import appeng.crafting.CraftingTreeProcess;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.appliedenhancements.Config;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.github.appliedenhancements.crafting.aelis.AelisPlanner;
 import com.github.appliedenhancements.integration.ae2.AelisCraftingTreeNodeBridge;
 import com.github.appliedenhancements.integration.ae2.AelisCraftingTreeProcessBridge;
@@ -158,6 +159,14 @@ public interface AelisCraftingPlanner {
         public boolean shouldFallback() {
             return !applied && branchFailure == null;
         }
+
+        /** Stable category for integrations; use fallbackReason for diagnostics. */
+        public AelisFallbackReason fallbackCategory() {
+            if (applied || branchFailure != null) return AelisFallbackReason.NONE;
+            if (error != null) return AelisFallbackReason.INTERNAL_ERROR;
+            if (fallbackReason == null || fallbackReason.isBlank()) return AelisFallbackReason.OTHER;
+            return AelisFallbackReason.fromDetail(fallbackReason);
+        }
     }
 }
 
@@ -185,6 +194,13 @@ final class AelisCraftingPlannerImpl implements AelisCraftingPlanner {
             long requestedAmount,
             boolean simulation,
             KeyCounter missingItems) throws InterruptedException {
+        try (var scope = CraftingPlannerIntervention.openExplicit()) {
+            return tryExecuteScoped(root, inventory, requestedAmount, simulation, missingItems);
+        }
+    }
+
+    private Result tryExecuteScoped(CraftingTreeNode root, CraftingSimulationState inventory,
+            long requestedAmount, boolean simulation, KeyCounter missingItems) throws InterruptedException {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(inventory, "inventory");
         Objects.requireNonNull(missingItems, "missingItems");

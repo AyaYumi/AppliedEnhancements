@@ -1933,8 +1933,7 @@ public final class AelisPlanner {
 
         attemptInventory.applyDiff(parent);
         mergeMissingAmounts(stagedMissing, attemptMissing);
-        if (Config.AELIS_DIAGNOSTICS.get()
-                || requestMultipliers >= 1_000_000) {
+        if (Config.AELIS_DIAGNOSTICS.get()) {
             AppliedEnhancements.LOGGER.info(
                     "AELIS runtime inventory-isolated quantity batch: key={}, amount={}, aggregatedRequest={}, patterns={}, stockedInputKeys={}",
                     node.key, node.amount, requestMultipliers,
@@ -2253,8 +2252,7 @@ public final class AelisPlanner {
         var possibleSnapshot = snapshotPossibleStates(candidateRoot);
         int recoveredCandidateStates = enableSimulationCandidateRecovery(
                 simulationProof, possibleSnapshot);
-        if (recoveredCandidateStates > 0
-                && (diagnostics || requestMultipliers >= 1_000)) {
+        if (recoveredCandidateStates > 0 && diagnostics) {
             AppliedEnhancements.LOGGER.info(
                     "AELIS simulation transient candidate state recovered: path={}, key={}, aggregatedRequest={}, processes={}",
                     path, node.key, requestMultipliers,
@@ -2386,7 +2384,7 @@ public final class AelisPlanner {
         List<CraftingTreeProcess> processes =
                 getNativeAggregateCandidateSet(node, candidateRoot, rejection);
         if (processes == null) {
-            if (diagnostics || requestMultipliers >= 1_000) {
+            if (diagnostics) {
                 AppliedEnhancements.LOGGER.info(
                         "AELIS native aggregate candidate set rejected: path={}, key={}, requested={}, compiledCandidates={}, totalCandidates={}, allCompiled={}, compileFailures={}, reason={}",
                         path, node.key, requestMultipliers,
@@ -2481,7 +2479,7 @@ public final class AelisPlanner {
 
         mixedInventory.applyDiff(parent);
         restorePossibleStates(candidateRoot, workingPossible);
-        if (diagnostics || requestMultipliers >= 1_000) {
+        if (diagnostics) {
             AppliedEnhancements.LOGGER.info(
                     "AELIS native aggregate candidate mix committed: path={}, key={}, requested={}, allocations={}, probes={}",
                     path, node.key, requestMultipliers,
@@ -2800,7 +2798,7 @@ public final class AelisPlanner {
             steps++;
         }
 
-        if (diagnostics || steps >= 1_000) {
+        if (diagnostics) {
             AppliedEnhancements.LOGGER.info(
                     "AELIS simulation ordered first-candidate replay: path={}, key={}, requested={}, committed={}, steps={}, chunk={}",
                     path, node.key, requestMultipliers, committed, steps, chunk);
@@ -2868,7 +2866,7 @@ public final class AelisPlanner {
         best.inventory.applyDiff(parent);
         mergeMissingAmounts(stagedMissing, best.missing);
         restorePossibleStates(candidateRoot, best.possibleStates);
-        if (diagnostics || requestMultipliers >= 1_000) {
+        if (diagnostics) {
             AppliedEnhancements.LOGGER.info(
                     "AELIS ordered first-candidate prefix: path={}, key={}, requested={}, allocated={}, nativeRemainder={}, probes={}",
                     path, node.key, requestMultipliers, prefix.allocation(),
@@ -7360,7 +7358,8 @@ public final class AelisPlanner {
                 diagnosticPatterns.addAll(node.candidatePatterns);
             }
 
-            AppliedEnhancements.LOGGER.info(
+            com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
+                    "contextual_terminal_conflict",
                     "AELIS contextual terminal conflict: key={}, amount={}, canonicalTerminal={}, conflictingTerminal={}, canonicalPath={}, conflictingPath={}, patternSource={}, patterns={}",
                     node.key, node.amount, node.terminal, occurrenceProcesses.isEmpty(),
                     describeRecipeContext(canonicalContext), describeRecipeContext(context),

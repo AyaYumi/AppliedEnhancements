@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 
 /** Rebuilds AE2's progress projection without allowing pattern-output products to wrap. */
 @Mixin(value = ExecutingCraftingJob.class, remap = false)
@@ -35,6 +36,7 @@ abstract class ExecutingCraftingJobLongSafetyMixin {
             method = "<init>(Lappeng/api/networking/crafting/ICraftingPlan;Lappeng/crafting/execution/ExecutingCraftingJob$CraftingDifferenceListener;Lappeng/crafting/CraftingLink;Ljava/lang/Integer;)V",
             at = @At("RETURN"))
     private void appliedenhancements$rebuildSaturatedProgress(CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         var exactByType = new IdentityHashMap<AEKeyType, BigInteger>();
         for (var entry : waitingFor.list) {
             merge(exactByType, entry.getKey().getType(),

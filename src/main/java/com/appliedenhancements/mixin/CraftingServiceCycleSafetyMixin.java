@@ -12,6 +12,7 @@ import appeng.crafting.execution.CraftingSubmitResult;
 import appeng.me.service.CraftingService;
 import com.appliedenhancements.api.AelisCycleExecutionApi;
 import com.appliedenhancements.runtime.AelisCycleDispatchScope;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -34,6 +35,8 @@ public abstract class CraftingServiceCycleSafetyMixin {
             boolean prioritizePower,
             IActionSource source,
             CallbackInfoReturnable<ICraftingSubmitResult> callback) {
+        if (!CraftingPlannerIntervention.enabledFor(plan)
+                && !AelisCycleExecutionApi.requiresCycleAwareCpu(plan)) return;
         if (target != null
                 && AelisCycleExecutionApi.requiresCycleAwareCpu(plan)
                 && !AelisCycleExecutionApi.supports(target)) {

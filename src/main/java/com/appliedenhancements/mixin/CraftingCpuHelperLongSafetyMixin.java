@@ -4,6 +4,7 @@ import appeng.crafting.execution.CraftingCpuHelper;
 import appeng.crafting.execution.InputTemplate;
 import appeng.crafting.inv.ICraftingInventory;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -22,6 +23,7 @@ abstract class CraftingCpuHelperLongSafetyMixin {
             InputTemplate template,
             long multiplier,
             CallbackInfoReturnable<Long> callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         NativeCraftingLongSafety.requirePositive(
                 template.amount(), "input template amount");
         NativeCraftingLongSafety.multiplyNonNegative(

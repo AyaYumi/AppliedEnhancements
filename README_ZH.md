@@ -6,9 +6,18 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 AELIS 合成规划器。
 
-> 当前版本：`1.0.9`
+> 当前版本：`1.0.9-fix`
 >
 > 目标平台：Minecraft `1.21.1` / NeoForge / Java `21`
+
+## 1.0.9-fix 更新
+
+- 移除 AE2 原生样板输入需求乘法的提前溢出拦截，允许该类请求继续交由 AE2 处理。
+- 保留样板输出数量及其他原生边界的安全校验。
+- 关闭自动 AELIS 规划时完全透传 AE2 原生合成计算；精确字节估算和增强溢出校验只在规划器介入时启用。
+- 新增稳定的 BigInteger 请求、计划元数据、结构化回退分类和精确执行需求 API，同时保留旧入口兼容。
+- 普通规划日志改为仅在诊断开关开启时输出，异常提示使用限流警告；开发运行默认使用 `info` 日志级别。
+- 移除失效的临时验证源码目录配置，并将接入文档更新到 `1.0.9-fix`。
 
 ## 1.0.9 更新
 
@@ -17,9 +26,9 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 - AELIS 新增可配置的 BigInteger 中间需求与分支合并计算，默认开启。
 - 在 AE2 仍使用 long 的摘要和 CPU 边界加入饱和与溢出保护，同时为确认界面保留精确的 AELIS 待合成总量。
 - 加入与 DataEnergistics 一致的 `E` 以上十进制单位：`Z`、`Y`、`B` 一直到 `Att`，再往上使用科学计数法。
-- 为精确 BigInteger 待合成、缺失、库存供应总量及存储字节估计加入有界网络同步，内部载荷协议为 `7`。
+- 为精确 BigInteger 待合成、缺失、库存供应总量及存储字节估计加入有界网络同步，内部载荷协议为 `9`。
 
-公共 Java API 签名与 1.0.8 保持一致。内部载荷协议已提升到 `7`，客户端与服务端必须使用同一 1.0.9 构建。
+旧公共 Java API 签名继续兼容 1.0.8；新接入可使用 `1.0.9-fix` 新增的稳定精确 API。当前内部载荷协议为 `9`，客户端与服务端必须使用同一发行构建。
 
 ## 功能概览
 
@@ -65,7 +74,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
 
 ```text
-build/libs/appliedenhancements-1.0.9.jar
+build/libs/appliedenhancements-1.0.9-fix.jar
 ```
 
 同时需要安装匹配版本的 NeoForge 与 AE2。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
@@ -74,7 +83,7 @@ build/libs/appliedenhancements-1.0.9.jar
 
 ## Long 范围合成
 
-数量输入框最多接受 20 个字符，并采用精确整数解析。服务器会再次校验功能开关与订单上限，因此客户端配置无法绕过服务器限制。
+长数量输入默认关闭。开启后，普通 long 请求采用精确整数解析，BigInteger 输入最多支持 256 位十进制数字。服务器会再次校验功能开关与订单上限，因此客户端配置无法绕过服务器限制。
 
 默认最大订单量：
 
@@ -96,15 +105,15 @@ build/libs/appliedenhancements-1.0.9.jar
 -1
 ```
 
-即使输入处于 `long` 范围内，如果某个配方分支的乘法、输出聚合或 AE2 原生逐件尝试会越过安全边界，请求仍可能被拒绝。超大订单能否实际完成还取决于配方图规模、网络库存、内存和执行时间。
+输入超过 `Long.MAX_VALUE` 的订单时，需开启长数量输入和 BigInteger 规划，并将配置上限设为 `Long.MAX_VALUE`；更小的配置上限仍会被严格执行。精确订单需要 CPU 实现读取完整元数据。在 AELIS 介入时，请求仍可能在不支持的配方或原生边界失败；自动规划关闭时，普通 AE2 计算遵循 AE2 自身行为。
 
 ## AELIS 规划器
 
 AELIS（Applied Enhancements Lattice Integer Solver）会在单次合成计算会话中分析配方树，并尝试把可证明安全的节点聚合执行。存在容器物品、复杂候选、可复用输入或其他兼容边界时，规划器会保留局部原生语义，或把整次尝试交回 AE2。
 
-开启 `crafting.aelis.enable_big_integer_planning` 后，AELIS 会用精确的 `BigInteger` 保存无环中间需求、多分支合并总量和样板执行次数。AE2 只能使用 `long` 的任务表与摘要采用饱和兼容投影，确认界面仍保留 AELIS 的精确待合成总量，并使用 `E`、`Z`、`Y`、`B` 一直到 `Att` 的扩展十进制单位，之后转为科学计数法。需要投影样板次数的计划只能预览，因为原生 AE2 CPU 无法执行超过 `Long.MAX_VALUE` 次的样板；网络中存在合格的 Trinity Data Core CPU 时，Data Energistics 仍可执行其自己的 Trinity 计划。
+开启 `crafting.aelis.enable_big_integer_planning` 后，AELIS 会用精确的 `BigInteger` 保存无环中间需求、多分支合并总量和样板执行次数。AE2 只能使用 `long` 的任务表与摘要采用饱和兼容投影，确认界面仍保留 AELIS 的精确待合成总量，并使用 `E`、`Z`、`Y`、`B` 一直到 `Att` 的扩展十进制单位，之后转为科学计数法。投影饱和不再强制仅预览，也不限制提交到特定 CPU 白名单；由所选 CPU 决定是否接受，完整执行仍需 CPU 实现精确数量支持。接入方通过 `AelisExactCraftingPlanApi.read(plan)` 读取稳定元数据，详见[精确执行 API](docs/EXACT_CRAFTING_API.md)。
 
-带可复用催化剂的事务规划路径也会保留精确的大整数材料需求，并按输入顺序借还实际催化剂；超大缺失数量会同步到确认界面。原生边界、有限耐久工具分配、有序候选选择和循环执行调度仍受部分 `long` 限制。无法支持的溢出或超大回退会结束并提示原因，避免重新逐次遍历整个订单。各路径的检查范围与剩余限制见[规划路径检查记录](docs/BIG_INTEGER_PLANNING_AUDIT.md)。开发环境可用 `gradlew runServer -PplanningSmoke -PwithoutJei` 执行真实 AE2 集成检查，测试类不包含在常规构建中。
+带可复用催化剂的事务规划路径也会保留精确的大整数材料需求，并按输入顺序借还实际催化剂；超大缺失数量会同步到确认界面。原生边界、有限耐久工具分配、有序候选选择和循环执行调度仍受部分 `long` 限制。无法支持的溢出或超大回退会结束并提示原因，避免重新逐次遍历整个订单。各路径的检查范围与剩余限制见[规划路径检查记录](docs/BIG_INTEGER_PLANNING_AUDIT.md)。历史运行检查使用独立开发环境，其临时验证代码不属于当前仓库。
 
 当 AELIS 实际采用循环 SCC 或数量反馈求解时，合成确认界面的对应材料格会增加“循环合成数量”。该数值按循环样板的实际执行次数乘以样板产量统计，是普通“合成数量”的子集，只随当前确认菜单同步。
 
@@ -217,7 +226,7 @@ AELIS 受节点数和编译时间预算约束。编译图仅在当前合成计�
 
 | 配置键 | 默认值 | 有效范围 | 说明 |
 |---|---:|---:|---|
-| `crafting.enable_long_range_crafting` | `true` | 布尔值 | 启用超过 `Integer.MAX_VALUE` 的合成订单 |
+| `crafting.enable_long_range_crafting` | `false` | 布尔值 | 启用超过 `Integer.MAX_VALUE` 的合成订单 |
 | `crafting.max_crafting_order_amount` | `2147483647` | `1` ～ `Long.MAX_VALUE` | 单次 AE2 自动合成订单的最大数量 |
 | `crafting.enable_progress_display` | `false` | 布尔值 | 启用合成计算进度和路径显示 |
 | `crafting.enable_enhanced_material_calculation` | `false` | 布尔值 | 启用增强的存储、合成和缺失材料统计 |
@@ -283,7 +292,7 @@ ServerEvents.tags('item', event => {
 构建产物位于：
 
 ```text
-build/libs/appliedenhancements-1.0.9.jar
+build/libs/appliedenhancements-1.0.9-fix.jar
 ```
 
 ## 验证范围
@@ -296,7 +305,7 @@ build/libs/appliedenhancements-1.0.9.jar
 
 完整的依赖配置、生命周期、线程/侧别要求及接入示例见 [API 接入文档](docs/API_INTEGRATION_ZH.md)。稳定兼容范围仅包括 `com.appliedenhancements.api` 与 `com.appliedenhancements.api.client`；Mixin、运行时实现和 `com.github.appliedenhancements` 下的内部桥接不属于公共 API。
 
-公开顶层 API 共 17 个，其中 16 个为现行接口，一个为已弃用兼容入口。
+主要公开 API 如下；精确请求使用 `AelisCraftingRequest` 和 `AelisExactCraftingService`，通过 `AelisExactCraftingPlanApi` 读取只读 `AelisPlanMetadata` 和 `AelisExecutionRequirement`。旧的 `MaxFastCraftingPlanner` 作为已弃用兼容入口保留。
 
 | 接口 | 用途 |
 |---|---|

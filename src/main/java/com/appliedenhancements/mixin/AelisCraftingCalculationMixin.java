@@ -21,6 +21,7 @@ import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgres
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
 import com.github.appliedenhancements.integration.ae2.AelisCraftingTreeNodeBridge;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -119,19 +120,7 @@ public abstract class AelisCraftingCalculationMixin
         var aelisEnabled = molecularmanipulator$aelisEnabled || com.appliedenhancements.runtime.ExactRequestScope.current() != null;
         var progress = molecularmanipulator$calculationProgress;
         if (!aelisEnabled) {
-            if (progress != null) {
-                progress.beginAe2(AelisCalculationPath.AE2_NATIVE);
-            }
-            try {
-                ICraftingPlan plan = original.call();
-                if (progress != null) {
-                    progress.complete(molecularmanipulator$finalCalculationPath(plan));
-                }
-                return plan;
-            } catch (RuntimeException | Error failure) {
-                molecularmanipulator$finishFailedProgress(progress, failure);
-                throw failure;
-            }
+            return original.call();
         }
 
         boolean backgroundSlot = false;
@@ -252,9 +241,6 @@ public abstract class AelisCraftingCalculationMixin
         var aelisEnabled = molecularmanipulator$aelisEnabled || com.appliedenhancements.runtime.ExactRequestScope.current() != null;
 
         if (!aelisEnabled || containerItems != null) {
-            if (progress != null) {
-                progress.beginAe2(AelisCalculationPath.AE2_NATIVE);
-            }
             original.call(tree, inventory, requestedAmount, containerItems);
             return;
         }
@@ -364,6 +350,7 @@ public abstract class AelisCraftingCalculationMixin
     private void molecularmanipulator$attachCalculationPath(
             boolean simulation, long amount,
             CallbackInfoReturnable<CraftingPlan> callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         if ((Object) callback.getReturnValue() instanceof AelisCalculationPathCarrier carrier) {
             // An external API caller may already have attached the actual path.
             if (carrier.molecularmanipulator$getCalculationPath() != AelisCalculationPath.AELIS) {
@@ -376,6 +363,7 @@ public abstract class AelisCraftingCalculationMixin
     private void molecularmanipulator$beginCraftAttempt(
             boolean simulation, long amount,
             CallbackInfoReturnable<CraftingPlan> callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         var progress = molecularmanipulator$calculationProgress;
         if (progress != null) {
             progress.beginAttempt(simulation);
@@ -389,6 +377,9 @@ public abstract class AelisCraftingCalculationMixin
             CraftingCalculation calculation,
             long amount,
             Operation<CraftingPlan> original) {
+        if (!CraftingPlannerIntervention.enabled()) {
+            return original.call(inventory, calculation, amount);
+        }
         var progress = molecularmanipulator$calculationProgress;
         if (progress != null) {
             progress.beginBuildingPlan();
@@ -400,6 +391,9 @@ public abstract class AelisCraftingCalculationMixin
             target = "Lappeng/crafting/CraftingTreeNode;getNodeCount()J"))
     private long molecularmanipulator$useAggregatedNodeCount(CraftingTreeNode tree,
             Operation<Long> original) {
+        if (!CraftingPlannerIntervention.enabled()) {
+            return original.call(tree);
+        }
         return molecularmanipulator$aelisNodeCount >= 0
                 ? molecularmanipulator$aelisNodeCount
                 : original.call(tree);

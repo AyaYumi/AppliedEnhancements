@@ -4,6 +4,7 @@ import appeng.api.stacks.AEKey;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.appliedenhancements.runtime.CraftingByteEstimate;
 import com.appliedenhancements.runtime.ExactCraftingBytes;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.github.appliedenhancements.integration.ae2.AelisCraftingBytesTracker;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -35,13 +36,19 @@ public abstract class CraftingSimulationStateBytesMixin implements AelisCrafting
 
     /** Overrides the inherited interface default, preserving integer operands and fluid fractions. */
     public void addStackBytes(AEKey key, long amount, long multiplier) {
+        if (!CraftingPlannerIntervention.enabledFor(this)) {
+            ((CraftingSimulationState) (Object) this).addBytes(
+                    (double) amount * (double) multiplier
+                            / key.getType().getAmountPerByte() * 8.0);
+            return;
+        }
         ExactCraftingBytes.addStackBytes((CraftingSimulationState) (Object) this, key,
                 BigInteger.valueOf(amount).multiply(BigInteger.valueOf(multiplier)));
     }
 
     @Inject(method = "addBytes", at = @At("HEAD"))
     private void appliedenhancements$trackNativeBytes(double bytes, CallbackInfo callback) {
-        if (!appliedenhancements$projectingBytes) {
+        if (CraftingPlannerIntervention.enabledFor(this) && !appliedenhancements$projectingBytes) {
             appliedenhancements$exactBytes = appliedenhancements$exactBytes.add(CraftingByteEstimate.fromDouble(bytes));
         }
     }
@@ -50,6 +57,10 @@ public abstract class CraftingSimulationStateBytesMixin implements AelisCrafting
             target = "Lappeng/crafting/inv/CraftingSimulationState;addBytes(D)V"))
     private void appliedenhancements$mergeExactBytes(CraftingSimulationState parent, double bytes,
             Operation<Void> original) {
+        if (!CraftingPlannerIntervention.enabledFor(this)) {
+            original.call(parent, bytes);
+            return;
+        }
         ((AelisCraftingBytesTracker) parent).appliedenhancements$addExactBytes(appliedenhancements$exactBytes);
     }
 }

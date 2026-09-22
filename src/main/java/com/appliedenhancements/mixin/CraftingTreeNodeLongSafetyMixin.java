@@ -6,6 +6,7 @@ import appeng.api.stacks.KeyCounter;
 import appeng.crafting.CraftingTreeNode;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import org.jetbrains.annotations.Nullable;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Final;
@@ -39,6 +40,7 @@ abstract class CraftingTreeNodeLongSafetyMixin {
             long requestedAmount,
             @Nullable KeyCounter containerItems,
             CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         NativeCraftingLongSafety.multiplyNonNegative(
                 this.amount, requestedAmount, "crafting tree node demand");
     }
@@ -50,6 +52,7 @@ abstract class CraftingTreeNodeLongSafetyMixin {
             long multiplier,
             @Nullable KeyCounter outputList,
             CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         if (outputList == null || this.parentInput == null) {
             return;
         }

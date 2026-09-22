@@ -10,6 +10,7 @@ import appeng.crafting.CraftingCalculation;
 import appeng.crafting.CraftingPlan;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.appliedenhancements.Config;
 import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftingTracker;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
@@ -50,6 +51,7 @@ abstract class CraftingSimulationStateLongSafetyMixin {
             shift = At.Shift.AFTER))
     private void appliedenhancements$rejectUnsafeInventorySum(
             AEKey what, long amount, Actionable mode, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         if (mode == Actionable.MODULATE) {
             NativeCraftingLongSafety.addNonNegative(
                     this.modifiableCache.get(what), amount, "simulated inventory amount");
@@ -59,6 +61,7 @@ abstract class CraftingSimulationStateLongSafetyMixin {
     @Inject(method = "emitItems", at = @At("HEAD"))
     private void appliedenhancements$rejectUnsafeEmittedItemSum(
             AEKey what, long amount, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         NativeCraftingLongSafety.addNonNegative(
                 this.emittedItems.get(what), amount, "emitted item total");
     }
@@ -66,6 +69,7 @@ abstract class CraftingSimulationStateLongSafetyMixin {
     @Inject(method = "addCrafting", at = @At("HEAD"))
     private void appliedenhancements$rejectUnsafeCraftCountSum(
             IPatternDetails details, long count, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         long aggregatedCrafts = NativeCraftingLongSafety.addNonNegative(
                 this.crafts.getOrDefault(details, 0L), count, "pattern craft total");
         ((AelisBigIntegerCraftingTracker) this)
@@ -83,6 +87,7 @@ abstract class CraftingSimulationStateLongSafetyMixin {
             CraftingCalculation calculation,
             long calculatedAmount,
             CallbackInfoReturnable<CraftingPlan> callback) {
+        if (!CraftingPlannerIntervention.enabledFor(state)) return;
         var stateAccess = (CraftingSimulationStateLongSafetyAccessor) (Object) state;
         boolean allowBigIntegerOutputs = Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
                 && state instanceof AelisCalculationPathCarrier path
@@ -100,6 +105,7 @@ abstract class CraftingSimulationStateLongSafetyMixin {
     @Inject(method = "applyDiff", at = @At("HEAD"))
     private void appliedenhancements$rejectUnsafeChildDiff(
             CraftingSimulationState parent, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         var parentState = (CraftingSimulationStateLongSafetyAccessor) (Object) parent;
         KeyCounter parentUnmodified = parentState.appliedenhancements$getUnmodifiedCache();
         KeyCounter parentModifiable = parentState.appliedenhancements$getModifiableCache();

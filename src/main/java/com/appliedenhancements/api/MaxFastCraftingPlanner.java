@@ -71,6 +71,13 @@ public interface MaxFastCraftingPlanner {
         public boolean shouldFallback() {
             return !applied && branchFailure == null;
         }
+
+        public AelisFallbackReason fallbackCategory() {
+            if (applied || branchFailure != null) return AelisFallbackReason.NONE;
+            if (error != null) return AelisFallbackReason.INTERNAL_ERROR;
+            if (fallbackReason == null || fallbackReason.isBlank()) return AelisFallbackReason.OTHER;
+            return AelisFallbackReason.fromDetail(fallbackReason);
+        }
     }
 }
 

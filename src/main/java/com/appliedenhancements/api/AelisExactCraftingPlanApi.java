@@ -10,9 +10,17 @@ import java.util.Objects;
 
 /** Read-only exact execution metadata for crafting CPU integrations. */
 public final class AelisExactCraftingPlanApi {
-    private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
-
     private AelisExactCraftingPlanApi() {
+    }
+
+    /** Reads all exact and projected quantities through the stable public API. */
+    public static AelisPlanMetadata read(ICraftingPlan plan) {
+        return AelisPlanMetadata.read(plan);
+    }
+
+    /** Reports which exact quantities a CPU must support for this plan. */
+    public static AelisExecutionRequirement executionRequirement(ICraftingPlan plan) {
+        return read(plan).executionRequirement();
     }
 
     /** Attach execution quantities to a plan produced by any planner. Keep the returned plan. */
@@ -75,9 +83,11 @@ public final class AelisExactCraftingPlanApi {
     }
 
     public static boolean requiresExactExecution(ICraftingPlan plan) {
-        return getFinalOutputAmount(plan).compareTo(LONG_MAX) > 0
-                || getStoredAmounts(plan).values().stream().anyMatch(value -> value.compareTo(LONG_MAX) > 0)
-                || getPatternTimes(plan).values().stream()
-                .anyMatch(amount -> amount != null && amount.compareTo(LONG_MAX) > 0);
+        // Preserve the legacy query contract. The structured query also reports
+        // aggregate outputs, infinite inputs and projection metadata.
+        var max = BigInteger.valueOf(Long.MAX_VALUE);
+        return getFinalOutputAmount(plan).compareTo(max) > 0
+                || getStoredAmounts(plan).values().stream().anyMatch(value -> value.compareTo(max) > 0)
+                || getPatternTimes(plan).values().stream().anyMatch(value -> value.compareTo(max) > 0);
     }
 }

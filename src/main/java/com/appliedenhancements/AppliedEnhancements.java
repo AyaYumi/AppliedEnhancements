@@ -43,8 +43,6 @@ public class AppliedEnhancements {
 
         ConfigFileMigration.migrate(FMLPaths.CONFIGDIR.get());
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "appliedenhancements-common.toml");
-
-        LOGGER.info("Applied Enhancements initializing...");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {

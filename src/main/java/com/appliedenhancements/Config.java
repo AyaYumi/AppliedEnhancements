@@ -47,9 +47,9 @@ public final class Config {
                 .comment(
                         "Enable crafting orders above Integer.MAX_VALUE; BigInteger planning also supports orders above long.",
                         "启用超过 Integer.MAX_VALUE 的合成订单；配合大整数规划可超过 long。",
-                        "Default / 默认值: true")
+                        "Default / 默认值: false")
                 .translation("appliedenhancements.config.enable_long_range_crafting")
-                .define("enable_long_range_crafting", true);
+                .define("enable_long_range_crafting", false);
 
         MAX_CRAFTING_ORDER_AMOUNT = builder
                 .comment(

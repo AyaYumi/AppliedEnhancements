@@ -1,7 +1,46 @@
-# 大整数规划与 CPU 执行 API（1.21.1 / 1.0.9 修订版）
+# 大整数规划与 CPU 执行 API（1.21.1 / 1.0.9-fix 修订版）
 
 此 API 不依赖 DataEnergistics，也不引用 OmniSequence。OmniSequence 是接入示例，不是允许执行的 CPU 白名单。
-客户端与服务端须使用本次同一构建（网络协议 9）；接入方须使用包含这些类的新版 1.0.9 JAR 编译和运行。
+客户端与服务端须使用本次同一构建（网络协议 9）；接入方须使用包含这些类的新版 1.0.9-fix JAR 编译和运行。
+
+## 稳定的计划元数据 API
+
+接入方不需要直接依赖 `com.github.appliedenhancements.integration.ae2` 下的 carrier 接口。使用稳定的公开 API 读取计划：
+
+```java
+AelisPlanMetadata metadata = AelisExactCraftingPlanApi.read(plan);
+AelisExecutionRequirement requirement = metadata.executionRequirement();
+if (requirement.requiresExactExecution()) {
+    // The CPU must keep exact quantities instead of using AE2 long projections.
+}
+```
+
+`AelisPlanMetadata` 提供最终产物、字节数、待合成/缺失/库存供应/无限输入、完整样板次数、规划路径和预览投影状态。`AelisExecutionRequirement` 按字段说明是否超过原生 `long` 执行能力；它只提供能力信息，不替 CPU 拒绝提交。
+
+快照中的映射不可修改。普通计划的数量从 `long` 提升为 `BigInteger`，不能恢复其他规划器已经丢失的精度。`craftedAmounts` 根据完整样板次数与产物汇总，再应用精确材料元数据。`projectionSaturated` 表示兼容投影受限，不代表计划只能预览。
+
+`requiresExactExecution()` 包含最终产量、样板次数、库存供应、无限输入、累计产量和投影受限标记；只有字节数或缺失数量超限时，使用 `requiresExactMetadata()` 判断显示和记账是否需要大整数。
+
+BigInteger 请求也可以使用统一对象构造：
+
+```java
+var request = new AelisCraftingRequest(
+        outputKey, amount, CalculationStrategy.REPORT_MISSING_ITEMS);
+Future<ICraftingPlan> pending = AelisExactCraftingService.begin(
+        level, requester, request);
+```
+
+旧的 `begin(level, requester, output, amount)` 和 carrier 读取方法继续保留，以兼容已有接入。
+
+请求必须为不超过 256 位的正整数。目前仅支持 `REPORT_MISSING_ITEMS`；传入 `CRAFT_LESS` 会明确抛出 `IllegalArgumentException`。也可通过 `AelisCraftingRequest.of(outputKey, amount)` 从 `long` 或 `BigInteger` 创建请求。
+
+## 自动规划与显式调用
+
+关闭 `crafting.aelis.enable_automatic_planner` 后，普通 AE2 请求保持原生规划；第三方主动调用 `AelisCraftingPlanner.tryExecute` 或 `AelisExactCraftingService.begin` 仍可使用对应扩展。精确服务仍受 `crafting.aelis.enable_big_integer_planning` 控制。调用方无需自行管理线程作用域。
+
+`AelisCraftingPlanner.Result` 和兼容入口 `MaxFastCraftingPlanner.Result` 新增 `fallbackCategory()`，返回 `AelisFallbackReason`。先用 `shouldFallback()` 判断是否需要回退，再按分类处理；成功或分支失败返回 `NONE`，异常返回 `INTERNAL_ERROR`，未知原因返回 `OTHER`。原有 `fallbackReason()` 字符串保留用于诊断，调用方无需解析其文本。
+
+旧的 `AelisExactCraftingPlanApi.requiresExactExecution(plan)` 保持原有判断范围。新接入应使用 `executionRequirement(plan)`，以覆盖累计产量、无限输入和投影状态。
 
 ## 生成完整订单
 
@@ -80,4 +119,4 @@ plan = AelisExactCraftingPlanApi.attachExecutionMetadata(plan, output, tasks, in
 - 开发验证用的是受控配方和合成的提供者接受回调，不等同于运行整合包中所有机器配方。
 - 万象样板回归：412 项单元测试通过；使用无用之物 2.3.6.3 的真实石头万象样板、智能倍增和提交前二次改写，验证 19 位、20 位及 51 位订单的整批/余数守恒、拒收不扣量、成功接收扣量、取消与存档恢复。NeoForge 21.1.248 + DataEnergistics 3.2.2 + NeoEcoAE 21.2.0-beta3 + LDLib 2.2.39.a 组合验证通过。提供者接受回调仍为受控测试，不声称外部机器能一次收下超 long 材料。
 
-执行验证源码仅在 `-PplanningSmoke` / `-PexactSmoke` 开发运行中加入，不进入普通发布 JAR。
+上述游戏内验证来自历史独立开发环境；当前仓库不包含该临时验证源码或对应 Gradle 开关，普通发布 JAR 不包含测试类。当前修订通过仓库单元测试和构建验证，未重新运行上述游戏内场景。
