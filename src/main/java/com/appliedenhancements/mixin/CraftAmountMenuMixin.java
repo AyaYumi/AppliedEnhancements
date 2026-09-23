@@ -15,6 +15,7 @@ import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
 import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
+import com.appliedenhancements.runtime.DataEnergisticsMenuCompat;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import org.spongepowered.asm.mixin.Final;
@@ -27,7 +28,37 @@ import org.spongepowered.asm.mixin.Unique;
  * Allows crafting orders that exceed Integer.MAX_VALUE.
  */
 @Mixin(value = CraftAmountMenu.class, remap = false)
-public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBridge {
+public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBridge, com.appliedenhancements.ae2.ExactCraftingMenuBridge {
+    @Unique private java.math.BigInteger appliedenhancements$initialExactAmount;
+    @Override public java.math.BigInteger appliedenhancements$getInitialExactAmount() { return appliedenhancements$initialExactAmount; }
+    @Override public void appliedenhancements$setInitialExactAmount(java.math.BigInteger amount) { appliedenhancements$initialExactAmount = amount; }
+
+    @Override public void appliedenhancements$confirmExact(java.math.BigInteger amount, boolean missing, boolean autoStart) {
+        var menu = (CraftAmountMenu) (Object) this;
+        if (menu.isClientSide() || whatToCraft == null || amount.signum() <= 0) return;
+        if (amount.bitLength() <= 63) { appliedenhancements$confirmLong(amount.longValueExact(), missing, autoStart); return; }
+        if (!Config.ENABLE_LONG_RANGE_CRAFTING.get() || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                || Config.MAX_CRAFTING_ORDER_AMOUNT.get() != Long.MAX_VALUE) return;
+        new com.appliedenhancements.api.AelisExactRequest(amount);
+        if (!(menu.getPlayer() instanceof ServerPlayer player) || menu.getLocator() == null
+                || !(menu.getTarget() instanceof IActionHost target) || target.getActionableNode() == null) return;
+        if (missing) amount = amount.subtract(java.math.BigInteger.valueOf(Math.max(0,
+                target.getActionableNode().getGrid().getStorageService().getCachedInventory().get(whatToCraft))));
+        if (amount.signum() <= 0) { host.returnToMainMenu(player, menu); return; }
+        MenuOpener.open(CraftConfirmMenu.TYPE, player, menu.getLocator());
+        if (player.containerMenu instanceof CraftConfirmMenu confirm) {
+            try {
+                confirm.setAutoStart(autoStart);
+                if (((com.appliedenhancements.ae2.ExactCraftingMenuBridge) confirm).appliedenhancements$planExact(whatToCraft, amount)) {
+                    confirm.broadcastChanges(); return;
+                }
+            } catch (RuntimeException failure) {
+                AppliedEnhancements.LOGGER.error("Exact crafting request failed", failure);
+            }
+            appliedenhancements$closePlanScreen(player, confirm);
+            player.sendSystemMessage(Component.translatable("message.appliedenhancements.crafting_plan_stalled"));
+        }
+    }
     @Shadow
     private AEKey whatToCraft;
 
@@ -59,6 +90,14 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
                 menu.getPlayer().sendSystemMessage(Component.translatable(
                         "message.appliedenhancements.long_range_disabled"));
             }
+            return;
+        }
+
+        // Data Energistics owns the BigInteger-capable Trinity planning and CPU
+        // context. Use its public menu state when present, while retaining the
+        // standalone Applied Enhancements path when the optional mod is absent.
+        if (DataEnergisticsMenuCompat.confirmLongIfAvailable(
+                menu, amount, craftMissingAmount, autoStart)) {
             return;
         }
 
@@ -142,6 +181,8 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
                 confirmMenu.broadcastChanges();
                 return;
             }
+        }
+        if (player.containerMenu instanceof CraftConfirmMenu confirmMenu) {
             appliedenhancements$closePlanScreen(player, confirmMenu);
         }
         player.sendSystemMessage(Component.translatable(

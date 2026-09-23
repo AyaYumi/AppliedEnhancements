@@ -53,6 +53,25 @@ class ExternalCraftingPlanLongSafetyTest {
     }
 
     @Test
+    void bigIntegerProjectionMaySaturateDisplayOnlyTotals() {
+        ICraftingPlan overflowingOutput = plan(Map.of(
+                pattern("first", 1), Long.MAX_VALUE,
+                pattern("second", 1), 1L));
+        ICraftingPlan overflowingSummary = plan(
+                Map.of(),
+                0,
+                new GenericStack(OUTPUT, 1),
+                counter(Long.MAX_VALUE),
+                new KeyCounter(),
+                counter(1));
+
+        assertDoesNotThrow(() -> NativeCraftingLongSafety.validatePlan(
+                overflowingOutput, true));
+        assertDoesNotThrow(() -> NativeCraftingLongSafety.validatePlan(
+                overflowingSummary, true));
+    }
+
+    @Test
     void arbitraryExternalPlanCannotOverflowCraftingPlanSummary() {
         ICraftingPlan storedOverflow = plan(
                 Map.of(),

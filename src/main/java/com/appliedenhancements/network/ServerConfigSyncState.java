@@ -7,6 +7,11 @@ import org.jetbrains.annotations.ApiStatus;
 @ApiStatus.Internal
 public final class ServerConfigSyncState {
     private static volatile Values synchronizedValues;
+    private static volatile Boolean exactEnabled;
+    public static boolean isBigIntegerEnabled() {
+        return exactEnabled != null ? exactEnabled : Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get();
+    }
+    static void acceptExact(boolean enabled) { exactEnabled = enabled; }
 
     private ServerConfigSyncState() {
     }
@@ -38,6 +43,7 @@ public final class ServerConfigSyncState {
 
     static void reset() {
         synchronizedValues = null;
+        exactEnabled = null;
     }
 
     static Values currentOr(Values fallback) {

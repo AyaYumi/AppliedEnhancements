@@ -16,6 +16,7 @@ public final class Config {
 
     // Crafting / AELIS
     public static final ForgeConfigSpec.BooleanValue ENABLE_AUTOMATIC_AELIS_PLANNER;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_AELIS_BIG_INTEGER_PLANNING;
     public static final ForgeConfigSpec.IntValue AELIS_MAX_NODES;
     public static final ForgeConfigSpec.IntValue AELIS_COMPILE_BUDGET_MS;
     public static final ForgeConfigSpec.BooleanValue AELIS_DIAGNOSTICS;
@@ -44,15 +45,17 @@ public final class Config {
 
         ENABLE_LONG_RANGE_CRAFTING = builder
                 .comment(
-                        "Enable crafting orders above Integer.MAX_VALUE, up to Long.MAX_VALUE.",
-                        "启用超过 Integer.MAX_VALUE、最大可到 Long.MAX_VALUE 的合成订单。",
-                        "Default / 默认值: true")
+                        "Enable crafting orders above Integer.MAX_VALUE; BigInteger planning also supports orders above long.",
+                        "启用超过 Integer.MAX_VALUE 的合成订单；配合大整数规划可超过 long。",
+                        "Default / 默认值: false")
                 .translation("appliedenhancements.config.enable_long_range_crafting")
-                .define("enable_long_range_crafting", true);
+                .define("enable_long_range_crafting", false);
 
         MAX_CRAFTING_ORDER_AMOUNT = builder
                 .comment(
                         "Maximum amount allowed for a single AE2 autocrafting order.",
+                        "Long.MAX_VALUE means no long ceiling when BigInteger planning is enabled; smaller values remain explicit limits.",
+                        "开启大整数规划时，Long.MAX_VALUE 表示不设 long 上限；较小值仍为明确限额。",
                         "Values above Integer.MAX_VALUE (2,147,483,647) use long-range crafting.",
                         "单次 AE2 自动合成订单允许的最大数量。",
                         "超过 Integer.MAX_VALUE（2,147,483,647）时使用超大数量合成路径。",
@@ -99,6 +102,18 @@ public final class Config {
                         "Default / 默认值: false")
                 .translation("appliedenhancements.config.enable_automatic_aelis_planner")
                 .define("enable_automatic_planner", false);
+
+        ENABLE_AELIS_BIG_INTEGER_PLANNING = builder
+                .comment(
+                        "Use exact BigInteger arithmetic for AELIS orders and intermediate demands above Long.MAX_VALUE.",
+                        "Long projections are for compatibility; CPUs decide execution and can read the exact execution API.",
+                        "When disabled, AELIS retains the legacy long-overflow fallback behavior.",
+                        "对超过 Long.MAX_VALUE 的订单和 AELIS 中间需求使用精确 BigInteger 算术。",
+                        "long 投影仅供兼容；由 CPU 自行决定执行，并可读取精确执行 API。",
+                        "关闭后，AELIS 保留原有的 long 溢出回退行为。",
+                        "Default / 默认值: true")
+                .translation("appliedenhancements.config.enable_aelis_big_integer_planning")
+                .define("enable_big_integer_planning", true);
 
         AELIS_MAX_NODES = builder
                 .comment(
@@ -262,12 +277,12 @@ public final class Config {
 
         ENABLE_INFINITE_STORAGE_LIMIT_BYPASS = builder
                 .comment(
-                        "Raise infinite-cell network listings to Long.MAX_VALUE and display them as 9.2E.",
-                        "Disable this to preserve the amount reported by the original cell implementation.",
-                        "Long.MAX_VALUE can leave no arithmetic headroom for AE2's native planner.",
-                        "将无限磁盘网络数量提升至 Long.MAX_VALUE，并显示为 9.2E。",
-                        "关闭后保留磁盘原实现报告的数量。",
-                        "Long.MAX_VALUE 可能不给 AE2 原生规划器留下算术余量。",
+                        "Allow unlimited extraction and planning supply for explicitly marked infinite cells.",
+                        "Only keys accepted by the mounted cell's extraction checks are supplied; finite cells are unchanged.",
+                        "Disable this to preserve the original cell behavior and reported quantities.",
+                        "显式标记的无限元件可无限取出，规划中作为无限材料来源。",
+                        "仅提供元件允许取出的物品，不改变普通有限元件。",
+                        "关闭后保留元件原实现的行为与数量。",
                         "Default / 默认值: false")
                 .translation("appliedenhancements.config.enable_infinite_storage_limit_bypass")
                 .define("enable_listing_limit_bypass", false);

@@ -4,6 +4,7 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.CraftingCalculation;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -20,6 +21,7 @@ abstract class CraftingCalculationLongSafetyMixin {
     @Inject(method = "addMissing", at = @At("HEAD"))
     private void appliedenhancements$rejectUnsafeMissingItemSum(
             AEKey what, long amount, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         NativeCraftingLongSafety.addNonNegative(
                 this.missing.get(what), amount, "missing item total");
     }

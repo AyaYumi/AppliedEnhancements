@@ -14,14 +14,17 @@ import net.minecraft.world.level.Level;
 
 public final class TestAEKey extends AEKey {
     private final ResourceLocation id;
+    private final AEKeyType type;
 
-    public TestAEKey(String path) {
-        this.id = new ResourceLocation("test", path);
+    public TestAEKey(String path) { this(path, null); }
+
+    public TestAEKey(String path, AEKeyType type) {
+        this.id = new ResourceLocation("test", path); this.type = type;
     }
 
     @Override
     public AEKeyType getType() {
-        return null;
+        return type;
     }
 
     @Override

@@ -47,14 +47,15 @@ public class AppliedEnhancements {
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info(
-                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, longRangeCrafting={}, progressDisplay={}, automaticAelis={}",
+                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, longRangeCrafting={}, progressDisplay={}, automaticAelis={}, aelisBigIntegerPlanning={}",
                 Config.ENABLE_PATTERN_CACHING.get(),
                 Config.ENABLE_STORAGE_BUS_SLOT_INDEX.get(),
                 Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
                 Config.ENABLE_IO_BUS_OPTIMIZATION.get(),
                 Config.ENABLE_LONG_RANGE_CRAFTING.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
-                Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get());
+                Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get(),
+                Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get());
     }
 
     public static net.minecraft.resources.ResourceLocation id(String path) {

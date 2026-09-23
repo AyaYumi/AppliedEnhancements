@@ -18,13 +18,10 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 
 Compared with 1.0.7-forge:
 
-- Fixed reusable-catalyst accounting across nested AELIS batch planning. A catalyst that is already reserved within the batch is no longer reported as missing; an absent catalyst is not counted as a returned item.
-- Expanded recognition of stable self-returning damageable inputs, including ProjectE-style charge items. Inputs with Unbreaking remain excluded from this classification.
-- Kept supported deterministic-durability tool recipes inside the aggregated AELIS graph, with batched tool allocation instead of forcing their consumable ingredients through per-item native planning.
-- Avoided passing a null plan to third-party confirmation-menu listeners, addressing the AE2 Crafting Time 1.2.5 interaction that could prevent a calculation from starting.
-- Added native-planner fallback for eligible failed requests up to `Integer.MAX_VALUE`, target-node checks, and automatic closure after 100 server ticks when a confirmation menu has no planning job or result. Active calculations are not subject to this timeout.
-- Adjusted native AE2 and AdvancedAE CPU Mixin priorities from 1100 to 900 to accommodate CPU observers. Full modpack compatibility still requires runtime validation.
-- Added English and Chinese messages for unavailable targets and calculations that never started.
+- Added configurable BigInteger arithmetic for AELIS intermediate demand and branch totals, enabled by default.
+- Added guarded saturation at AE2's long-only summary and CPU boundaries while retaining exact AELIS crafted totals for confirmation screens.
+- Added DataEnergistics-compatible decimal units beyond `E`: `Z`, `Y`, `B` through `Att`, followed by scientific notation.
+- Added bounded network synchronization for exact BigInteger crafted, missing and supplied totals plus storage byte estimates; internal payload protocol is `9`.
 
 Public Java API signatures and network protocol `1.0.6-forge-1` remain unchanged from 1.0.7-forge. The cyclic dispatch crash fix was already included in 1.0.7-forge.
 
@@ -91,7 +88,7 @@ ExtendedAE, AE2WTLib, and JEI are optional and only required for their correspon
 
 ## Long-range crafting
 
-The crafting amount field accepts exact integer input up to 20 characters. The server validates the feature switch and maximum order size again, so client configuration cannot bypass server restrictions.
+Long-range crafting is disabled by default. When enabled, ordinary long requests use exact integer parsing; exact BigInteger input supports up to 256 decimal digits. The server validates the feature switch and maximum order size again, so client configuration cannot bypass server restrictions.
 
 Default maximum order:
 
@@ -105,13 +102,17 @@ Maximum configurable value:
 9,223,372,036,854,775,807
 ```
 
-Overflowing, fractional, and negative input is rejected rather than truncated or wrapped. A valid `long` request may still be rejected when recipe multiplication, output aggregation, or an unproven native boundary cannot be processed safely.
+Fractional, non-positive and over-budget input is rejected. To enter orders above `Long.MAX_VALUE`, enable long-range crafting and BigInteger planning, and set the configured limit to `Long.MAX_VALUE`; a smaller configured limit remains enforced. Exact plans require a CPU implementation that reads their exact metadata. When AELIS intervenes, a valid request can still fail at unsupported recipe or native boundaries. With automatic planning disabled, ordinary AE2 calculations follow AE2's own behavior.
 
 ## AELIS planner
 
 Useless Mod smart doubling rewrites only ordinary patterns in cyclic plans, preserving cyclic firing counts and execution metadata. Cyclic wrappers are normalized at plan construction, API wrapping, and CPU submission. Saved orders with existing cycle metadata also normalize pending patterns without resetting their progress. When loading a legacy quantum CPU order with no in-flight outputs, recovery unwraps scaled cyclic patterns only if a new solve proves exactly the same remaining work without missing materials. Inventory and crafting links are preserved; unprovable orders remain intact and are logged.
 
 AELIS (Applied Enhancements Lattice Integer Solver) analyzes one AE2 crafting calculation and aggregates recipe nodes whose behavior can be proven safe. Container items, complex alternatives, reusable inputs, random behavior, and other compatibility boundaries retain local native semantics or cause the attempt to roll back and fall back.
+
+With `crafting.aelis.enable_big_integer_planning` enabled, AELIS keeps acyclic intermediate demand, merged branch totals, and pattern firing counts as exact `BigInteger` values. Long-only AE2 task maps and summaries use a saturating compatibility projection, while the confirmation screen retains the exact AELIS crafted total and formats it with the extended decimal units `E`, `Z`, `Y`, `B` through `Att`, followed by scientific notation. A saturated projection does not force preview-only mode or restrict submission to a CPU whitelist. The selected CPU decides acceptance and must implement exact quantities to execute the full order. Read the stable metadata through `AelisExactCraftingPlanApi.read(plan)`; see the [exact execution API](docs/EXACT_CRAFTING_API.md).
+
+The transactional path also preserves exact consumable demand through reusable-catalyst recipes, while borrowing and returning physical catalysts in input order. Exact missing totals reach the confirmation screen. Native boundaries, finite-durability allocation, ordered candidate selection and cyclic runtime schedules retain long limits; unsupported overflow or oversized fallback ends with an explanation instead of replaying the whole order one craft at a time. See [the path audit](docs/BIG_INTEGER_PLANNING_AUDIT.md) for coverage and remaining limits. Historical runtime checks used a separate development harness, which is not part of this checkout.
 
 When AELIS applies a cyclic or quantity-feedback plan, the confirmation grid shows `Cyclic Craft` for each material produced by those cyclic pattern firings. This value is a subset of the normal crafted amount and is transported only with the active confirmation menu.
 
@@ -213,11 +214,12 @@ One COMMON configuration file is generated on first launch: `config/appliedenhan
 
 | Key | Default | Description |
 |---|---:|---|
-| `crafting.enable_long_range_crafting` | `true` | Enables orders above `Integer.MAX_VALUE` |
+| `crafting.enable_long_range_crafting` | `false` | Enables orders above `Integer.MAX_VALUE` |
 | `crafting.max_crafting_order_amount` | `2147483647` | Maximum amount in one AE2 crafting order |
 | `crafting.enable_progress_display` | `false` | Enables calculation progress and path display |
 | `crafting.enable_enhanced_material_calculation` | `false` | Enables enhanced stored, craftable, and missing material statistics |
 | `crafting.aelis.enable_automatic_planner` | `false` | Enables automatic AELIS interception and manual-plan inventory locking |
+| `crafting.aelis.enable_big_integer_planning` | `true` | Uses exact BigInteger arithmetic for AELIS intermediate demand and exact crafted-total display |
 | `crafting.aelis.max_nodes` | `100000` | Maximum nodes analyzed per attempt |
 | `crafting.aelis.compile_budget_ms` | `2000` | Compilation budget per attempt in milliseconds |
 | `crafting.aelis.enable_diagnostics` | `false` | Emits detailed planner diagnostics |
@@ -229,7 +231,7 @@ One COMMON configuration file is generated on first launch: `config/appliedenhan
 | `performance.pattern_cache.max_entries_per_pattern` | `32` | Maximum multi-key cache entries retained per pattern |
 | `performance.storage_bus.enable_slot_index` | `true` | Enables candidate-slot indexing for item storage buses |
 | `performance.io_bus.enable_slot_routing` | `true` | Enables validated source/target slot hints for import and export buses |
-| `storage.infinite.enable_listing_limit_bypass` | `false` | Raises explicitly marked infinite-cell listings to `Long.MAX_VALUE` and displays them as `9.2E` |
+| `storage.infinite.enable_listing_limit_bypass` | `false` | Unlimited extraction and planning supply for explicitly marked infinite cells; listings use `9.2E` |
 
 Pre-AELIS planner settings are migrated automatically into `crafting.aelis.*`. The original common file is backed up with a `.pre-aelis.bak` suffix, and a former split planner file is renamed with a `.migrated.bak` suffix. Customized values are preserved.
 
@@ -248,7 +250,7 @@ Applied Enhancements recognizes these infinite storage sources:
 | Data packs / KubeJS | `#appliedenhancements:infinite_storage_cells` item tag |
 | Java mods | Runtime `StorageCell` implementation of `InfiniteStorageCellMarker` |
 
-When `storage.infinite.enable_listing_limit_bypass` is enabled, recognized cells are listed as `Long.MAX_VALUE` and displayed as `9.2E`. Disabling it preserves the amounts reported by each cell's original implementation. The marker does not turn a finite storage cell into an infinite source.
+When `storage.infinite.enable_listing_limit_bypass` is enabled, recognized cells supply their accessible keys without depletion and are treated as infinite by the planner. Each extraction validates the mounted cell's key and source checks. Listings use `Long.MAX_VALUE` / `9.2E`; that value alone never marks a finite cell as infinite. Disabling the option preserves the original cell behavior. Explicitly tagging a finite cell opts it into infinite supply while enabled.
 
 KubeJS example:
 
@@ -269,7 +271,7 @@ com.appliedenhancements.api
 com.appliedenhancements.api.client
 ```
 
-There are 17 public top-level API types: 16 current types and one deprecated compatibility entry point.
+The main public API types are listed below. Exact requests use `AelisCraftingRequest` and `AelisExactCraftingService`; read immutable `AelisPlanMetadata` and `AelisExecutionRequirement` through `AelisExactCraftingPlanApi`. The deprecated MaxFast entry point remains available for compatibility.
 
 | API | Purpose |
 |---|---|

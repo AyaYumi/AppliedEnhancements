@@ -34,6 +34,26 @@ com.appliedenhancements.api.client
 - `com.github.appliedenhancements`；
 - 其他未位于公共 API 包中的桥接类、载荷和常量。
 
+## 1.0.9-fix 精确规划与元数据
+
+在服务器线程调用 `AelisExactCraftingService.begin`，然后异步等待结果。数量必须为不超过 256 位十进制数字的正整数。目前仅支持 `REPORT_MISSING_ITEMS`；传入 `CRAFT_LESS` 会明确报错。
+
+```java
+var request = AelisCraftingRequest.of(outputKey, new BigInteger("10000000000000000000"));
+Future<ICraftingPlan> pending = AelisExactCraftingService.begin(level, requester, request);
+// 结果完成后读取；不要阻塞服务器线程等待 Future：
+AelisPlanMetadata metadata = AelisExactCraftingPlanApi.read(plan);
+AelisExecutionRequirement requirement = metadata.executionRequirement();
+```
+
+只读快照包含最终产量、字节数、待合成/缺失/库存供应/无限输入、完整样板次数、规划来源和 `projectionSaturated`。普通计划将 long 提升为 BigInteger，无法恢复已经丢失的精度。精确样板次数替换投影任务表，精确材料映射覆盖对应的投影条目。
+
+`requiresExactExecution()` 检查最终产量、样板次数、库存供应、无限输入、累计产量超限或投影受限标记。仅字节或缺失数量超限时，通过 `requiresExactMetadata()` 查询。接口不代替 CPU 决定是否接受订单。旧 `requiresExactExecution(plan)` 保持较窄的原有判断范围，新接入使用结构化查询。
+
+当 `Result.shouldFallback()` 为 true 时，通过 `fallbackCategory()` 获取稳定的 `AelisFallbackReason`，无需解析字符串。未知原因返回 `OTHER`，异常返回 `INTERNAL_ERROR`，成功或分支失败返回 `NONE`。AELIS 和旧 MaxFast 结果均提供此查询，原始诊断文本继续保留。
+
+关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，精确服务仍受 `enable_big_integer_planning` 控制。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.0.9-fix` 构建。
+
 ## 开发环境依赖
 
 项目暂未发布独立 Maven API 构件。接入方可以把发行 JAR 放入自己项目的 `libs` 目录，并以 `compileOnly` 方式引用：
@@ -94,7 +114,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 
 ## API 总览
 
-公开顶层 API 共 17 个，包括以下 16 个现行类型和一个已弃用兼容入口。侧别表示接入方应在哪里调用；共享的 `api` 包中也有操作仅适用于客户端的接口。
+主要接入类型如下，精确请求和元数据类型见上文。侧别表示接入方应在哪里调用；共享的 `api` 包中也有操作仅适用于客户端的接口。
 
 | API | 侧别 | 推荐注册/调用阶段 | 用途 |
 |---|---|---|---|
@@ -407,7 +427,7 @@ public final class ExampleInfiniteInventory
 }
 ```
 
-标记只告诉 Applied Enhancements：这个实现本身已经提供无限内容，应使用无限数量哨兵和 `9.2E` 显示。它不会把有限磁盘改造成真正的无限来源。
+开启 `storage.infinite.enable_listing_limit_bypass` 后，标记使元件允许取出的物品成为无限供应，规划也按无限材料处理。取出前通过当前挂载包装器模拟检查物品和操作来源，实际取出不消耗被标记元件的库存；列表继续使用 `9.2E` 哨兵。关闭配置恢复原行为，未标记的有限元件不会因为数量很大而被识别为无限。
 
 ## 4. 第三方编码样板与样板筛选
 

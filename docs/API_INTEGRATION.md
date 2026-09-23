@@ -34,6 +34,26 @@ The following are implementation details and do not carry source or binary compa
 - `com.github.appliedenhancements`;
 - bridges, payloads, constants, and other classes outside the public API packages.
 
+## Exact planning and metadata in 1.0.9-fix
+
+Call `AelisExactCraftingService.begin` on the server thread, then wait asynchronously for the result. A request must have a positive quantity of at most 256 decimal digits. Only `REPORT_MISSING_ITEMS` is supported; `CRAFT_LESS` is rejected explicitly.
+
+```java
+var request = AelisCraftingRequest.of(outputKey, new BigInteger("10000000000000000000"));
+Future<ICraftingPlan> pending = AelisExactCraftingService.begin(level, requester, request);
+// After completion; never block the server thread waiting for the future:
+AelisPlanMetadata metadata = AelisExactCraftingPlanApi.read(plan);
+AelisExecutionRequirement requirement = metadata.executionRequirement();
+```
+
+The immutable snapshot exposes final output, bytes, crafted/missing/stored/infinite quantities, complete pattern counts, planner path and `projectionSaturated`. Ordinary plans promote long values to BigInteger; already lost precision cannot be recovered. Exact task counts replace the projected task ledger, while exact material maps override corresponding projected entries.
+
+`requiresExactExecution()` reports overflowing output, pattern counts, supplied/infinite inputs, aggregate crafted quantities or a saturated projection. Byte or missing-quantity overflow alone requires exact metadata, exposed by `requiresExactMetadata()`. These queries do not accept or reject a CPU submission. The older `requiresExactExecution(plan)` retains its narrower contract; new consumers should use the structured query.
+
+When `Result.shouldFallback()` is true, `fallbackCategory()` supplies a stable `AelisFallbackReason` instead of requiring string parsing. Unknown details map to `OTHER`, errors to `INTERNAL_ERROR`, and success or branch failure to `NONE`. Both the AELIS and legacy MaxFast results expose this query; diagnostic text remains available.
+
+Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and the exact service remains gated by `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.0.9-fix` build when using the new types.
+
 ## Development dependency
 
 Applied Enhancements does not yet publish a separate Maven API artifact. Place the release JAR in your project's `libs` directory and reference it with `compileOnly`:
@@ -95,7 +115,7 @@ A runtime Mod ID check is not sufficient when a main mod class, field, method si
 
 ## API overview
 
-There are 17 public top-level API types: 16 current types plus one deprecated compatibility entry point. Side labels describe where an integration should call them; the shared `api` package also contains APIs whose operations belong exclusively to the client.
+The main integration types are listed below; exact request and metadata types are described above. Side labels describe where an integration should call them; the shared `api` package also contains APIs whose operations belong exclusively to the client.
 
 | API | Side | Recommended lifecycle | Purpose |
 |---|---|---|---|
@@ -413,7 +433,7 @@ public final class ExampleInfiniteInventory
 }
 ```
 
-The marker tells Applied Enhancements that the implementation already provides infinite contents and should use the infinite quantity sentinel and compact `9.2E` display. It does not turn a finite cell into an actual infinite source.
+With `storage.infinite.enable_listing_limit_bypass` enabled, the marker opts the cell into unlimited extraction and infinite planning supply for keys it permits extracting. A simulation probe through the mounted wrapper preserves key and source checks; actual extraction does not deplete the marked backing cell. Listings retain the compact `9.2E` sentinel. Disabling the option restores original behavior; unmarked finite cells are never inferred to be infinite from their amounts.
 
 ## 4. Third-party encoded patterns and pattern filters
 

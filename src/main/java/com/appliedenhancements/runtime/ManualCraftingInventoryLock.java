@@ -37,7 +37,10 @@ public final class ManualCraftingInventoryLock {
         var availableCounter = new KeyCounter();
         storage.getAvailableStacks(availableCounter);
         Map<AEKey, Long> available = positiveEntries(availableCounter);
-        Map<AEKey, Long> wanted = positiveEntries(requested);
+        Map<AEKey, Long> wanted = new LinkedHashMap<>(positiveEntries(requested));
+        // An inexhaustible source must not be locked away by another confirmation menu.
+        com.appliedenhancements.storage.InfiniteStorageSupport.snapshot(storage, source)
+                .forEach(wanted::remove);
 
         InventoryReservationLedger<AEKey> ledger;
         synchronized (LEDGERS) {

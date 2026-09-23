@@ -69,7 +69,11 @@ final class AelisCyclicPatternOverlay {
         }
         for (var region : regions) {
             for (var entry : region.variants().entrySet()) {
-                result.putIfAbsent(entry.getKey(), List.copyOf(entry.getValue()));
+                List<AelisCyclicDemandSolver.Variant<K, V>> current =
+                        result.get(entry.getKey());
+                if (current == null || current.isEmpty()) {
+                    result.put(entry.getKey(), List.copyOf(entry.getValue()));
+                }
             }
         }
         return Collections.unmodifiableMap(result);

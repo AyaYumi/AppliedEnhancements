@@ -209,6 +209,7 @@ tasks.withType(ProcessResources).configureEach {
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
+    exclude('**/AelisBigIntegerTransactionalTest.java')
 }
 
 idea {

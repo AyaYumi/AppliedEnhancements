@@ -10,6 +10,11 @@ import appeng.crafting.CraftingCalculation;
 import appeng.crafting.CraftingPlan;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
+import com.appliedenhancements.Config;
+import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftingTracker;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -46,6 +51,7 @@ abstract class CraftingSimulationStateLongSafetyMixin {
             shift = At.Shift.AFTER))
     private void appliedenhancements$rejectUnsafeInventorySum(
             AEKey what, long amount, Actionable mode, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         if (mode == Actionable.MODULATE) {
             NativeCraftingLongSafety.addNonNegative(
                     this.modifiableCache.get(what), amount, "simulated inventory amount");
@@ -55,6 +61,7 @@ abstract class CraftingSimulationStateLongSafetyMixin {
     @Inject(method = "emitItems", at = @At("HEAD"))
     private void appliedenhancements$rejectUnsafeEmittedItemSum(
             AEKey what, long amount, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         NativeCraftingLongSafety.addNonNegative(
                 this.emittedItems.get(what), amount, "emitted item total");
     }
@@ -62,12 +69,11 @@ abstract class CraftingSimulationStateLongSafetyMixin {
     @Inject(method = "addCrafting", at = @At("HEAD"))
     private void appliedenhancements$rejectUnsafeCraftCountSum(
             IPatternDetails details, long count, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         long aggregatedCrafts = NativeCraftingLongSafety.addNonNegative(
                 this.crafts.getOrDefault(details, 0L), count, "pattern craft total");
-        for (var output : details.getOutputs()) {
-            NativeCraftingLongSafety.multiplyNonNegative(
-                    output.amount(), aggregatedCrafts, "aggregated pattern output total");
-        }
+        ((AelisBigIntegerCraftingTracker) this)
+                .appliedenhancements$recordBigIntegerCrafting(details, count);
     }
 
     /**
@@ -81,9 +87,13 @@ abstract class CraftingSimulationStateLongSafetyMixin {
             CraftingCalculation calculation,
             long calculatedAmount,
             CallbackInfoReturnable<CraftingPlan> callback) {
+        if (!CraftingPlannerIntervention.enabledFor(state)) return;
         var stateAccess = (CraftingSimulationStateLongSafetyAccessor) (Object) state;
+        boolean allowBigIntegerOutputs = Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                && state instanceof AelisCalculationPathCarrier path
+                && path.molecularmanipulator$getCalculationPath() == AelisCalculationPath.AELIS;
         NativeCraftingLongSafety.validatePatternOutputs(
-                stateAccess.appliedenhancements$getCrafts());
+                stateAccess.appliedenhancements$getCrafts(), allowBigIntegerOutputs);
     }
 
     /**
@@ -95,6 +105,7 @@ abstract class CraftingSimulationStateLongSafetyMixin {
     @Inject(method = "applyDiff", at = @At("HEAD"))
     private void appliedenhancements$rejectUnsafeChildDiff(
             CraftingSimulationState parent, CallbackInfo callback) {
+        if (!CraftingPlannerIntervention.enabled()) return;
         var parentState = (CraftingSimulationStateLongSafetyAccessor) (Object) parent;
         KeyCounter parentUnmodified = parentState.appliedenhancements$getUnmodifiedCache();
         KeyCounter parentModifiable = parentState.appliedenhancements$getModifiableCache();

@@ -46,6 +46,10 @@ desktop.ini
 /*.zip
 /codex-backups/
 
+# Local decompilation output
+/*_javap.txt
+/ae2javap.txt
+
 # local release notes
 /CHANGELOG.md
 /CHANGELOG_*.md

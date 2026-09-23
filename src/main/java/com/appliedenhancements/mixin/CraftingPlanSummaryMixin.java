@@ -7,7 +7,12 @@ import appeng.api.stacks.AEKey;
 import appeng.menu.me.crafting.CraftingPlanSummary;
 import appeng.menu.me.crafting.CraftingPlanSummaryEntry;
 import com.appliedenhancements.Config;
+import com.appliedenhancements.runtime.Ae2CraftingTreeCompat;
+import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.appliedenhancements.util.SaturatingLongMath;
+import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
+import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -36,14 +41,43 @@ public abstract class CraftingPlanSummaryMixin {
     @Unique
     private static final int appliedenhancements$CRAFTING = 2;
 
+    @Inject(method = "fromJob", at = @At("HEAD"), cancellable = true)
+    private static void appliedenhancements$projectBigIntegerPlanBeforeNativeOverflow(
+            IGrid grid, IActionSource actionSource, ICraftingPlan job,
+            CallbackInfoReturnable<CraftingPlanSummary> callback) {
+        if (!CraftingPlannerIntervention.enabledFor(job)) return;
+        if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                && job instanceof AelisCalculationPathCarrier path
+                && path.molecularmanipulator$getCalculationPath()
+                        == AelisCalculationPath.AELIS
+                && job instanceof AelisBigIntegerCraftAmountsCarrier exact
+                && (!exact.appliedenhancements$getBigIntegerCraftAmounts().isEmpty()
+                    || !exact.appliedenhancements$getBigIntegerMissingAmounts().isEmpty()
+                    || !exact.appliedenhancements$getBigIntegerStoredAmounts().isEmpty()
+                    || exact.appliedenhancements$isPreviewOnly())) {
+            var summary = new CraftingPlanSummary(job.bytes(), job.simulation(), appliedenhancements$createEntries(job));
+            Ae2CraftingTreeCompat.initializeSummary(summary, job);
+            callback.setReturnValue(summary);
+        }
+    }
+
     @Inject(method = "fromJob", at = @At("RETURN"))
     private static void appliedenhancements$enhanceMaterialCalculation(
             IGrid grid, IActionSource actionSource, ICraftingPlan job,
             CallbackInfoReturnable<CraftingPlanSummary> callback) {
-        if (!Config.ENABLE_ENHANCED_MATERIAL_CALCULATION.get()) {
+        if (!CraftingPlannerIntervention.enabledFor(job)
+                || !Config.ENABLE_ENHANCED_MATERIAL_CALCULATION.get()) {
             return;
         }
 
+        // Preserve metadata initialized by other mods on the original summary.
+        ((CraftingPlanSummaryAccessor) callback.getReturnValue())
+                .appliedenhancements$setEntries(appliedenhancements$createEntries(job));
+    }
+
+    @Unique
+    private static List<CraftingPlanSummaryEntry> appliedenhancements$createEntries(
+            ICraftingPlan job) {
         // Build material plan
         var plan = new HashMap<AEKey, long[]>();
 
@@ -93,9 +127,7 @@ public abstract class CraftingPlanSummaryMixin {
         }
         Collections.sort(entries);
 
-        // Update the summary with enhanced entries
-        ((CraftingPlanSummaryAccessor) (Object) callback.getReturnValue())
-                .appliedenhancements$setEntries(List.copyOf(entries));
+        return List.copyOf(entries);
     }
 
     @Unique

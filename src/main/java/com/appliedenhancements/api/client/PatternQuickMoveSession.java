@@ -65,6 +65,18 @@ public final class PatternQuickMoveSession {
                 mouseX, mouseY, guiLeft, guiTop, menuSlots, displayToSource);
     }
 
+    public boolean finishSelection(
+            double mouseX,
+            double mouseY,
+            int guiLeft,
+            int guiTop,
+            Collection<Slot> menuSlots,
+            Map<PatternSlotRef, PatternSlotRef> displayToSource,
+            int slotOffsetY) {
+        return delegate.finishSelection(
+                mouseX, mouseY, guiLeft, guiTop, menuSlots, displayToSource, slotOffsetY);
+    }
+
     public void renderSelectionBox(GuiGraphics graphics) {
         delegate.renderSelectionBox(graphics);
     }
@@ -74,6 +86,14 @@ public final class PatternQuickMoveSession {
             Collection<Slot> menuSlots,
             Map<PatternSlotRef, PatternSlotRef> displayToSource) {
         delegate.renderSelectedSlots(graphics, menuSlots, displayToSource);
+    }
+
+    public void renderSelectedSlots(
+            GuiGraphics graphics,
+            Collection<Slot> menuSlots,
+            Map<PatternSlotRef, PatternSlotRef> displayToSource,
+            int slotOffsetY) {
+        delegate.renderSelectedSlots(graphics, menuSlots, displayToSource, slotOffsetY);
     }
 
     /** Returns false without replacing the cut buffer if the selection exceeds the request limit. */
