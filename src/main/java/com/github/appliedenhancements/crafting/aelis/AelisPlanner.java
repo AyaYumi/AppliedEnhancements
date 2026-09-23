@@ -51,6 +51,8 @@ public final class AelisPlanner {
     private static final long MAX_LINEAR_ORDERED_NATIVE_ITEMS = 1_000_000L;
     private static final long MAX_LINEAR_NATIVE_BOUNDARY_ITEMS = 8_192L;
     private static final long MAX_SIMULATION_ORDERED_REPLAY_STEPS = 64L;
+    private static final IdentityHashMap<Graph, List<LocalCyclicRegion>> CYCLIC_REGIONS =
+            new IdentityHashMap<>();
     private static final String ADVANCED_AE_PROCESSING_PATTERN =
             "net.pedroksl.advanced_ae.common.patterns.AdvProcessingPattern";
     private static final String AE2LT_OVERLOAD_PATTERN =
@@ -665,22 +667,18 @@ public final class AelisPlanner {
      * set. The solver sees all shared demands before any inventory mutation,
      * so one startup seed can serve every occurrence of the same cycle.
      */
-    private static boolean tryExecuteGlobalCyclicPlan(
-            Graph graph, CraftingSimulationState parent,
-            long requestedAmount, boolean simulation,
-            KeyCounter stagedMissing, PauseCheckpoint pauseCheckpoint)
-            throws InterruptedException, Fallback {
-        try (var seedLease = AelisIgnoredSeedScope.lease(parent)) {
+    /** Builds the validated model shared by real and simulated global attempts. */
+    private static Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>
+            buildGlobalCyclicVariants(Graph graph, CraftingSimulationState parent,
+                    PauseCheckpoint pauseCheckpoint) throws InterruptedException, Fallback {
         var variants = new LinkedHashMap<AEKey,
                 List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>();
         var canonicalCandidates = new LinkedHashMap<AEKey, List<CompiledCandidate>>();
-        var modelKeys = new LinkedHashMap<AEKey, Boolean>();
 
         for (Node node : graph.nodes) {
             if (!node.reachable) {
                 continue;
             }
-            modelKeys.put(node.key, Boolean.TRUE);
             if (node.compiledCandidates.isEmpty()) {
                 continue;
             }
@@ -689,13 +687,13 @@ public final class AelisPlanner {
                     || !node.allCandidatesCompiled
                     || node.compiledCandidates.size()
                             != node.candidatePatterns.size()) {
-                return false;
+                return null;
             }
             List<CompiledCandidate> existing = canonicalCandidates.get(node.key);
             if (existing != null) {
                 if (!sameCycleCandidateSet(
                         graph.nodes, existing, node.compiledCandidates)) {
-                    return false;
+                    return null;
                 }
                 continue;
             }
@@ -709,23 +707,23 @@ public final class AelisPlanner {
                         || candidate.observedPatternSemantics != null
                                 && !candidate.observedPatternSemantics.matches(
                                         candidate.details)) {
-                    return false;
+                    return null;
                 }
                 var inputs = new LinkedHashMap<AEKey, BigInteger>();
                 for (OrderedGraphInput orderedInput : candidate.orderedInputs) {
                     if (orderedInput.reusable()) {
-                        return false;
+                        return null;
                     }
                     GraphConsumableInput consumable = orderedInput.consumableInput;
                     if (consumable == null || consumable.substituteInput
                             || consumable.childIndex < 0
                             || consumable.childIndex >= graph.nodes.size()) {
-                        return false;
+                        return null;
                     }
                     Node child = graph.nodes.get(consumable.childIndex);
                     if (!validateSparseConsumableTemplates(
                             child, consumable.child, parent, pauseCheckpoint)) {
-                        return false;
+                        return null;
                     }
                     long amount = checkedMultiply(
                             child.amount, consumable.multiplier,
@@ -733,7 +731,6 @@ public final class AelisPlanner {
                     inputs.merge(
                             child.key, BigInteger.valueOf(amount),
                             BigInteger::add);
-                    modelKeys.put(child.key, Boolean.TRUE);
                 }
                 var modelInputs = new ArrayList<
                         AelisCyclicDemandSolver.Input<AEKey>>(inputs.size());
@@ -752,9 +749,8 @@ public final class AelisPlanner {
         }
 
         var rawRegions = new IdentityHashMap<LocalCyclicRegion, Boolean>();
-        for (Node node : graph.nodes) {
-            LocalCyclicRegion local = node.localCyclicRegion;
-            if (local != null && local.hasRawCandidates) {
+        for (LocalCyclicRegion local : CYCLIC_REGIONS.getOrDefault(graph, List.of())) {
+            if (local != null) {
                 rawRegions.put(local, Boolean.TRUE);
             }
         }
@@ -774,11 +770,11 @@ public final class AelisPlanner {
                                 || candidate.observedPatternSemantics != null
                                         && !candidate.observedPatternSemantics.matches(
                                                 candidate.details)) {
-                            return false;
+                            return null;
                         }
                         for (RawCycleInput rawInput : candidate.rawCycleInputs) {
                             if (!validateRawCycleInput(rawInput)) {
-                                return false;
+                                return null;
                             }
                         }
                         for (OrderedGraphInput orderedInput : candidate.orderedInputs) {
@@ -788,13 +784,13 @@ public final class AelisPlanner {
                                     || consumable.substituteInput
                                     || consumable.childIndex < 0
                                     || consumable.childIndex >= graph.nodes.size()) {
-                                return false;
+                                return null;
                             }
                             Node child = graph.nodes.get(consumable.childIndex);
                             if (!validateSparseConsumableTemplates(
                                     child, consumable.child,
                                     parent, pauseCheckpoint)) {
-                                return false;
+                                return null;
                             }
                         }
                     }
@@ -805,13 +801,30 @@ public final class AelisPlanner {
                     variants, regionModels);
             variants.clear();
             variants.putAll(merged);
-            for (var entry : merged.entrySet()) {
-                modelKeys.put(entry.getKey(), Boolean.TRUE);
-                for (var variant : entry.getValue()) {
-                    for (var input : variant.inputs()) {
-                        modelKeys.put(input.key(), Boolean.TRUE);
-                    }
-                }
+        }
+
+
+        return variants;
+    }
+
+    private static boolean tryExecuteGlobalCyclicPlan(
+            Graph graph, CraftingSimulationState parent,
+            long requestedAmount, boolean simulation,
+            KeyCounter stagedMissing, PauseCheckpoint pauseCheckpoint)
+            throws InterruptedException, Fallback {
+        try (var seedLease = AelisIgnoredSeedScope.lease(parent)) {
+        var variants = buildGlobalCyclicVariants(graph, parent, pauseCheckpoint);
+        if (variants == null) {
+            return false;
+        }
+        var modelKeys = new LinkedHashMap<AEKey, Boolean>();
+        for (Node node : graph.nodes) {
+            if (node.reachable) modelKeys.put(node.key, Boolean.TRUE);
+        }
+        for (var entry : variants.entrySet()) {
+            modelKeys.put(entry.getKey(), Boolean.TRUE);
+            for (var variant : entry.getValue()) {
+                for (var input : variant.inputs()) modelKeys.put(input.key(), Boolean.TRUE);
             }
         }
 
@@ -5873,7 +5886,7 @@ public final class AelisPlanner {
         }
     }
 
-    private static void assignLocalCyclicRegions(
+    private static List<LocalCyclicRegion> assignLocalCyclicRegions(
             List<Node> nodes, ICraftingService craftingService) throws Fallback {
         var models = new LinkedHashMap<AEKey,
                 AelisCyclicRegionDetector.KeyModel<AEKey, CompiledCandidate>>();
@@ -5931,13 +5944,8 @@ public final class AelisPlanner {
 
         Set<AEKey> restoredKeys = Set.of();
         if (craftingService != null && !terminalNodes.isEmpty()) {
-            var overlay = AelisCyclicPatternOverlay.merge(
-                    models, terminalNodes.keySet(),
-                    key -> buildRawCycleVariants(
-                            exactNodes, terminalNodes, key, craftingService));
-            models.clear();
-            models.putAll(overlay.models());
-            restoredKeys = overlay.restoredKeys();
+            restoredKeys = restoreConnectedRawCycleCandidates(
+                    models, exactNodes, terminalNodes, craftingService);
         }
 
         var analysis = AelisCyclicRegionDetector.analyze(models);
@@ -5965,17 +5973,17 @@ public final class AelisPlanner {
                         rejected.keys(), rejected.reasons());
             }
         }
+        var assignedRegions = new ArrayList<LocalCyclicRegion>();
         for (var region : analysis.regions()) {
-            boolean hasRawCandidates = region.variants().values().stream()
-                    .flatMap(List::stream)
-                    .anyMatch(variant -> variant.id().sourceProcess == null);
-            var local = new LocalCyclicRegion(region, hasRawCandidates);
+            var local = new LocalCyclicRegion(region);
+            assignedRegions.add(local);
             for (Node node : nodes) {
                 if (region.keys().contains(node.key)) {
                     node.localCyclicRegion = local;
                 }
             }
         }
+        return List.copyOf(assignedRegions);
     }
 
     private static CycleKeyModel buildCycleKeyModel(List<Node> nodes, Node node)
@@ -6072,6 +6080,15 @@ public final class AelisPlanner {
         if (outputNode == null) {
             return List.of();
         }
+        return buildRawCycleVariants(
+                exactNodes, outputNode.level, outputKey, craftingService);
+    }
+
+    private static List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>
+            buildRawCycleVariants(
+                    Map<NodeKey, Node> exactNodes,
+                    net.minecraft.world.level.Level outputLevel,
+                    AEKey outputKey, ICraftingService craftingService) {
         var variants = new ArrayList<
                 AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>();
         int sourceIndex = 0;
@@ -6120,7 +6137,7 @@ public final class AelisPlanner {
                     GenericStack exact = getSingleExactInputChoice(input);
                     if (exact == null || exact.what() == null || exact.amount() <= 0
                             || input.getMultiplier() <= 0
-                            || !input.isValid(exact.what(), outputNode.level)
+                            || !input.isValid(exact.what(), outputLevel)
                             || input.getRemainingKey(exact.what()) != null) {
                         inputSafe = false;
                         break;
@@ -6146,7 +6163,7 @@ public final class AelisPlanner {
                     }
                     rawInputs.add(new RawCycleInput(
                             input, exact.what(), exact.amount(), multiplier,
-                            boundChildIndex, outputNode.level));
+                            boundChildIndex, outputLevel));
                 }
                 if (!inputSafe) {
                     allCandidatesSafe = false;
@@ -6175,6 +6192,137 @@ public final class AelisPlanner {
             return List.of();
         }
         return allCandidatesSafe ? List.copyOf(variants) : List.of();
+    }
+
+    /**
+     * Restores recursion-hidden candidates and follows only dependencies that
+     * can reach an already known producer. This closes a hidden cyclic region
+     * through arbitrarily many layers without expanding unrelated recipes for
+     * ordinary external materials such as sand or metal.
+     */
+    private static Set<AEKey> restoreConnectedRawCycleCandidates(
+            Map<AEKey, AelisCyclicRegionDetector.KeyModel<AEKey, CompiledCandidate>> models,
+            Map<NodeKey, Node> exactNodes,
+            Map<AEKey, Node> terminalNodes,
+            ICraftingService craftingService) {
+        var initial = AelisCyclicPatternOverlay.merge(
+                models, terminalNodes.keySet(),
+                key -> buildRawCycleVariants(
+                        exactNodes, terminalNodes, key, craftingService));
+        models.clear();
+        models.putAll(initial.models());
+
+        var restored = new LinkedHashSet<>(initial.restoredKeys());
+        var knownProducers = new LinkedHashSet<AEKey>();
+        for (var entry : models.entrySet()) {
+            if (!entry.getValue().variants().isEmpty()) {
+                knownProducers.add(entry.getKey());
+            }
+        }
+
+        var pending = new ArrayDeque<AEKey>(restored);
+        var cachedCandidates = new LinkedHashMap<AEKey,
+                List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>();
+        for (AEKey key : restored) {
+            var model = models.get(key);
+            if (model != null) {
+                cachedCandidates.put(key, model.variants());
+            }
+        }
+
+        while (!pending.isEmpty()) {
+            AEKey owner = pending.removeFirst();
+            var ownerModel = models.get(owner);
+            if (ownerModel == null) {
+                continue;
+            }
+            for (var variant : ownerModel.variants()) {
+                CompiledCandidate candidate = variant.id();
+                for (RawCycleInput rawInput : candidate.rawCycleInputs) {
+                    if (rawInput.childIndex >= 0
+                            || knownProducers.contains(rawInput.key)) {
+                        continue;
+                    }
+                    var expansion = findConnectedRawCycleExpansion(
+                            rawInput.key, rawInput.level, knownProducers,
+                            cachedCandidates, new HashSet<>(), exactNodes,
+                            craftingService);
+                    if (!expansion.connected()) {
+                        continue;
+                    }
+                    for (var discovered : expansion.expansions()) {
+                        if (!knownProducers.add(discovered.key())) {
+                            continue;
+                        }
+                        models.put(discovered.key(),
+                                new AelisCyclicRegionDetector.KeyModel<>(
+                                        discovered.variants(), true));
+                        restored.add(discovered.key());
+                        pending.addLast(discovered.key());
+                    }
+                }
+            }
+        }
+        return Set.copyOf(restored);
+    }
+
+    private static RawCycleSearch findConnectedRawCycleExpansion(
+            AEKey key, net.minecraft.world.level.Level level,
+            Set<AEKey> knownProducers,
+            Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>> cache,
+            Set<AEKey> visiting,
+            Map<NodeKey, Node> exactNodes,
+            ICraftingService craftingService) {
+        if (knownProducers.contains(key)) {
+            return new RawCycleSearch(true, List.of());
+        }
+        if (!visiting.add(key)) {
+            return new RawCycleSearch(true, List.of());
+        }
+        try {
+            var variants = cache.computeIfAbsent(key,
+                    ignored -> buildRawCycleVariants(
+                            exactNodes, level, key, craftingService));
+            if (variants.isEmpty()) {
+                return new RawCycleSearch(false, List.of());
+            }
+
+            var discovered = new LinkedHashMap<AEKey, RawCycleExpansion>();
+            boolean connected = false;
+            for (var variant : variants) {
+                CompiledCandidate candidate = variant.id();
+                for (RawCycleInput rawInput : candidate.rawCycleInputs) {
+                    if (rawInput.childIndex >= 0) {
+                        if (knownProducers.contains(rawInput.key)) {
+                            connected = true;
+                        }
+                        continue;
+                    }
+                    if (knownProducers.contains(rawInput.key)) {
+                        connected = true;
+                        continue;
+                    }
+                    var nested = findConnectedRawCycleExpansion(
+                            rawInput.key, rawInput.level, knownProducers,
+                            cache, visiting, exactNodes, craftingService);
+                    if (nested.connected()) {
+                        connected = true;
+                        for (var entry : nested.expansions()) {
+                            discovered.putIfAbsent(entry.key(), entry);
+                        }
+                    }
+                }
+            }
+            if (!connected) {
+                return new RawCycleSearch(false, List.of());
+            }
+            var result = new ArrayList<RawCycleExpansion>(discovered.size() + 1);
+            result.add(new RawCycleExpansion(key, variants));
+            result.addAll(discovered.values());
+            return new RawCycleSearch(true, result);
+        } finally {
+            visiting.remove(key);
+        }
     }
 
     private static String joinCycleRejection(String... reasons) {
@@ -6274,12 +6422,14 @@ public final class AelisPlanner {
                     }
                 }
             }
-            assignLocalCyclicRegions(nodes, craftingService);
-            return new Graph(List.copyOf(nodes), topologicalOrder, rootIndex,
+            var cyclicRegions = assignLocalCyclicRegions(nodes, craftingService);
+            var graph = new Graph(List.copyOf(nodes), topologicalOrder, rootIndex,
                     logicalNodeCount, mergedOccurrences, barrierCount, orderedChoiceCount,
                     !contextSplitKeys.isEmpty()
                             || !crossAmountContextSensitiveKeys.isEmpty(),
                     hasSubstituteInputs, hasReusableInputs, craftingService);
+            CYCLIC_REGIONS.put(graph, cyclicRegions);
+            return graph;
         }
 
         /**
@@ -7946,9 +8096,17 @@ public final class AelisPlanner {
             net.minecraft.world.level.Level level) {
     }
 
+    private record RawCycleExpansion(
+            AEKey key,
+            List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>> variants) {
+    }
+
+    private record RawCycleSearch(
+            boolean connected, List<RawCycleExpansion> expansions) {
+    }
+
     private record LocalCyclicRegion(
-            AelisCyclicRegionDetector.Region<AEKey, CompiledCandidate> model,
-            boolean hasRawCandidates) {
+            AelisCyclicRegionDetector.Region<AEKey, CompiledCandidate> model) {
     }
 
     private record CycleKeyModel(

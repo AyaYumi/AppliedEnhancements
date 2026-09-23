@@ -88,6 +88,33 @@ class AelisCyclicPatternOverlayTest {
         assertFalse(solved.plan().missing().containsKey("meteorSeed"));
     }
 
+    @Test
+    void replacesEmptyGlobalPlaceholderWithRestoredCycleCandidates() {
+        var base = new LinkedHashMap<String,
+                List<AelisCyclicDemandSolver.Variant<String, String>>>();
+        base.put("meteorSeed", List.of());
+        base.put("pureMeteor", List.of());
+
+        var models = new LinkedHashMap<String,
+                AelisCyclicRegionDetector.KeyModel<String, String>>();
+        models.put("meteorSeed", new AelisCyclicRegionDetector.KeyModel<>(List.of(), true));
+        models.put("pureMeteor", new AelisCyclicRegionDetector.KeyModel<>(List.of(), true));
+        var region = new AelisCyclicRegionDetector.Region<>(
+                Set.of("meteorSeed", "pureMeteor"),
+                Map.of(
+                        "meteorSeed", List.of(variant(
+                                "grow", "meteorSeed", 32,
+                                input("pureMeteor", 1))),
+                        "pureMeteor", List.of(variant(
+                                "refine", "pureMeteor", 1,
+                                input("meteorSeed", 1)))));
+
+        var merged = AelisCyclicPatternOverlay.mergeIntoGlobal(base, List.of(region));
+
+        assertEquals("grow", merged.get("meteorSeed").getFirst().id());
+        assertEquals("refine", merged.get("pureMeteor").getFirst().id());
+    }
+
     private static AelisCyclicRegionDetector.KeyModel<String, String> model(
             AelisCyclicDemandSolver.Variant<String, String> variant) {
         return new AelisCyclicRegionDetector.KeyModel<>(List.of(variant), true);
