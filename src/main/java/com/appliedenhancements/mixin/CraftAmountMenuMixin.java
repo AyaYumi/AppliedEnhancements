@@ -16,6 +16,7 @@ import com.appliedenhancements.Config;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
 import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
 import com.appliedenhancements.runtime.DataEnergisticsMenuCompat;
+import com.appliedenhancements.runtime.NativeCraftingMenuCompat;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import org.spongepowered.asm.mixin.Final;
@@ -84,8 +85,8 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         }
 
         if (!Config.ENABLE_LONG_RANGE_CRAFTING.get()) {
-            if (amount <= Integer.MAX_VALUE) {
-                menu.confirm((int) amount, craftMissingAmount, autoStart);
+            if (amount <= NativeCraftingMenuCompat.maximumNativeAmount(menu)) {
+                NativeCraftingMenuCompat.confirm(menu, amount, craftMissingAmount, autoStart);
             } else {
                 menu.getPlayer().sendSystemMessage(Component.translatable(
                         "message.appliedenhancements.long_range_disabled"));
@@ -174,7 +175,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         if (amount <= Integer.MAX_VALUE
                 && player.containerMenu instanceof CraftConfirmMenu confirmMenu) {
             confirmMenu.setAutoStart(autoStart);
-            if (confirmMenu.planJob(
+            if (NativeCraftingMenuCompat.plan(confirmMenu,
                     what,
                     (int) amount,
                     CalculationStrategy.REPORT_MISSING_ITEMS)) {

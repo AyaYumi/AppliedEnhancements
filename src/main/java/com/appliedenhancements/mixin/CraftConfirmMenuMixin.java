@@ -17,6 +17,8 @@ import appeng.me.helpers.PlayerSource;
 import appeng.menu.MenuOpener;
 import appeng.menu.me.crafting.CraftAmountMenu;
 import appeng.menu.me.crafting.CraftConfirmMenu;
+import com.appliedenhancements.runtime.NativeCraftingMenuCompat;
+import org.spongepowered.asm.mixin.injection.Group;
 import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
 import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
@@ -82,9 +84,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
     @Shadow
     private AEKey whatToCraft;
-
-    @Shadow
-    private int amount;
 
     @Shadow
     private Future<ICraftingPlan> job;
@@ -264,10 +263,24 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         }
     }
 
-    @Inject(method = "planJob", at = @At("HEAD"))
-    private void appliedenhancements$cancelProgressBeforePlan(
-            AEKey what, int amount, CalculationStrategy strategy,
-            CallbackInfoReturnable<Boolean> callback) {
+    @Group(name = "nativePlanAmount", min = 1, max = 1)
+    @Inject(method = "planJob(Lappeng/api/stacks/AEKey;ILappeng/api/networking/crafting/CalculationStrategy;)Z",
+            at = @At("HEAD"), require = 0)
+    private void appliedenhancements$beforeIntPlan(AEKey what, int amount,
+            CalculationStrategy strategy, CallbackInfoReturnable<Boolean> callback) {
+        appliedenhancements$cancelProgressBeforePlan(amount, strategy);
+    }
+
+    @Group(name = "nativePlanAmount", min = 1, max = 1)
+    @Inject(method = "planJob(Lappeng/api/stacks/AEKey;JLappeng/api/networking/crafting/CalculationStrategy;)Z",
+            at = @At("HEAD"), require = 0)
+    private void appliedenhancements$beforeLongPlan(AEKey what, long amount,
+            CalculationStrategy strategy, CallbackInfoReturnable<Boolean> callback) {
+        appliedenhancements$cancelProgressBeforePlan(amount, strategy);
+    }
+
+    @Unique
+    private void appliedenhancements$cancelProgressBeforePlan(long amount, CalculationStrategy strategy) {
         if (!((CraftConfirmMenu) (Object) this).isClientSide()) {
             appliedenhancements$requestedAmount = amount;
             appliedenhancements$exactRequestedAmount = null;
@@ -322,7 +335,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         appliedenhancements$clearDisplayedPlan();
         menu.clearError();
         this.whatToCraft = what;
-        this.amount = (int) Math.min(requestedAmount, Integer.MAX_VALUE);
+        NativeCraftingMenuCompat.setAmount(menu, requestedAmount);
         this.appliedenhancements$requestedAmount = requestedAmount;
         this.appliedenhancements$exactRequestedAmount = exact;
         this.appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
@@ -422,7 +435,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             return appliedenhancements$requestedAmount;
         }
         return DataEnergisticsMenuCompat.requestedAmount(menu)
-                .orElse(this.amount > 0 ? this.amount : 0L);
+                .orElse(Math.max(0L, NativeCraftingMenuCompat.amount(menu)));
     }
 
     @WrapOperation(method = "planJob", at = @At(value = "INVOKE",
@@ -700,9 +713,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                                 this.whatToCraft,
                                 appliedenhancements$requestedAmount,
                                 appliedenhancements$calculationStrategy)
-                        : menu.planJob(
+                        : NativeCraftingMenuCompat.plan(menu,
                                 this.whatToCraft,
-                                (int) appliedenhancements$requestedAmount,
+                                appliedenhancements$requestedAmount,
                                 appliedenhancements$calculationStrategy));
         if (!replanned) {
             menu.goBack();
@@ -776,7 +789,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         AppliedEnhancements.LOGGER.warn(
                 "Crafting plan screen #{} had no planning job for {} ticks; closing it (what={}, amount={})",
                 menu.containerId, APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS,
-                this.whatToCraft, this.amount);
+                this.whatToCraft, NativeCraftingMenuCompat.amount(menu));
         player.sendSystemMessage(Component.translatable(
                 "message.appliedenhancements.crafting_plan_stalled"));
         menu.goBack();
