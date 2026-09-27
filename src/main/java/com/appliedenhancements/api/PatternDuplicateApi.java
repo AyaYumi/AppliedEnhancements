@@ -2,7 +2,7 @@ package com.appliedenhancements.api;
 
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.stacks.AEKey;
-import com.appliedenhancements.AppliedEnhancements;
+import com.appliedenhancements.runtime.AelisPlanningLog;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -69,7 +69,8 @@ public final class PatternDuplicateApi {
                     return outputs;
                 }
             } catch (RuntimeException failure) {
-                AppliedEnhancements.LOGGER.warn(
+                AelisPlanningLog.warning(
+                        "pattern_output_resolver:" + registration.id(),
                         "Pattern output resolver {} failed for {}",
                         registration.id(), patternStack, failure);
             }

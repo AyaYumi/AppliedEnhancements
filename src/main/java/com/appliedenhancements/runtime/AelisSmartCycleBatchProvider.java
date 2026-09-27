@@ -4,6 +4,7 @@ import appeng.api.crafting.IPatternDetails;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
+import com.appliedenhancements.Config;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Field;
@@ -39,6 +40,9 @@ public final class AelisSmartCycleBatchProvider {
             String outcome, ICraftingProvider provider,
             BigInteger requested, BigInteger admitted,
             Integer coilTier, Integer threads) {
+        if (!Config.AELIS_DIAGNOSTICS.get()) {
+            return;
+        }
         long now = System.nanoTime();
         if (now - lastDiagnosticNanos < 2_000_000_000L) {
             return;

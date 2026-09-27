@@ -5,7 +5,6 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.inv.ListCraftingInventory;
-import com.appliedenhancements.AppliedEnhancements;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Optional;
@@ -36,7 +35,8 @@ public final class DataEnergisticsOrderCompletion {
             var key = finalOutput.what();
             return new NativeSnapshot(ledger, key, ledger.list.get(key), outputs.get(key));
         } catch (IllegalAccessException inaccessible) {
-            AppliedEnhancements.LOGGER.warn("Could not inspect native Data Energistics order completion", inaccessible);
+            AelisPlanningLog.warning("data_energistics_native_ledger",
+                    "Could not inspect native Data Energistics order completion", inaccessible);
             return null;
         }
     }
@@ -60,7 +60,8 @@ public final class DataEnergisticsOrderCompletion {
         try {
             return (boolean) resolver.invoke(null, output);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
-            AppliedEnhancements.LOGGER.warn("Could not resolve Data Energistics order completion", unavailable);
+            AelisPlanningLog.warning("data_energistics_virtual_order",
+                    "Could not resolve Data Energistics order completion", unavailable);
             return false;
         }
     }

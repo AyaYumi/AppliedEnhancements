@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
 
-/** Keeps repeated automatic crafting attempts from flooding server logs. */
+/** Keeps repeated crafting and compatibility failures from flooding logs. */
 public final class AelisPlanningLog {
     private static final RateLimiter LIMITER =
             new RateLimiter(Duration.ofMinutes(1).toNanos(), 128, System::nanoTime);
