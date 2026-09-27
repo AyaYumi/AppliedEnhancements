@@ -12,6 +12,9 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 ## 1.0.9-config-fix 更新
 
+- 将独立的长数量开关和数值上限合并为 `DISABLED`、`LONG_MAX`、`BIG_INTEGER` 三种模式。默认 `DISABLED` 保持 AE2 原生数量处理，旧配置会在启动时迁移。
+- 修复数量输入初始值为 1 时，大步进按钮额外加 1 的问题。
+- 无用之物合金炉的常态诊断日志改由 AELIS 诊断开关控制，并对图样解析器和 Data Energistics 的重复警告限频。
 - 移除 AE2 原生样板输入需求乘法的提前溢出拦截，允许该类请求继续交由 AE2 处理。
 - 保留样板输出数量及其他原生边界的安全校验。
 - 关闭自动 AELIS 规划时完全透传 AE2 原生合成计算；精确字节估算和增强溢出校验只在规划器介入时启用。
@@ -34,7 +37,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 | 功能 | 当前行为 |
 |---|---|
-| Long 范围合成 | 合成订单、网络载荷和规划过程使用 `long` 数量；默认单次上限为 `Integer.MAX_VALUE`（2147483647），可配置到 `Long.MAX_VALUE` |
+| Long 范围合成 | 默认关闭，由 AE2 原生处理订单数量；`LONG_MAX` 支持到 `Long.MAX_VALUE`，启用 AELIS BigInteger 规划后，`BIG_INTEGER` 支持更大的精确请求 |
 | 精确数量校验 | 客户端与服务端共同校验输入，拒绝溢出、非法小数、负数以及会导致 AE2 原生规划器计数溢出的请求 |
 | 计算进度显示 | 合成确认界面显示等待、准备、编译、执行、原生计算、计划整理、完成或失败等阶段 |
 | 规划路径标识 | 计算结果可区分 `AELIS`、`AE2 回退`、`AE2` 和通用的`外部规划器`路径 |
@@ -83,29 +86,16 @@ build/libs/appliedenhancements-1.0.9-config-fix.jar
 
 ## Long 范围合成
 
-长数量输入默认关闭。开启后，普通 long 请求采用精确整数解析，BigInteger 输入最多支持 256 位十进制数字。服务器会再次校验功能开关与订单上限，因此客户端配置无法绕过服务器限制。
-
-默认最大订单量：
-
-```text
-2,147,483,647
-```
-
-配置允许的理论最大值：
-
-```text
-9,223,372,036,854,775,807
-```
+`crafting.max_crafting_order_amount` 默认为 `DISABLED`，由 AE2 原生处理数量输入与确认。`LONG_MAX` 启用精确 long 数量输入，最大为 `Long.MAX_VALUE`（9,223,372,036,854,775,807）。启用 `crafting.aelis.enable_big_integer_planning` 后，`BIG_INTEGER` 可输入最多 256 位十进制数字。服务器会校验所选模式，客户端配置不能绕过限制。
 
 以下类型的输入会被拒绝，不会截断或回绕成其他数值：
 
 ```text
-9223372036854775808
 1.5
 -1
 ```
 
-输入超过 `Long.MAX_VALUE` 的订单时，需开启长数量输入和 BigInteger 规划，并将配置上限设为 `Long.MAX_VALUE`；更小的配置上限仍会被严格执行。精确订单需要 CPU 实现读取完整元数据。在 AELIS 介入时，请求仍可能在不支持的配方或原生边界失败；自动规划关闭时，普通 AE2 计算遵循 AE2 自身行为。
+精确订单需要 CPU 实现读取完整元数据。在 AELIS 介入时，请求仍可能在不支持的配方或原生边界失败；自动规划关闭时，普通 AE2 计算遵循 AE2 自身行为。
 
 ## AELIS 规划器
 

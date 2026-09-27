@@ -16,6 +16,9 @@ It registers no new blocks or items. Instead, it extends AE2 through Mixins and 
 
 ## What's new in 1.0.9-config-fix
 
+- Replaced the separate long-range toggle and numeric order limit with `DISABLED`, `LONG_MAX`, and `BIG_INTEGER` modes. The default `DISABLED` mode leaves AE2's native amount handling in control; existing settings migrate on startup.
+- Fixed large quantity step buttons adding an extra 1 when the input starts at 1.
+- Gated routine Useless alloy furnace diagnostics behind the AELIS diagnostics setting and rate-limited repeated pattern resolver and Data Energistics warnings.
 - Removed the early overflow rejection for native AE2 pattern input-demand multiplication so these requests can continue through AE2.
 - Kept safety checks for pattern output multiplication and other native arithmetic boundaries.
 - When automatic AELIS planning is disabled, native AE2 crafting calculations now pass through unchanged; exact byte estimation and enhanced overflow checks only run when the planner intervenes.
@@ -38,7 +41,7 @@ Legacy public Java API signatures remain compatible with 1.0.8. New integrations
 
 | Feature | Behavior |
 |---|---|
-| Long-range crafting | Crafting requests, payloads, summaries, and execution support `long` quantities. The default per-order limit is `Integer.MAX_VALUE` and can be configured up to `Long.MAX_VALUE`. |
+| Long-range crafting | Disabled by default so AE2 handles order amounts. `LONG_MAX` enables quantities up to `Long.MAX_VALUE`; `BIG_INTEGER` adds larger exact requests when AELIS BigInteger planning is enabled. |
 | Exact validation | Client and server reject overflow, decimals, negative values, and requests that would cross proven native-planner safety boundaries. |
 | Calculation progress | The confirmation screen shows queueing, preparation, compilation, execution, native calculation, plan building, completion, and failure states. |
 | Planning-path display | Completed results distinguish `AELIS`, `AE2 fallback`, native `AE2`, and generic `external planner` paths. |
@@ -84,21 +87,9 @@ ExtendedAE, AE2WTLib, and JEI are optional and only required for their correspon
 
 ## Long-range crafting
 
-Long-range crafting is disabled by default. When enabled, ordinary long requests use exact integer parsing; exact BigInteger input supports up to 256 decimal digits. The server validates the feature switch and maximum order size again, so client configuration cannot bypass server restrictions.
+`crafting.max_crafting_order_amount` defaults to `DISABLED`, leaving amount entry and confirmation to AE2. `LONG_MAX` enables exact long-valued input up to `Long.MAX_VALUE` (9,223,372,036,854,775,807). `BIG_INTEGER` accepts up to 256 decimal digits when `crafting.aelis.enable_big_integer_planning` is enabled. The server checks the selected mode, so client settings cannot bypass it.
 
-Default maximum order:
-
-```text
-2,147,483,647
-```
-
-Maximum configurable value:
-
-```text
-9,223,372,036,854,775,807
-```
-
-Fractional, non-positive and over-budget input is rejected. To enter orders above `Long.MAX_VALUE`, enable long-range crafting and BigInteger planning, and set the configured limit to `Long.MAX_VALUE`; a smaller configured limit remains enforced. Exact plans require a CPU implementation that reads their exact metadata. When AELIS intervenes, a valid request can still fail at unsupported recipe or native boundaries. With automatic planning disabled, ordinary AE2 calculations follow AE2's own behavior.
+Fractional and non-positive input is rejected. Exact plans require a CPU implementation that reads their exact metadata. When AELIS intervenes, a valid request can still fail at unsupported recipe or native boundaries. With automatic planning disabled, ordinary AE2 calculations follow AE2's own behavior.
 
 ## AELIS planner
 
