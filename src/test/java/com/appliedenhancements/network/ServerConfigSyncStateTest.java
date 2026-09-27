@@ -3,6 +3,7 @@ package com.appliedenhancements.network;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.appliedenhancements.CraftingOrderMode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -14,27 +15,27 @@ class ServerConfigSyncStateTest {
 
     @Test
     void usesLocalValuesBeforeAHandshake() {
-        var local = new ServerConfigSyncState.Values(128, false, true, false);
+        var local = new ServerConfigSyncState.Values(CraftingOrderMode.DISABLED, true, false);
 
         assertEquals(local, ServerConfigSyncState.currentOr(local));
     }
 
     @Test
     void serverHandshakeOverridesLocalValues() {
-        var local = new ServerConfigSyncState.Values(128, false, false, false);
+        var local = new ServerConfigSyncState.Values(CraftingOrderMode.DISABLED, false, false);
 
-        ServerConfigSyncState.accept(9_000_000_000L, true, true, true);
+        ServerConfigSyncState.accept(CraftingOrderMode.LONG_MAX, true, true, false);
 
         assertEquals(
-                new ServerConfigSyncState.Values(9_000_000_000L, true, true, true),
+                new ServerConfigSyncState.Values(CraftingOrderMode.LONG_MAX, true, true),
                 ServerConfigSyncState.currentOr(local));
         assertEquals(true, ServerConfigSyncState.isInfiniteStorageLimitBypassEnabled());
     }
 
     @Test
     void disconnectRestoresTheLocalFallback() {
-        var local = new ServerConfigSyncState.Values(512, false, true, false);
-        ServerConfigSyncState.accept(Long.MAX_VALUE, true, false, true);
+        var local = new ServerConfigSyncState.Values(CraftingOrderMode.DISABLED, true, false);
+        ServerConfigSyncState.accept(CraftingOrderMode.BIG_INTEGER, false, true, true);
 
         ServerConfigSyncState.reset();
 
@@ -43,8 +44,7 @@ class ServerConfigSyncStateTest {
 
     @Test
     void rejectsAnInvalidServerMaximum() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> ServerConfigSyncState.accept(0, true, true, true));
+        assertThrows(IllegalArgumentException.class,
+                () -> ServerConfigSyncState.accept(null, true, true, false));
     }
 }

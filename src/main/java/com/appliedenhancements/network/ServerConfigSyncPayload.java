@@ -2,6 +2,7 @@ package com.appliedenhancements.network;
 
 import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
+import com.appliedenhancements.CraftingOrderMode;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -13,37 +14,43 @@ import org.jetbrains.annotations.ApiStatus;
 /** Server-authoritative feature settings needed by client-side crafting screens. */
 @ApiStatus.Internal
 public record ServerConfigSyncPayload(
-        long maxCraftingOrderAmount,
-        boolean longRangeCraftingEnabled,
+        int craftingOrderModeId,
         boolean progressDisplayEnabled,
         boolean infiniteStorageLimitBypassEnabled, boolean bigIntegerEnabled) implements CustomPacketPayload {
-    public ServerConfigSyncPayload(long max, boolean longRange, boolean progress, boolean infinite) {
-        this(max, longRange, progress, infinite, true);
+    public ServerConfigSyncPayload(CraftingOrderMode mode, boolean progress, boolean infinite) {
+        this(mode.id(), progress, infinite, mode.supportsBigInteger());
+    }
+
+    public ServerConfigSyncPayload(CraftingOrderMode mode, boolean progress, boolean infinite,
+            boolean bigIntegerEnabled) {
+        this(mode.id(), progress, infinite, bigIntegerEnabled);
     }
     public static final Type<ServerConfigSyncPayload> TYPE =
             new Type<>(AppliedEnhancements.id("server_config"));
 
     public static final StreamCodec<ByteBuf, ServerConfigSyncPayload> STREAM_CODEC =
             StreamCodec.composite(
-                    ByteBufCodecs.VAR_LONG, ServerConfigSyncPayload::maxCraftingOrderAmount,
-                    ByteBufCodecs.BOOL, ServerConfigSyncPayload::longRangeCraftingEnabled,
+                    ByteBufCodecs.VAR_INT, ServerConfigSyncPayload::craftingOrderModeId,
                     ByteBufCodecs.BOOL, ServerConfigSyncPayload::progressDisplayEnabled,
                     ByteBufCodecs.BOOL, ServerConfigSyncPayload::infiniteStorageLimitBypassEnabled,
                     ByteBufCodecs.BOOL, ServerConfigSyncPayload::bigIntegerEnabled,
                     ServerConfigSyncPayload::new);
 
     public ServerConfigSyncPayload {
-        if (maxCraftingOrderAmount <= 0) {
-            throw new IllegalArgumentException("Maximum crafting order amount must be positive");
-        }
+        CraftingOrderMode.fromId(craftingOrderModeId);
+    }
+
+    public CraftingOrderMode craftingOrderMode() {
+        return CraftingOrderMode.fromId(craftingOrderModeId);
     }
 
     public static ServerConfigSyncPayload currentServerValues() {
         return new ServerConfigSyncPayload(
                 Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
-                Config.ENABLE_LONG_RANGE_CRAFTING.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
-                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(), Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get());
+                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
+                Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()
+                        && Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get());
     }
 
     public static void register(PayloadRegistrar registrar) {
@@ -54,10 +61,10 @@ public record ServerConfigSyncPayload(
         context.enqueueWork(() -> {
             ServerConfigSyncState.acceptExact(payload.bigIntegerEnabled);
             ServerConfigSyncState.accept(
-                    payload.maxCraftingOrderAmount,
-                    payload.longRangeCraftingEnabled,
+                    payload.craftingOrderMode(),
                     payload.progressDisplayEnabled,
-                    payload.infiniteStorageLimitBypassEnabled);
+                    payload.infiniteStorageLimitBypassEnabled,
+                    payload.bigIntegerEnabled);
             ClientCraftingProgressReset.resetIfDisabled(
                     payload.progressDisplayEnabled,
                     context.player().containerMenu);

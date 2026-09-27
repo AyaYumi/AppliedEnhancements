@@ -1,6 +1,7 @@
 package com.appliedenhancements.network;
 
 import com.appliedenhancements.Config;
+import com.appliedenhancements.CraftingOrderMode;
 import org.jetbrains.annotations.ApiStatus;
 
 /** Client view of server-authoritative settings used by client-side menus. */
@@ -9,19 +10,19 @@ public final class ServerConfigSyncState {
     private static volatile Values synchronizedValues;
     private static volatile Boolean exactEnabled;
     public static boolean isBigIntegerEnabled() {
-        return exactEnabled != null ? exactEnabled : Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get();
+        return current().craftingOrderMode().supportsBigInteger()
+                && (exactEnabled == null ? Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() : exactEnabled);
     }
-    static void acceptExact(boolean enabled) { exactEnabled = enabled; }
 
     private ServerConfigSyncState() {
     }
 
     public static boolean isLongRangeCraftingEnabled() {
-        return current().longRangeCraftingEnabled();
+        return current().craftingOrderMode().isEnabled();
     }
 
     public static long getMaxCraftingOrderAmount() {
-        return current().maxCraftingOrderAmount();
+        return Long.MAX_VALUE;
     }
 
     public static boolean isProgressDisplayEnabled() {
@@ -32,13 +33,18 @@ public final class ServerConfigSyncState {
         return current().infiniteStorageLimitBypassEnabled();
     }
 
-    static void accept(long maxCraftingOrderAmount, boolean longRangeCraftingEnabled,
-            boolean progressDisplayEnabled, boolean infiniteStorageLimitBypassEnabled) {
+    static void accept(CraftingOrderMode craftingOrderMode,
+            boolean progressDisplayEnabled, boolean infiniteStorageLimitBypassEnabled,
+            boolean bigIntegerEnabled) {
         synchronizedValues = new Values(
-                maxCraftingOrderAmount,
-                longRangeCraftingEnabled,
+                craftingOrderMode,
                 progressDisplayEnabled,
                 infiniteStorageLimitBypassEnabled);
+        exactEnabled = bigIntegerEnabled;
+    }
+
+    static void acceptExact(boolean enabled) {
+        exactEnabled = enabled;
     }
 
     static void reset() {
@@ -58,16 +64,15 @@ public final class ServerConfigSyncState {
         }
         return new Values(
                 Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
-                Config.ENABLE_LONG_RANGE_CRAFTING.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
                 Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get());
     }
 
-    record Values(long maxCraftingOrderAmount, boolean longRangeCraftingEnabled,
+    record Values(CraftingOrderMode craftingOrderMode,
             boolean progressDisplayEnabled, boolean infiniteStorageLimitBypassEnabled) {
         Values {
-            if (maxCraftingOrderAmount <= 0) {
-                throw new IllegalArgumentException("Maximum crafting order amount must be positive");
+            if (craftingOrderMode == null) {
+                throw new IllegalArgumentException("Crafting order mode must be present");
             }
         }
     }

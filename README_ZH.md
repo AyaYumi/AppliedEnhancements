@@ -226,8 +226,7 @@ AELIS 受节点数和编译时间预算约束。编译图仅在当前合成计�
 
 | 配置键 | 默认值 | 有效范围 | 说明 |
 |---|---:|---:|---|
-| `crafting.enable_long_range_crafting` | `false` | 布尔值 | 启用超过 `Integer.MAX_VALUE` 的合成订单 |
-| `crafting.max_crafting_order_amount` | `2147483647` | `1` ～ `Long.MAX_VALUE` | 单次 AE2 自动合成订单的最大数量 |
+| `crafting.max_crafting_order_amount` | `DISABLED` | `DISABLED` / `LONG_MAX` / `BIG_INTEGER` | `DISABLED` 保持 AE2 原生处理；`LONG_MAX` 启用最大至 `Long.MAX_VALUE` 的数量；`BIG_INTEGER` 额外启用超过 `Long.MAX_VALUE` 的精确订单 |
 | `crafting.enable_progress_display` | `false` | 布尔值 | 启用合成计算进度和路径显示 |
 | `crafting.enable_enhanced_material_calculation` | `false` | 布尔值 | 启用增强的存储、合成和缺失材料统计 |
 | `crafting.aelis.enable_automatic_planner` | `false` | 布尔值 | 允许自动接入 AE2 原生规划，并启用手动计划库存锁 |

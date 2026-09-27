@@ -209,8 +209,7 @@ One COMMON configuration file is generated on first launch: `config/appliedenhan
 
 | Key | Default | Description |
 |---|---:|---|
-| `crafting.enable_long_range_crafting` | `false` | Enables orders above `Integer.MAX_VALUE` |
-| `crafting.max_crafting_order_amount` | `2147483647` | Maximum amount in one AE2 crafting order |
+| `crafting.max_crafting_order_amount` | `DISABLED` | `DISABLED` keeps AE2 native handling; `LONG_MAX` enables orders up to `Long.MAX_VALUE`; `BIG_INTEGER` also enables exact orders above `Long.MAX_VALUE` |
 | `crafting.enable_progress_display` | `false` | Enables calculation progress and path display |
 | `crafting.enable_enhanced_material_calculation` | `false` | Enables enhanced stored, craftable, and missing material statistics |
 | `crafting.aelis.enable_automatic_planner` | `false` | Enables automatic AELIS interception and manual-plan inventory locking |

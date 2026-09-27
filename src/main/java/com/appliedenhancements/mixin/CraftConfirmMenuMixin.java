@@ -67,7 +67,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
     @Override public boolean appliedenhancements$planExact(AEKey what, BigInteger requested) {
         var request = new com.appliedenhancements.api.AelisExactRequest(requested);
-        if (!Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return false;
+        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()
+                || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return false;
         return appliedenhancements$planRequested(what, request.projection(), CalculationStrategy.REPORT_MISSING_ITEMS, requested);
     }
     @Unique
@@ -291,10 +292,10 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             CalculationStrategy strategy, BigInteger exact) {
         var menu = (CraftConfirmMenu) (Object) this;
         if (menu.isClientSide() || what == null || requestedAmount <= 0 || strategy == null
-                || !Config.ENABLE_LONG_RANGE_CRAFTING.get()) {
+                || !Config.MAX_CRAFTING_ORDER_AMOUNT.get().isEnabled()) {
             return false;
         }
-        long maximumAmount = Config.MAX_CRAFTING_ORDER_AMOUNT.get();
+        long maximumAmount = Long.MAX_VALUE;
         if (NativeCraftingLongSafety.exceedsConfiguredLimit(requestedAmount, maximumAmount)) {
             menu.getPlayer().sendSystemMessage(Component.translatable(
                     "message.appliedenhancements.crafting_amount_too_large", maximumAmount));

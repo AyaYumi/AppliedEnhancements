@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class ConfigDefaultsTest {
     @Test
     void craftingOrderDefaultMatchesNativeIntegerLimit() {
-        assertEquals((long) Integer.MAX_VALUE,
+        assertEquals(CraftingOrderMode.DISABLED,
                 Config.MAX_CRAFTING_ORDER_AMOUNT.getDefault());
     }
 
@@ -38,7 +38,7 @@ class ConfigDefaultsTest {
 
     @Test
     void validatedModpackPerformanceProfileIsTheDefault() {
-        assertFalse(Config.ENABLE_LONG_RANGE_CRAFTING.getDefault());
+        assertEquals(CraftingOrderMode.DISABLED, Config.MAX_CRAFTING_ORDER_AMOUNT.getDefault());
         assertTrue(Config.ENABLE_PATTERN_CACHING.getDefault());
         assertEquals(32, Config.PATTERN_CACHE_SIZE.getDefault());
         assertTrue(Config.ENABLE_STORAGE_BUS_SLOT_INDEX.getDefault());
@@ -48,7 +48,6 @@ class ConfigDefaultsTest {
     @Test
     void unifiedSpecUsesFunctionOrientedPathsOnly() {
         var values = Config.SPEC.getValues();
-        assertTrue(values.contains("crafting.enable_long_range_crafting"));
         assertTrue(values.contains("crafting.max_crafting_order_amount"));
         assertTrue(values.contains("crafting.enable_progress_display"));
         assertTrue(values.contains("crafting.enable_enhanced_material_calculation"));

@@ -96,9 +96,7 @@ class ConfigFileMigrationTest {
                 .sync()
                 .build()) {
             migrated.load();
-            assertEquals(false, migrated.get("crafting.enable_long_range_crafting"));
-            assertEquals(9999999999L,
-                    ((Number) migrated.get("crafting.max_crafting_order_amount")).longValue());
+            assertEquals("DISABLED", migrated.get("crafting.max_crafting_order_amount"));
             assertEquals(false, migrated.get("crafting.enable_progress_display"));
             assertEquals(false,
                     migrated.get("crafting.enable_enhanced_material_calculation"));
@@ -167,13 +165,36 @@ class ConfigFileMigrationTest {
                 .sync()
                 .build()) {
             migrated.load();
-            assertEquals(true, migrated.get("crafting.enable_long_range_crafting"));
+            assertEquals("LONG_MAX", migrated.get("crafting.max_crafting_order_amount"));
             assertEquals(false, migrated.get("crafting.enable_progress_display"));
             assertEquals(true,
                     migrated.get("crafting.aelis.enable_automatic_planner"));
             assertEquals(true, migrated.get("performance.pattern_cache.enabled"));
             assertEquals(false,
                     migrated.get("storage.infinite.enable_listing_limit_bypass"));
+        }
+    }
+
+    @Test
+    void migratesLegacyCraftingSettingsInsideTheCurrentUnifiedLayout() throws Exception {
+        Path common = configDirectory.resolve(ConfigFileMigration.COMMON_FILE);
+        Files.writeString(common, """
+                [crafting]
+                enable_long_range_crafting = true
+                max_crafting_order_amount = 9999999999
+
+                [crafting.aelis]
+                enable_automatic_planner = false
+                """);
+
+        ConfigFileMigration.migrate(configDirectory);
+
+        try (CommentedFileConfig migrated = CommentedFileConfig.builder(common)
+                .sync()
+                .build()) {
+            migrated.load();
+            assertEquals("LONG_MAX", migrated.get("crafting.max_crafting_order_amount"));
+            assertFalse(migrated.contains("crafting.enable_long_range_crafting"));
         }
     }
 

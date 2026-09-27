@@ -111,7 +111,7 @@ class ConfiguredConfigPatchTest {
     private static CommentedConfig customizedConfig() {
         var config = emptyConfig();
         Config.SPEC.correct(config);
-        config.set("crafting.max_crafting_order_amount", 9_999_999_999L);
+        config.set("crafting.max_crafting_order_amount", "LONG_MAX");
         config.setComment("crafting.max_crafting_order_amount", "Keep this custom limit");
         config.set("crafting.aelis.max_nodes", 654321);
         config.set("crafting.aelis.compile_budget_ms", 4321);
@@ -129,7 +129,7 @@ class ConfiguredConfigPatchTest {
     }
 
     private static void assertCustomValues(CommentedConfig config) {
-        assertEquals(9_999_999_999L, (Long) config.get("crafting.max_crafting_order_amount"));
+        assertEquals("LONG_MAX", config.get("crafting.max_crafting_order_amount"));
         assertEquals(654321, (Integer) config.get("crafting.aelis.max_nodes"));
         assertEquals(4321, (Integer) config.get("crafting.aelis.compile_budget_ms"));
         assertEquals(512, (Integer) config.get("crafting.aelis.cycle_solver.max_scc_nodes"));

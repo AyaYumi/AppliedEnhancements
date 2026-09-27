@@ -3,6 +3,7 @@ package com.appliedenhancements.network;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.appliedenhancements.CraftingOrderMode;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
@@ -41,8 +42,8 @@ class ClientCraftingProgressResetTest {
     void connectionChangeResetsDistinctPlayerAndScreenMenusAndServerSnapshot() {
         var playerMenu = new FakeProgressMenu(activeProgress(30, 1));
         var screenMenu = new FakeProgressMenu(activeProgress(31, 1));
-        var fallback = new ServerConfigSyncState.Values(128, false, true, false);
-        ServerConfigSyncState.accept(Long.MAX_VALUE, true, false, true);
+        var fallback = new ServerConfigSyncState.Values(CraftingOrderMode.DISABLED, true, false);
+        ServerConfigSyncState.accept(CraftingOrderMode.LONG_MAX, false, true, false);
 
         assertEquals(2, ClientCraftingProgressReset.resetForConnectionChange(
                 playerMenu, screenMenu, playerMenu, null, new Object()));

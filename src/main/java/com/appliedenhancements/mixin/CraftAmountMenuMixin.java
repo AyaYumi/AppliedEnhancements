@@ -37,8 +37,8 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         var menu = (CraftAmountMenu) (Object) this;
         if (menu.isClientSide() || whatToCraft == null || amount.signum() <= 0) return;
         if (amount.bitLength() <= 63) { appliedenhancements$confirmLong(amount.longValueExact(), missing, autoStart); return; }
-        if (!Config.ENABLE_LONG_RANGE_CRAFTING.get() || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
-                || Config.MAX_CRAFTING_ORDER_AMOUNT.get() != Long.MAX_VALUE) return;
+        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()
+                || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return;
         new com.appliedenhancements.api.AelisExactRequest(amount);
         if (!(menu.getPlayer() instanceof ServerPlayer player) || menu.getLocator() == null
                 || !(menu.getTarget() instanceof IActionHost target) || target.getActionableNode() == null) return;
@@ -83,7 +83,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
             return;
         }
 
-        if (!Config.ENABLE_LONG_RANGE_CRAFTING.get()) {
+        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().isEnabled()) {
             if (amount <= Integer.MAX_VALUE) {
                 menu.confirm((int) amount, craftMissingAmount, autoStart);
             } else {
@@ -113,7 +113,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         }
 
         // Check maximum crafting amount
-        long maximumAmount = Config.MAX_CRAFTING_ORDER_AMOUNT.get();
+        long maximumAmount = Long.MAX_VALUE;
         if (amount > maximumAmount) {
             menu.getPlayer().sendSystemMessage(Component.translatable(
                     "message.appliedenhancements.crafting_amount_too_large",
