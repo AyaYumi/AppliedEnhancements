@@ -6,18 +6,18 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 
 项目不注册新的方块或物品，主要通过 Mixin 和网络同步扩展 AE2 的自动合成流程：支持 `long` 范围的合成数量、显示合成计算进度、修正超大数量下的材料统计，并提供可选的 AELIS 合成规划器。
 
-> 当前版本：`1.0.9-fix`
+> 当前版本：`1.0.9-config-fix`
 >
 > 目标平台：Minecraft `1.21.1` / NeoForge / Java `21`
 
-## 1.0.9-fix 更新
+## 1.0.9-config-fix 更新
 
 - 移除 AE2 原生样板输入需求乘法的提前溢出拦截，允许该类请求继续交由 AE2 处理。
 - 保留样板输出数量及其他原生边界的安全校验。
 - 关闭自动 AELIS 规划时完全透传 AE2 原生合成计算；精确字节估算和增强溢出校验只在规划器介入时启用。
 - 新增稳定的 BigInteger 请求、计划元数据、结构化回退分类和精确执行需求 API，同时保留旧入口兼容。
 - 普通规划日志改为仅在诊断开关开启时输出，异常提示使用限流警告；开发运行默认使用 `info` 日志级别。
-- 移除失效的临时验证源码目录配置，并将接入文档更新到 `1.0.9-fix`。
+- 移除失效的临时验证源码目录配置，并将接入文档更新到 `1.0.9-config-fix`。
 
 ## 1.0.9 更新
 
@@ -28,7 +28,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 - 加入与 DataEnergistics 一致的 `E` 以上十进制单位：`Z`、`Y`、`B` 一直到 `Att`，再往上使用科学计数法。
 - 为精确 BigInteger 待合成、缺失、库存供应总量及存储字节估计加入有界网络同步，内部载荷协议为 `9`。
 
-旧公共 Java API 签名继续兼容 1.0.8；新接入可使用 `1.0.9-fix` 新增的稳定精确 API。当前内部载荷协议为 `9`，客户端与服务端必须使用同一发行构建。
+旧公共 Java API 签名继续兼容 1.0.8；新接入可使用 `1.0.9-config-fix` 新增的稳定精确 API。当前内部载荷协议为 `9`，客户端与服务端必须使用同一发行构建。
 
 ## 功能概览
 
@@ -74,7 +74,7 @@ Applied Enhancements 是一个面向 Applied Energistics 2（AE2）的 NeoForge 
 目前仓库提供源码构建流程。构建完成后，将以下文件放入客户端和服务端的 `mods` 目录：
 
 ```text
-build/libs/appliedenhancements-1.0.9-fix.jar
+build/libs/appliedenhancements-1.0.9-config-fix.jar
 ```
 
 同时需要安装匹配版本的 NeoForge 与 AE2。ExtendedAE、AE2WTLib 和 JEI 仅在使用对应兼容功能时安装。
@@ -291,7 +291,7 @@ ServerEvents.tags('item', event => {
 构建产物位于：
 
 ```text
-build/libs/appliedenhancements-1.0.9-fix.jar
+build/libs/appliedenhancements-1.0.9-config-fix.jar
 ```
 
 ## 验证范围

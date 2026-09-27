@@ -10,18 +10,18 @@ Applied Enhancements is a NeoForge quality-of-life and performance addon for App
 
 It registers no new blocks or items. Instead, it extends AE2 through Mixins and network synchronization with long-range crafting quantities, crafting-calculation progress, optional high-performance planning, pattern-terminal management tools, explicit infinite-cell integration, and compatibility fixes for popular AE2 addons.
 
-> Current version: `1.0.9-fix`
+> Current version: `1.0.9-config-fix`
 >
 > Target: Minecraft `1.21.1` / NeoForge / Java `21`
 
-## What's new in 1.0.9-fix
+## What's new in 1.0.9-config-fix
 
 - Removed the early overflow rejection for native AE2 pattern input-demand multiplication so these requests can continue through AE2.
 - Kept safety checks for pattern output multiplication and other native arithmetic boundaries.
 - When automatic AELIS planning is disabled, native AE2 crafting calculations now pass through unchanged; exact byte estimation and enhanced overflow checks only run when the planner intervenes.
 - Added the stable BigInteger request and plan metadata APIs, structured fallback categories, and exact execution requirement reporting while preserving the legacy entry points.
 - Reduced routine planner logging to diagnostics or rate-limited warnings; development runs now default to the normal `info` console level.
-- Removed the obsolete development harness source-set hook and refreshed the integration documentation for `1.0.9-fix`.
+- Removed the obsolete development harness source-set hook and refreshed the integration documentation for `1.0.9-config-fix`.
 
 ## What's new in 1.0.9
 
@@ -32,7 +32,7 @@ Compared with 1.0.8:
 - Added DataEnergistics-compatible decimal units beyond `E`: `Z`, `Y`, `B` through `Att`, followed by scientific notation.
 - Added bounded network synchronization for exact BigInteger crafted, missing and supplied totals plus storage byte estimates; internal payload protocol is `9`.
 
-Legacy public Java API signatures remain compatible with 1.0.8. New integrations can use the stable exact APIs added in `1.0.9-fix`. Client and server must use the same release build; the current internal payload protocol is `9`.
+Legacy public Java API signatures remain compatible with 1.0.8. New integrations can use the stable exact APIs added in `1.0.9-config-fix`. Client and server must use the same release build; the current internal payload protocol is `9`.
 
 ## Features
 
@@ -77,7 +77,7 @@ Quantum CPU, smart-doubling and order-package integration additionally use the o
 Install the same Applied Enhancements release build on both the client and server, together with compatible NeoForge and AE2 versions.
 
 ```text
-mods/appliedenhancements-1.0.9-fix.jar
+mods/appliedenhancements-1.0.9-config-fix.jar
 ```
 
 ExtendedAE, AE2WTLib, and JEI are optional and only required for their corresponding integrations.
@@ -306,7 +306,7 @@ The project uses Gradle Wrapper `8.14.2` and requires JDK 21.
 Build output:
 
 ```text
-build/libs/appliedenhancements-1.0.9-fix.jar
+build/libs/appliedenhancements-1.0.9-config-fix.jar
 ```
 
 ## Validation
