@@ -1,6 +1,6 @@
 # Applied Enhancements API / 接口文档
 
-Current: **1.1.0-forge**, Minecraft **1.20.1**, Java **17**, Forge **47.4.20+**,
+Current: **1.1.1-forge**, Minecraft **1.20.1**, Java **17**, Forge **47.4.20+**,
 AE2 **15.4.10+**. Network protocol **1.1.0-forge-1** requires matching client/server builds.
 
 | Contract | Documentation |
@@ -8,6 +8,7 @@ AE2 **15.4.10+**. Network protocol **1.1.0-forge-1** requires matching client/se
 | Planner, cycle CPU, infinite markers, terminal/menu integrations | [English](API_INTEGRATION.md) · [中文](API_INTEGRATION_ZH.md) |
 | Exact BigInteger requests, plan metadata, progress and persistence | [Exact crafting](EXACT_CRAFTING_API.md) |
 | One protected inventory view, actual batch count, ownership and rollback | [Shared batch execution](BATCH_EXECUTION_API.md) |
+| Native enabled-state queries and exact external task reconciliation | [Native smart doubling / 原生智能倍增](SMART_DOUBLING.md) |
 | All configuration paths/defaults and migration | [Configuration](CONFIGURATION.md) |
 | Build, JavaDoc, regression and release checks | [Development](DEVELOPMENT.md) |
 
@@ -17,6 +18,6 @@ classes are internal. Use compileOnly against the matching separate JAR; do not
 shade these packages into an addon. Mutate live game state on its server thread.
 Planning futures are asynchronous; never block the server thread on get().
 
-本版新增共享批量投料上下文。能力上限不代替真实材料、机器容量或持久所有权。
+本版新增原生智能倍增状态查询，保留共享批量投料上下文。能力上限不代替真实材料、机器容量或持久所有权。
 客户端接口只在客户端加载，可选附属兼容类只在对应模组存在时加载。历史个人机器
 验证报告已移出项目，公开文档描述当前源码契约与可重复验证方法。

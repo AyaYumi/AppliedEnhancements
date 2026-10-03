@@ -14,12 +14,19 @@ import org.spongepowered.asm.mixin.Pseudo;
 @Mixin(targets = "com.sorrowmist.useless.content.machines.advanced_alloy_furnace.ae.SmartDoublingPlans",
         remap = false)
 public abstract class UselessSmartDoublingPlanMixin {
-    @WrapMethod(method = "rewriteForSubmission")
+    @WrapMethod(method = "name=/^rewriteForSubmission$/ desc=/^\\(Lappeng\\/api\\/networking\\/crafting\\/ICraftingPlan;Ljava\\/util\\/function\\/Function;\\)Lappeng\\/api\\/networking\\/crafting\\/ICraftingPlan;$/", require = 0)
     private static ICraftingPlan appliedenhancements$preserveCyclicPlan(
             ICraftingPlan plan,
             Function<IPatternDetails, Iterable<ICraftingProvider>> providers,
             Operation<ICraftingPlan> original) {
         return AelisCraftingPlanRewrite.rewriteOrdinaryPatterns(
                 plan, ordinary -> original.call(ordinary, providers));
+    }
+    @WrapMethod(method = "name=/^rewriteForSubmission$/ desc=/^\\(Lappeng\\/api\\/networking\\/crafting\\/ICraftingPlan;Ljava\\/util\\/function\\/Function;Lnet\\/minecraft\\/world\\/level\\/Level;\\)Lappeng\\/api\\/networking\\/crafting\\/ICraftingPlan;$/", require = 0)
+    private static ICraftingPlan appliedenhancements$preserveNativePlan(
+            ICraftingPlan plan, Function<IPatternDetails, Iterable<ICraftingProvider>> providers,
+            net.minecraft.world.level.Level level, Operation<ICraftingPlan> original) {
+        return AelisCraftingPlanRewrite.rewriteOrdinaryPatterns(
+                plan, ordinary -> original.call(ordinary, providers, level));
     }
 }

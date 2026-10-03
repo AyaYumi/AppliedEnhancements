@@ -1,7 +1,6 @@
 package com.appliedenhancements.runtime;
 
 import appeng.api.crafting.IPatternDetails;
-import com.github.appliedenhancements.integration.ae2.AelisScaledPattern;
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -33,6 +32,8 @@ public final class ExactScaledTaskReconciliation {
         var chosen = new LinkedHashMap<IPatternDetails, IPatternDetails>();
         var scales = new LinkedHashMap<IPatternDetails, Long>();
         var mapped = new java.util.HashSet<IPatternDetails>();
+        var external = new java.util.HashSet<IPatternDetails>();
+        var batches = new LinkedHashMap<IPatternDetails, Map<IPatternDetails, Long>>();
         for (var candidate : projected.keySet()) {
             if (exact.containsKey(candidate)) continue;
             var scaled = resolver.apply(candidate);
@@ -45,6 +46,8 @@ public final class ExactScaledTaskReconciliation {
                 throw new IllegalStateException("Scaled crafting task has no exact original");
             }
             mapped.add(candidate);
+            batches.computeIfAbsent(original, ignored -> new LinkedHashMap<>()).put(candidate, scaled.multiplier());
+            if (SmartDoublingPatternAccess.isExternallyManaged(candidate)) external.add(original);
             if (scaled.multiplier() > scales.getOrDefault(original, 0L)) {
                 chosen.put(original, candidate);
                 scales.put(original, scaled.multiplier());
@@ -55,7 +58,8 @@ public final class ExactScaledTaskReconciliation {
         // Never silently discard an unrelated task introduced by another integration.
         for (var candidate : projected.keySet()) {
             if (!exact.containsKey(candidate) && !mapped.contains(candidate)) {
-                throw new IllegalStateException("Cannot reconcile unknown rewritten crafting task");
+                throw new IllegalStateException("Cannot reconcile unknown rewritten crafting task: "
+                        + candidate.getClass().getName());
             }
         }
         var corrected = new LinkedHashMap<>(exact);
@@ -63,6 +67,25 @@ public final class ExactScaledTaskReconciliation {
             var amount = corrected.remove(original);
             if (amount == null || amount.signum() <= 0) {
                 throw new IllegalStateException("Invalid exact original crafting count");
+            }
+            if (external.contains(original)) {
+                // Keep the native provider split and wrapper identity when it conserves the exact work.
+                var nativeTasks = new LinkedHashMap<>(batches.get(original));
+                if (projected.containsKey(original)) nativeTasks.put(original, 1L);
+                BigInteger nativeWork = BigInteger.ZERO;
+                for (var task : nativeTasks.entrySet()) {
+                    var pushes = projected.get(task.getKey());
+                    if (pushes == null || pushes <= 0) throw new IllegalStateException("Invalid native crafting count");
+                    nativeWork = nativeWork.add(BigInteger.valueOf(pushes).multiply(BigInteger.valueOf(task.getValue())));
+                }
+                if (nativeWork.equals(amount)) {
+                    nativeTasks.forEach((pattern, scale) -> corrected.put(pattern, BigInteger.valueOf(projected.get(pattern))));
+                    return;
+                }
+                if (amount.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0)
+                    throw new IllegalStateException("Native smart doubling changed exact crafting work");
+                // A saturated long preview cannot express the whole demand. Retain the native
+                // wrapper and exact ledger rather than executing only its projected window.
             }
             var parts = amount.divideAndRemainder(BigInteger.valueOf(scales.get(original)));
             if (parts[0].signum() > 0) corrected.put(batch, parts[0]);
@@ -95,8 +118,20 @@ public final class ExactScaledTaskReconciliation {
     }
 
     private static ScaledTask resolve(IPatternDetails pattern) {
-        if (!(pattern instanceof AelisScaledPattern scaled)) return null;
-        return new ScaledTask(scaled.appliedenhancements$originalPattern(),
-                scaled.appliedenhancements$operationsPerPush());
+        var scale = SmartDoublingPatternAccess.resolve(pattern);
+        if (scale == null) return null;
+        var original = scale.original();
+        long multiplier = scale.multiplier();
+        var visited = new java.util.IdentityHashMap<IPatternDetails, Boolean>();
+        visited.put(pattern, Boolean.TRUE);
+        while (original != null) {
+            if (visited.put(original, Boolean.TRUE) != null)
+                throw new IllegalStateException("Recursive smart-doubling wrapper");
+            var nested = SmartDoublingPatternAccess.resolve(original);
+            if (nested == null) break;
+            multiplier = Math.multiplyExact(multiplier, nested.multiplier());
+            original = nested.original();
+        }
+        return new ScaledTask(original, multiplier);
     }
 }

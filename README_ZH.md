@@ -2,7 +2,7 @@
 
 [English](README.md) · [接口文档](docs/README.md) · [配置参考](docs/CONFIGURATION.md)
 
-当前 **1.1.0-forge** 为 Minecraft 1.20.1 / Forge 提供 AE2 规划、存储访问和样板终端
+当前 **1.1.1-forge** 为 Minecraft 1.20.1 / Forge 提供 AE2 规划、存储访问和样板终端
 增强。本版增加共享批量投料事务，让循环 CPU 的首份抽料、额外份数、回滚和原生
 Provider 钩子保持同一材料账本。
 
@@ -26,7 +26,7 @@ Provider 钩子保持同一材料账本。
 默认构建使用 AE2 15.4.10，同一份 JAR 也支持 UELM 15.5.4。ExtendedAE、AE2WTLib、JEI、AdvancedAE 和其他
 附属兼容均为可选；内部接口变化后的新版仍需实际运行验证。
 
-构建 `build/libs/appliedenhancements-1.1.0-forge.jar` 后放入两端 mods，客户端和
+构建 `build/libs/appliedenhancements-1.1.1-forge.jar` 后放入两端 mods，客户端和
 服务端使用相同构建，内部载荷协议为 9。OmniSequence 使用独立安装的本模组 API，
 不会把本模组嵌入自己的 JAR。
 

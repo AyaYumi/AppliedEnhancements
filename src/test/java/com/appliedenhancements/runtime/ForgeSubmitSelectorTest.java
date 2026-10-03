@@ -29,10 +29,30 @@ class ForgeSubmitSelectorTest {
         assertFalse(withFlag.match(ElementNode.of(target, upstream)).isExactMatch());
     }
 
+    @Test
+    void nativeDoublingSubmitOverloadsRemainDistinctDuringPermissiveRemap() throws IOException {
+        var target = new ClassNode();
+        target.name = "com/sorrowmist/useless/content/machines/advanced_alloy_furnace/ae/SmartDoublingPlans";
+        String plan = "Lappeng/api/networking/crafting/ICraftingPlan;";
+        String function = "Ljava/util/function/Function;";
+        var two = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "rewriteForSubmission", "(" + plan + function + ")" + plan, null, null);
+        var three = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "rewriteForSubmission", "(" + plan + function + "Lnet/minecraft/world/level/Level;)" + plan, null, null);
+        var noLevel = selector("UselessSmartDoublingPlanMixin", "appliedenhancements$preserveCyclicPlan");
+        var withLevel = selector("UselessSmartDoublingPlanMixin", "appliedenhancements$preserveNativePlan");
+        assertTrue(noLevel.match(ElementNode.of(target, two)).isExactMatch());
+        assertFalse(noLevel.match(ElementNode.of(target, three)).isExactMatch());
+        assertTrue(withLevel.match(ElementNode.of(target, three)).isExactMatch());
+        assertFalse(withLevel.match(ElementNode.of(target, two)).isExactMatch());
+    }
+
     private static ITargetSelector selector(String name) throws IOException {
+        return selector("CraftConfirmMenuMixin", name);
+    }
+
+    private static ITargetSelector selector(String mixinName, String name) throws IOException {
         var mixin = new ClassNode();
         try (var input = ForgeSubmitSelectorTest.class.getResourceAsStream(
-                "/com/appliedenhancements/mixin/CraftConfirmMenuMixin.class")) {
+                "/com/appliedenhancements/mixin/" + mixinName + ".class")) {
             new ClassReader(input).accept(mixin, ClassReader.SKIP_CODE);
         }
         var method = mixin.methods.stream().filter(candidate -> candidate.name.equals(name)).findFirst().orElseThrow();

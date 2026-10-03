@@ -12,7 +12,6 @@
     "AdvancedAeCraftingCycleMixin",
     "AdvancedAeOrderCompletionMixin",
     "UselessSmartDoublingPlanMixin",
-    "UselessScaledPatternMixin",
     "AE2WTLibCraftingTerminalHandlerMixin",
     "AECraftingPatternInputMixin",
     "CraftAmountMenuMixin",

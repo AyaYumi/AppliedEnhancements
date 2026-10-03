@@ -69,6 +69,49 @@ class ExactScaledTaskReconciliationTest {
         assertSame(projected, ExactScaledTaskReconciliation.reconcile(projected, Map.of(original, BigInteger.valueOf(9)), resolver(4)).projected());
     }
 
+    @Test void mixedNativeAndLocalBatchesDoNotThrowOrDuplicateWork() {
+        var nativeOriginal = pattern();
+        var nativeBatch = new com.extendedae_plus.api.crafting.ScaledProcessingPattern(nativeOriginal, 7);
+        var local = (IPatternDetails) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{IPatternDetails.class, com.github.appliedenhancements.integration.ae2.AelisScaledPattern.class},
+                (p, m, a) -> switch (m.getName()) {
+                    case "hashCode" -> System.identityHashCode(p);
+                    case "equals" -> p == a[0];
+                    case "appliedenhancements$originalPattern" -> original;
+                    case "appliedenhancements$operationsPerPush" -> 4L;
+                    default -> throw new AssertionError(m.getName());
+                });
+        var result = ExactScaledTaskReconciliation.reconcile(
+                Map.of(nativeBatch, 2L, nativeOriginal, 1L, local, 1L),
+                Map.of(nativeOriginal, BigInteger.valueOf(15), original, BigInteger.valueOf(9)));
+        assertEquals(Map.of(nativeBatch, BigInteger.TWO, nativeOriginal, BigInteger.ONE,
+                local, BigInteger.TWO, original, BigInteger.ONE), result.exact());
+        assertFalse(nativeBatch instanceof com.github.appliedenhancements.integration.ae2.AelisScaledPattern);
+    }
+
+    @Test void nativeRoundRobinSplitAndRemainderRetainTheirIdentities() {
+        var large = new com.extendedae_plus.api.crafting.ScaledProcessingPattern(original, 4);
+        var small = new com.extendedae_plus.api.crafting.ScaledProcessingPattern(original, 3);
+        var projected = Map.<IPatternDetails, Long>of(large, 2L, small, 1L, original, 1L);
+        var result = ExactScaledTaskReconciliation.reconcile(projected, Map.of(original, BigInteger.valueOf(12)));
+        assertEquals(projected, result.projected());
+        assertEquals(Map.of(large, BigInteger.TWO, small, BigInteger.ONE, original, BigInteger.ONE), result.exact());
+    }
+
+    @Test void nativeWrapperBeyondLongRetainsAllExactWork() {
+        var nativeBatch = new com.extendedae_plus.api.crafting.ScaledProcessingPattern(original, 7);
+        var result = ExactScaledTaskReconciliation.reconcile(Map.of(nativeBatch, 1L), Map.of(original, total));
+        assertEquals(total, result.exact().get(nativeBatch).multiply(BigInteger.valueOf(7))
+                .add(result.exact().getOrDefault(original, BigInteger.ZERO)));
+        assertSame(nativeBatch, result.exact().keySet().stream().filter(p -> p == nativeBatch).findFirst().orElseThrow());
+    }
+
+    @Test void nativeFiniteWorkMismatchIsRejectedInsteadOfLosingOrInventingCrafts() {
+        var nativeBatch = new com.extendedae_plus.api.crafting.ScaledProcessingPattern(original, 7);
+        assertThrows(IllegalStateException.class, () -> ExactScaledTaskReconciliation.reconcile(
+                Map.of(nativeBatch, 2L), Map.of(original, BigInteger.valueOf(15))));
+    }
+
     private static IPatternDetails pattern() {
         return (IPatternDetails) Proxy.newProxyInstance(ExactScaledTaskReconciliationTest.class.getClassLoader(),
                 new Class<?>[]{IPatternDetails.class}, (p, m, a) -> switch (m.getName()) {

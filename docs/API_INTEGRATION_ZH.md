@@ -2,11 +2,11 @@
 
 [English documentation](API_INTEGRATION.md)
 
-当前 `1.1.0-forge` 源码默认使用 AE2 `15.4.10`，声明 `[15.4.10,16)` 依赖范围，
+当前 `1.1.1-forge` 源码默认使用 AE2 `15.4.10`，声明 `[15.4.10,16)` 依赖范围，
 CI 分别构建原版 AE2 15.4.10 与 UELM 15.5.4。公开 API 使用 AE2 类型；CPU 显示内部钩子属于
 独立兼容实现，依赖更新后仍需实际运行验证。
 
-本文面向希望接入 Applied Enhancements `1.1.0-forge` 的 Forge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+本文面向希望接入 Applied Enhancements `1.1.1-forge` 的 Forge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -16,9 +16,9 @@ CI 分别构建原版 AE2 15.4.10 与 UELM 15.5.4。公开 API 使用 AE2 类型
 | Java | `17` | 编译与运行目标 |
 | Forge | `47.4.20` | 构建与运行验证版本；当前声明范围：`[47.4.10,)` |
 | Applied Energistics 2 | `15.4.10` | 声明范围：`[15.4.10,16)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.1.0-forge` | 本文档对应版本 |
+| Applied Enhancements | `1.1.1-forge` | 本文档对应版本 |
 
-`1.1.0-forge` 保留既有公共 API，并增加 `AelisBatchExecutionContext` 共享投料事务。客户端与服务端使用同一构建，内部载荷协议为 `1.1.0-forge-1`。使用本版共享批量接口时，编译和运行最低版本设为 `1.1.0-forge`。
+`1.1.1-forge` 保留 `1.1.0-forge` 引入的 `AelisBatchExecutionContext` 共享投料事务，新增 `AelisSmartDoublingApi` 原生倍增状态查询，详见[原生智能倍增](SMART_DOUBLING.md)。客户端与服务端使用同一构建，内部载荷协议为 `1.1.0-forge-1`。使用新增查询时，编译和运行最低版本设为 `1.1.1-forge`。
 
 BigInteger 计划不做统一 CPU 能力预检。long 投影饱和不会强制 `simulation()`，也不会改写 CPU 的提交结果。服务端接入方应通过 `AelisExactCraftingPlanApi.read(plan)` 读取精确数量；`AelisCycleExecutionApi.copyMetadata` 会保留这些字段。旧名 `isPreviewOnly` 现在只表示投影发生饱和。标准 long 字段仍是投影，未适配 CPU 接受订单不代表已支持完整 BigInteger 执行。
 
@@ -40,7 +40,7 @@ com.appliedenhancements.api.client
 - `com.github.appliedenhancements`；
 - 其他未位于公共 API 包中的桥接类、载荷和常量。
 
-## 1.1.0-forge 精确规划与元数据
+## 1.1.1-forge 精确规划与元数据
 
 在服务器线程调用 `AelisExactCraftingService.begin`，然后异步等待结果。数量必须为不超过 256 位十进制数字的正整数。目前仅支持 `REPORT_MISSING_ITEMS`；传入 `CRAFT_LESS` 会明确报错。
 
@@ -58,7 +58,7 @@ AelisExecutionRequirement requirement = metadata.executionRequirement();
 
 当 `Result.shouldFallback()` 为 true 时，通过 `fallbackCategory()` 获取稳定的 `AelisFallbackReason`，无需解析字符串。未知原因返回 `OTHER`，异常返回 `INTERNAL_ERROR`，成功或分支失败返回 `NONE`。AELIS 和旧 MaxFast 结果均提供此查询，原始诊断文本继续保留。
 
-关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，精确服务仍受 `enable_big_integer_planning` 控制。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.1.0-forge` 构建。
+关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，精确服务仍受 `enable_big_integer_planning` 控制。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.1.1-forge` 构建。
 
 ## 开发环境依赖
 
@@ -70,10 +70,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:15.4.10"
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly files("libs/appliedenhancements-1.1.0-forge.jar")
+    compileOnly files("libs/appliedenhancements-1.1.1-forge.jar")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly files("libs/appliedenhancements-1.1.0-forge.jar")
+    runtimeOnly files("libs/appliedenhancements-1.1.1-forge.jar")
 }
 ```
 
@@ -83,7 +83,7 @@ dependencies {
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.1.0-forge,)"
+versionRange="[1.1.1-forge,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -94,7 +94,7 @@ side="BOTH"
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.1.0-forge,)"
+versionRange="[1.1.1-forge,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -143,7 +143,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.1.0-forge` 的内部载荷协议为 `1.1.0-forge-1`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.1.1-forge` 的内部载荷协议为 `1.1.0-forge-1`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
@@ -334,7 +334,7 @@ if (cyclePlan != null) {
 
 应在构造 CPU 任务表之前调用 `preparePlan`；仅调用 `getPlan` 不会替换该任务表。受保护库存只属于本次提取尝试，不能跨样板或跨运行时推进缓存复用。`dispatchedCrafts` 本身不推进控制器。没有受保护输入的步骤是合法的，但该辅助方法无法推导其实际执行次数；宿主必须自己确定次数，将其限制在 `remainingCrafts()` 内，再调用 `patternDispatched`。
 
-`1.1.0-forge` 保留 Forge 分支针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 优先级调整（1100 改为 900），将原生和 AdvancedAE 接入排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
+`1.1.1-forge` 保留 Forge 分支针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 优先级调整（1100 改为 900），将原生和 AdvancedAE 接入排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
 
 本版原生 AE2 与 AdvancedAE 接入让首份抽料、批量扩展和回滚共享同一份循环保护库存视图。使用 `AelisBatchExecutionContext.beginDispatch` 登记真实次数，原生 Provider 钩子识别已有事务，避免重复推进。拒收恢复运行账本；已转移材料所有权后须确认接受。独立 CPU 应读取实际批量次数，不能将受保护输入表为空解释为样板没有原料。
 

@@ -251,7 +251,7 @@ tasks.register('apiJavadoc', Javadoc) {
     options.charSet = 'UTF-8'
     options.memberLevel = JavadocMemberLevel.PUBLIC
     options.addBooleanOption('Xdoclint:none', true)
-    options.windowTitle = 'Applied Enhancements 1.1.0 Forge API'
+    options.windowTitle = 'Applied Enhancements 1.1.1 Forge API'
 }
 
 // MixinGradle writes these alongside compiler output; include and track the refmap.

@@ -1,6 +1,6 @@
 # Shared batch execution / 共享批量投料 API
 
-Applied Enhancements **1.1.0-forge**, Java 17, Minecraft 1.20.1, Forge 47.4.20+,
+Applied Enhancements **1.1.1-forge**, Java 17, Minecraft 1.20.1, Forge 47.4.20+,
 AE2 15.4.10+. [API index](README.md) · [Cycle and integration guide](API_INTEGRATION.md)
 
 A CPU must retain one protected inventory view throughout initial extraction,

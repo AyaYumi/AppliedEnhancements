@@ -7,7 +7,6 @@ import appeng.crafting.inv.ListCraftingInventory;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
 import com.github.appliedenhancements.crafting.aelis.AelisLegacyCycleRecovery;
-import com.github.appliedenhancements.integration.ae2.AelisScaledPattern;
 import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -118,7 +117,7 @@ public final class AdvancedAeCycleRecovery {
             if (job == null || !((ListCraftingInventory) read(job, "waitingFor")).list.isEmpty()) return null;
             @SuppressWarnings("unchecked")
             Map<IPatternDetails, Object> tasks = (Map<IPatternDetails, Object>) read(job, "tasks");
-            if (tasks.keySet().stream().noneMatch(AelisScaledPattern.class::isInstance)) return null;
+            if (tasks.keySet().stream().noneMatch(pattern -> SmartDoublingPatternAccess.resolve(pattern) != null)) return null;
             var counts = new LinkedHashMap<IPatternDetails, Long>();
             for (var entry : tasks.entrySet()) counts.put(entry.getKey(), (Long) read(entry.getValue(), "value"));
             var output = (GenericStack) read(job, "finalOutput");
