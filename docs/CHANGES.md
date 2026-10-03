@@ -1,5 +1,19 @@
 # Changes / 本版变更
 
+## 1.1.0-forge — selected planning rejection removal / 移除指定规划拒绝
+
+- Remove A03 ordered-choice/long replay rejection, A19 native fallback rejection and A07 selected-CPU cycle capability rejection. Optimizer budgets remain; failed optimization can continue through native AE.
+- Replace A11 smart-doubling rejection with exact remainder repair or restoration of authoritative original tasks. Optional ABI failures keep native ownership without failing local planning.
+- Remove A02's 256-digit, strategy and configuration rejection. Explicit exact requests work with the preference disabled; CRAFT_LESS attempts use independent quantities and non-positive requests become empty orders. Input and wire permit longer decimals within the transport envelope.
+- Keep other inventory protections, runtime consistency rules, tick budgets, caches and rate-limited diagnostics. Native fallback uses the actual long result and does not fabricate full exact output.
+
+中文
+
+- 删除 A03 候选配方／重放拒绝、A19 原生回退拒绝，以及 A07 指定 CPU 的循环能力拒绝；优化预算保留，优化失败可交回原生 AE。
+- A11 数量不一致改为精确尾数修复，未知或不可读改写恢复原始任务；可选接口失败不再让本地规划报错。
+- A02 去掉 256 位、计算策略及配置开关拒绝。显式精确请求在偏好关闭时可用，尽量合成的每次尝试独立计数，非正数按空订单处理。输入／网络支持更长数字，传输载荷边界仍保留。
+- 其他库存保护、运行状态规则、tick 预算、缓存和日志限流保留；原生回退记录实际 long 结果，不伪造完整精确产量。
+
 ## 1.1.0-forge — native arithmetic interception removal / 移除原生算术拦截
 
 - Removed Applied's native AE2 64-bit planner rejection and all five rejection Mixins. Maximum-valued cobblestone/water inventory and returned byproducts no longer trigger `UnsafeNativeCraftingRequestException` from this mod.

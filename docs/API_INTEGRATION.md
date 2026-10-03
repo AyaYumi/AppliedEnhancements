@@ -45,7 +45,7 @@ The following are implementation details and do not carry source or binary compa
 
 ## Exact planning and metadata in 1.1.0-forge
 
-Call `AelisExactCraftingService.begin` on the server thread, then wait asynchronously for the result. A request must have a positive quantity of at most 256 decimal digits. Only `REPORT_MISSING_ITEMS` is supported; `CRAFT_LESS` is rejected explicitly.
+Call `AelisExactCraftingService.begin` on the server thread, then wait asynchronously for the result. There is no 256-digit API limit. Non-positive amounts become empty orders. `REPORT_MISSING_ITEMS` and `CRAFT_LESS` are accepted; reduced native attempts use their own exact request context.
 
 ```java
 var request = AelisCraftingRequest.of(outputKey, new BigInteger("10000000000000000000"));
@@ -61,7 +61,7 @@ The immutable snapshot exposes final output, bytes, crafted/missing/stored/infin
 
 When `Result.shouldFallback()` is true, `fallbackCategory()` supplies a stable `AelisFallbackReason` instead of requiring string parsing. Unknown details map to `OTHER`, errors to `INTERNAL_ERROR`, and success or branch failure to `NONE`. Both the AELIS and legacy MaxFast results expose this query; diagnostic text remains available.
 
-Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and the exact service remains gated by `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.1.0-forge` build when using the new types.
+Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and explicit exact service calls work independently of `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.1.0-forge` build when using the new types.
 
 ## Development dependency
 

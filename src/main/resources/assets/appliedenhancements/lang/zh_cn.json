@@ -1,6 +1,5 @@
 {
-  "gui.appliedenhancements.invalid_exact_amount": "请输入配置限额内的正数（最多256位）。",
-  "message.appliedenhancements.planning_path_limit": "该配方路径暂不支持此规模的合成规划，已停止计算。请减少数量或拆分订单。",
+  "gui.appliedenhancements.invalid_exact_amount": "请输入当前订单模式允许的正数。",
   "gui.appliedenhancements.calculation_result.title": "合成计划 · %s · %s",
   "gui.appliedenhancements.calculation_result.title_timed": "合成计划 · %s · %s · 总用时 %s",
   "gui.appliedenhancements.calculation_result.path.aelis": "AELIS",
@@ -90,7 +89,6 @@
   "gui.appliedenhancements.jei_item_menu.search_in_me": "在 ME 中搜索",
   "gui.appliedenhancements.item_menu.search_same_mod": "搜索同模组物品",
   "message.appliedenhancements.crafting_amount_too_large": "合成数量超过服务器上限：%s。",
-  "message.appliedenhancements.ordered_choice_native_too_large": "合成请求 %s 需要 AE2 逐件尝试有序配方，超过原生安全上限 %s。请减少数量或精简该物品的候选配方。",
   "message.appliedenhancements.long_range_disabled": "服务器已禁用超大数量合成。",
   "message.appliedenhancements.crafting_target_unavailable": "无法开始合成计算：目标网络节点当前不可用，请检查该终端是否已连接并通电。",
   "message.appliedenhancements.crafting_plan_stalled": "合成计算未能启动，已退出合成计划界面。",

@@ -40,6 +40,20 @@ class SmartDoublingBypassTest {
         assertEquals(plan.patternTimes(), result.patternTimes());
     }
 
+    @Test void optionalRewriteFailureReturnsOriginalExecutablePlan() {
+        var plan = plan(Map.of(aware(new boolean[]{false}), 17L));
+        assertSame(plan, assertDoesNotThrow(() -> AelisCraftingPlanRewrite.rewriteOrdinaryPatterns(plan,
+                ignored -> { throw new IllegalStateException("Unrecognized native rewrite"); })));
+    }
+
+    @Test void unreadableEnabledSwitchPreservesNativeOwnership() {
+        var pattern = (IPatternDetails) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{IPatternDetails.class, ISmartDoublingAwarePattern.class},
+                (p,m,a) -> { throw new IllegalStateException("Optional API unavailable"); });
+        assertTrue(assertDoesNotThrow(() -> AelisSmartDoublingApi.isExternallyManaged(pattern)));
+        assertNull(assertDoesNotThrow(() -> SmartDoublingPatternAccess.resolve(pattern)));
+    }
+
     private static IPatternDetails aware(boolean[] enabled) {
         return (IPatternDetails) Proxy.newProxyInstance(SmartDoublingBypassTest.class.getClassLoader(),
                 new Class<?>[]{IPatternDetails.class, ISmartDoublingAwarePattern.class},

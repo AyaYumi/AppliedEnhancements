@@ -14,27 +14,26 @@ public final class SmartDoublingPatternAccess {
     private static final String USELESS_PROVIDER = "com.sorrowmist.useless.api.crafting.SmartDoublingCraftingProvider";
     public record Scale(IPatternDetails original, long multiplier) {}
     private record Access(boolean external, Method original, Method multiplier, Field multiplierField,
-            Method enabled, RuntimeException failure) {}
+            Method enabled) {}
     private static final ClassValue<Access> ACCESS = new ClassValue<>() {
         @Override protected Access computeValue(Class<?> type) {
             boolean eap = inherits(type, EAP);
             boolean useless = inherits(type, USELESS);
             try {
                 Method enabled = hasInterface(type, EAP_AWARE) ? type.getMethod("eap$allowScaling") : null;
-                if (!eap && !useless) return new Access(false, null, null, null, enabled, null);
+                if (!eap && !useless) return new Access(false, null, null, null, enabled);
                 Method original = type.getMethod("getOriginal");
-                if (useless) return new Access(true, original, type.getMethod("getOperationsPerPush"), null, enabled, null);
+                if (useless) return new Access(true, original, type.getMethod("getOperationsPerPush"), null, enabled);
                 Field multiplier = null;
                 for (Class<?> current = type; current != null; current = current.getSuperclass()) {
                     try { multiplier = current.getDeclaredField("multiplier"); break; }
                     catch (NoSuchFieldException absent) { /* inherited optional wrapper */ }
                 }
                 if (multiplier == null || !multiplier.trySetAccessible())
-                    throw new IllegalStateException("Native smart-doubling multiplier is inaccessible: " + type.getName());
-                return new Access(true, original, null, multiplier, enabled, null);
+                    return new Access(true, null, null, null, enabled);
+                return new Access(true, original, null, multiplier, enabled);
             } catch (ReflectiveOperationException | RuntimeException unavailable) {
-                return new Access(eap || useless, null, null, null, null,
-                        new IllegalStateException("Native smart-doubling API is incompatible: " + type.getName(), unavailable));
+                return new Access(eap || useless || hasInterface(type, EAP_AWARE), null, null, null, null);
             }
         }
     };
@@ -48,38 +47,43 @@ public final class SmartDoublingPatternAccess {
     }
 
     public static boolean isExternallyManaged(IPatternDetails pattern) {
+        if (pattern == null) return false;
         var access = ACCESS.get(pattern.getClass());
         if (access.external()) return true;
-        if (access.failure() != null) throw access.failure();
-        return access.enabled() != null && Boolean.TRUE.equals(invoke(access.enabled(), pattern));
+        if (access.enabled() == null) return false;
+        Object enabled = invoke(access.enabled(), pattern);
+        return !(enabled instanceof Boolean value) || value;
     }
 
     /** Reads one wrapper layer; external implementations do not need AelisScaledPattern. */
     public static Scale resolve(IPatternDetails pattern) {
+        if (pattern == null) return null;
         var access = ACCESS.get(pattern.getClass());
-        if (access.external()) {
-            if (access.failure() != null) throw access.failure();
-            Object original = invoke(access.original(), pattern);
-            long multiplier;
-            try {
-                multiplier = access.multiplier() != null ? ((Number) invoke(access.multiplier(), pattern)).longValue()
+        try {
+            if (access.external()) {
+                if (access.original() == null || access.multiplier() == null && access.multiplierField() == null) return null;
+                Object original = invoke(access.original(), pattern);
+                Object raw = access.multiplier() != null ? invoke(access.multiplier(), pattern)
                         : access.multiplierField().getLong(pattern);
-            } catch (IllegalAccessException failure) {
-                throw new IllegalStateException("Cannot read native smart-doubling multiplier", failure);
+                if (!(original instanceof IPatternDetails base) || base == pattern
+                        || !(raw instanceof Number number) || number.longValue() <= 0) return null;
+                return new Scale(base, number.longValue());
             }
-            if (!(original instanceof IPatternDetails base) || base == pattern || multiplier <= 0)
-                throw new IllegalStateException("Invalid native smart-doubling wrapper: " + pattern.getClass().getName());
-            return new Scale(base, multiplier);
+            if (pattern instanceof AelisScaledPattern scaled) {
+                var original = scaled.appliedenhancements$originalPattern();
+                long multiplier = scaled.appliedenhancements$operationsPerPush();
+                if (original != null && original != pattern && multiplier > 0) return new Scale(original, multiplier);
+            }
+        } catch (IllegalAccessException | RuntimeException | LinkageError unavailable) {
+            // Keep native ownership; callers restore original tasks when the optional ABI is unreadable.
         }
-        if (pattern instanceof AelisScaledPattern scaled)
-            return new Scale(scaled.appliedenhancements$originalPattern(), scaled.appliedenhancements$operationsPerPush());
         return null;
     }
 
     private static Object invoke(Method method, Object target) {
         try { return method.invoke(target); }
-        catch (IllegalAccessException | InvocationTargetException failure) {
-            throw new IllegalStateException("Cannot read native smart-doubling state", failure);
+        catch (IllegalAccessException | InvocationTargetException | RuntimeException | LinkageError unavailable) {
+            return null;
         }
     }
     private static boolean inherits(Class<?> type, String name) {

@@ -47,7 +47,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public final class AelisPlanner {
-    private static final long MAX_LINEAR_ORDERED_NATIVE_ITEMS = 1_000_000L;
     private static final long MAX_LINEAR_NATIVE_BOUNDARY_ITEMS = 8_192L;
     private static final long MAX_SIMULATION_ORDERED_REPLAY_STEPS = 64L;
     private static final IdentityHashMap<Graph, List<LocalCyclicRegion>> CYCLIC_REGIONS =
@@ -247,11 +246,6 @@ public final class AelisPlanner {
                 return Result.fallback(fallback.reason, graph.nodes.size(), graph.mergedOccurrences,
                         graph.barrierCount,
                         compileNanos, System.nanoTime() - startedAt, null);
-            } catch (AelisOrderedChoicePlanningRejectedException rejection) {
-                // This is an intentional terminal planning result. Turning it
-                // into Result.fallback would immediately re-enter AE2's
-                // unbounded per-item ordered-choice loop.
-                throw rejection;
             } catch (RuntimeException exception) {
                 if (graph.executionScope()
                         == AelisExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL) {
@@ -329,7 +323,7 @@ public final class AelisPlanner {
             mergeMissingAmounts(missingItems, stagedMissing);
             return;
         }
-        if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) {
+        if ((Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)) {
             var stagedMissing = new KeyCounter();
             executeBigIntegerTopological(
                     graph, inventory, requestedAmount, simulation, stagedMissing,
@@ -362,9 +356,6 @@ public final class AelisPlanner {
                         progressSink.executionStep();
                         continue;
                     }
-                    enforceOrderedChoiceNativeLimit(
-                            graph, node, requestMultipliers, requestedAmount,
-                            "topological");
                 }
                 if (isReusableBoundaryReason(node.barrierReason)
                         && tryExecuteReusableContainerBoundary(
@@ -372,9 +363,6 @@ public final class AelisPlanner {
                     progressSink.executionStep();
                     continue;
                 }
-                enforceOrderedChoiceNativeLimit(
-                        graph, node, requestMultipliers, requestedAmount,
-                        "topological");
                 // Call AE2 bridge with aggregated amount from upstream
                 executeNativeBoundary(node, inventory, requestMultipliers, "topological");
 
@@ -390,9 +378,6 @@ public final class AelisPlanner {
                     progressSink.executionStep();
                     continue;
                 }
-                enforceOrderedChoiceNativeLimit(
-                        graph, node, requestMultipliers, requestedAmount,
-                        "legacy");
                 executeNativeBoundary(node, inventory, requestMultipliers, "legacy");
                 progressSink.executionStep();
                 continue;
@@ -516,8 +501,6 @@ public final class AelisPlanner {
                     progressSink.executionStep();
                     continue;
                 }
-                enforceOrderedChoiceNativeLimit(
-                        graph, node, nativeRequest, requestedAmount, path);
                 executeNativeBoundary(node, inventory, nativeRequest, path);
                 progressSink.executionStep();
                 continue;
@@ -834,7 +817,7 @@ public final class AelisPlanner {
                 AelisCyclicCraftingMembership.find(variants);
 
         Node root = graph.nodes.get(graph.rootIndex);
-        BigInteger rootItems = Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+        BigInteger rootItems = (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)
                 ? AelisBigIntegerMath.multiply(root.amount, requestedAmount)
                 : BigInteger.valueOf(checkedMultiply(
                         root.amount, requestedAmount,
@@ -902,7 +885,7 @@ public final class AelisPlanner {
             }
         }
         for (var entry : plan.missing().entrySet()) {
-            long amount = Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+            long amount = (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)
                     ? AelisBigIntegerMath.saturatingLong(entry.getValue())
                     : exactPositiveLong(entry.getValue(), "cyclic_missing_overflow");
             addSaturated(attemptMissing, entry.getKey(), amount);
@@ -912,7 +895,7 @@ public final class AelisPlanner {
             if (entry.getValue().signum() <= 0) {
                 continue;
             }
-            long amount = Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+            long amount = (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)
                     ? AelisBigIntegerMath.saturatingLong(entry.getValue())
                     : exactPositiveLong(entry.getValue(), "cyclic_demand_overflow");
             attempt.addStackBytes(entry.getKey(), 1, amount);
@@ -1378,7 +1361,7 @@ public final class AelisPlanner {
     }
 
     private static void mergeMissingAmounts(KeyCounter target, KeyCounter source) {
-        if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) {
+        if ((Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)) {
             for (var entry : source) addSaturated(target, entry.getKey(), entry.getLongValue());
         } else {
             target.addAll(source);
@@ -1616,9 +1599,6 @@ public final class AelisPlanner {
                         "contextual", requestInput)) {
                     return;
                 }
-                enforceOrderedChoiceNativeLimit(
-                        graph, node, nativeRequest, rootRequestedAmount,
-                        "contextual");
             }
             if (tryExecuteRuntimeQuantityFeedbackBoundary(
                     graph, nodeIndex, inventory, nativeRequest,
@@ -1632,10 +1612,6 @@ public final class AelisPlanner {
                             node, inventory, nativeRequest, pauseCheckpoint)) {
                 return;
             }
-
-            enforceOrderedChoiceNativeLimit(
-                    graph, node, nativeRequest, rootRequestedAmount,
-                    "contextual");
             executeNativeBoundary(
                     node, inventory, nativeRequest, "contextual", requestInput);
             return;
@@ -1645,7 +1621,7 @@ public final class AelisPlanner {
                 node, executeCompiledBoundary ? compiledCandidate : null);
 
         BigInteger requestedItems = AelisBigIntegerMath.multiply(node.amount, requestMultipliers);
-        if (!Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) {
+        if (!(Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)) {
             exactNonNegativeLong(requestedItems, "request_amount_overflow");
         }
         ExactCraftingBytes.addStackBytes(inventory, node.key, requestedItems);
@@ -1778,7 +1754,7 @@ public final class AelisPlanner {
             inventory.insert(node.key, surplus, Actionable.MODULATE);
         }
         IPatternDetails pattern = executeCompiledBoundary ? compiledCandidate.details : node.details;
-        if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) {
+        if ((Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)) {
             long projectedTimes = projectedPatternTimes(inventory, pattern, patternTimes);
             recordProjectedBigIntegerCrafting(inventory, pattern, patternTimes, projectedTimes);
         } else {
@@ -2029,52 +2005,6 @@ public final class AelisPlanner {
                 == AelisExecutionPolicy.BoundaryStrategy.COMPILED_CANDIDATES_THEN_NATIVE;
     }
 
-    private static void enforceOrderedChoiceNativeLimit(
-            Graph graph, Node node, long requestMultipliers,
-            long rootRequestedAmount, String path) {
-        if (!hasLiveOrderedCandidateChoice(node)) {
-            return;
-        }
-        AelisOrderedChoiceFallback.Decision decision =
-                AelisOrderedChoiceFallback.afterCompiledFailure(
-                        node.amount, requestMultipliers,
-                        rootRequestedAmount,
-                        MAX_LINEAR_ORDERED_NATIVE_ITEMS);
-        if (decision != AelisOrderedChoiceFallback.Decision.CONTROLLED_REJECT) {
-            return;
-        }
-
-        var rejection = new AelisOrderedChoicePlanningRejectedException(
-                node.key, node.amount, requestMultipliers,
-                MAX_LINEAR_ORDERED_NATIVE_ITEMS);
-        com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                "ordered_choice_work_limit",
-                "AELIS rejected unbounded ordered-choice native replay: path={}, key={}, amount={}, aggregatedRequest={}, rootRequest={}, linearItems={}, limit={}",
-                path, node.key, node.amount, requestMultipliers,
-                rootRequestedAmount, rejection.requestedItems(),
-                rejection.maxLinearNativeItems());
-        throw rejection;
-    }
-
-    private static boolean hasLiveOrderedCandidateChoice(Node node) {
-        int candidateCount = node.candidatePatterns.size();
-        try {
-            if (!node.occurrences.isEmpty()) {
-                List<CraftingTreeProcess> processes =
-                        ((AelisCraftingTreeNodeBridge) node.occurrences.get(0))
-                                .molecularmanipulator$getProcesses();
-                if (processes != null) {
-                    candidateCount = Math.max(candidateCount, processes.size());
-                }
-            }
-        } catch (RuntimeException exception) {
-            // The compiler snapshot remains a conservative ordered-choice
-            // fact when a compatibility bridge cannot expose live processes.
-        }
-        return AelisExecutionPolicy.isOrderedCandidateChoice(
-                node.barrierReason, candidateCount);
-    }
-
     /**
      * AE2 executes a multi-pattern node one craft at a time so it can roll back
      * a failed candidate and continue with the next one. Try the already
@@ -2172,26 +2102,6 @@ public final class AelisPlanner {
                             stagedMissing, pauseCheckpoint, path, requestInput,
                             candidateRoot, diagnostics)) {
                 return true;
-            }
-            long replaySteps = singlePatternSimulationShape
-                    ? AelisSimulationSinglePattern.requiredReplaySteps(
-                            node.amount, requestMultipliers,
-                            firstCandidate.outputPerPattern)
-                    : 0;
-            if (singlePatternSimulationShape
-                    && replaySteps > MAX_SIMULATION_ORDERED_REPLAY_STEPS) {
-                long maxReplayItems = saturatedMultiply(
-                        firstCandidate.outputPerPattern,
-                        MAX_SIMULATION_ORDERED_REPLAY_STEPS);
-                com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                        "simulation_replay_work_limit",
-                        "AELIS rejected expensive simulation replay: path={}, key={}, requested={}, estimatedSteps={}, stepLimit={}, certificateReason={}, certificateDetail={}",
-                        path, node.key, requestMultipliers, replaySteps,
-                        MAX_SIMULATION_ORDERED_REPLAY_STEPS,
-                        simulationProof.reason, simulationProof.detail);
-                throw new AelisOrderedChoicePlanningRejectedException(
-                        node.key, node.amount, requestMultipliers,
-                        maxReplayItems);
             }
             String simulationReason = exactRequest
                     ? simulationProof.reason : "substitute_request";
@@ -2791,10 +2701,6 @@ public final class AelisPlanner {
                 if (committed == 0) {
                     return false;
                 }
-
-                enforceOrderedChoiceNativeLimit(
-                        graph, node, remaining, rootRequestedAmount,
-                        path + "_linear_remainder");
                 executeNativeBoundary(
                         node, parent, remaining,
                         path + "_linear_remainder", requestInput);
@@ -2868,11 +2774,6 @@ public final class AelisPlanner {
         if (remaining <= 0) {
             return false;
         }
-        // Reject an unbounded native remainder before committing speculative
-        // state. This preserves the controlled-rejection rollback contract.
-        enforceOrderedChoiceNativeLimit(
-                graph, node, remaining, rootRequestedAmount,
-                path + "_prefix_remainder");
 
         CandidateAttempt best = prefix.value();
         best.inventory.applyDiff(parent);

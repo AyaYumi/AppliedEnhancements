@@ -50,6 +50,8 @@ public abstract class AelisCraftingCalculationMixin
     @Unique
     private static final Semaphore MOLECULARMANIPULATOR_INTERACTIVE_SLOT = new Semaphore(1, true);
 
+    @Shadow private long requestedAmount;
+
     @Shadow
     abstract void handlePausing() throws InterruptedException;
 
@@ -234,6 +236,17 @@ public abstract class AelisCraftingCalculationMixin
     }
 
 
+    @WrapMethod(method = "runCraftAttempt")
+    private CraftingPlan appliedenhancements$exactAttempt(boolean simulation, long amount,
+            Operation<CraftingPlan> original) throws InterruptedException {
+        var request = com.appliedenhancements.runtime.ExactRequestScope.current();
+        if (request == null) return original.call(simulation, amount);
+        try (var scope = new com.appliedenhancements.runtime.ExactRequestScope(
+                request.attempt(amount, requestedAmount))) {
+            return original.call(simulation, amount);
+        }
+    }
+
     @WrapOperation(method = "runCraftAttempt", at = @At(value = "INVOKE",
             target = "Lappeng/crafting/CraftingTreeNode;request(Lappeng/crafting/inv/CraftingSimulationState;JLappeng/api/stacks/KeyCounter;)V"))
     private void molecularmanipulator$aggregateSafeRecipeTree(CraftingTreeNode tree,
@@ -301,12 +314,6 @@ public abstract class AelisCraftingCalculationMixin
                     result.mergedOccurrences(), result.barrierCount(),
                     result.compileNanos() / 1_000_000.0,
                     result.executionNanos() / 1_000_000.0);
-        }
-        if (com.appliedenhancements.runtime.ExactRequestScope.current() != null
-                || Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
-                && com.github.appliedenhancements.crafting.aelis.AelisPlanningLimitException
-                        .rejectsNativeFallback(result.fallbackReason(), requestedAmount)) {
-            throw new com.github.appliedenhancements.crafting.aelis.AelisPlanningLimitException(result.fallbackReason());
         }
         molecularmanipulator$calculationPath = AelisCalculationPath.AE2_FALLBACK;
         if (progress != null) {

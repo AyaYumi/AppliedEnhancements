@@ -21,7 +21,7 @@ public abstract class NumberEntryWidgetAccessor implements LongNumberEntryWidget
     @Shadow @Final private int errorTextColor;
     @Shadow private appeng.client.gui.widgets.ValidationIcon validationIcon;
 
-    @Override public void appliedenhancements$enableExactInput() { appliedenhancements$exactInput = true; textField.setMaxLength(257); }
+    @Override public void appliedenhancements$enableExactInput() { appliedenhancements$exactInput = true; textField.setMaxLength(1_048_576); }
     @Override public void appliedenhancements$setExactValue(java.math.BigInteger value) {
         textField.setValue(new java.math.BigDecimal(value).divide(java.math.BigDecimal.valueOf(type.amountPerUnit())).toPlainString());
     }
@@ -56,7 +56,7 @@ public abstract class NumberEntryWidgetAccessor implements LongNumberEntryWidget
         value = value.max(java.math.BigInteger.valueOf(minValue));
         if (maxValue != Long.MAX_VALUE || !com.appliedenhancements.network.ServerConfigSyncState.isBigIntegerEnabled())
             value = value.min(java.math.BigInteger.valueOf(maxValue));
-        if (value.toString().length() <= 256) appliedenhancements$setExactValue(value);
+        appliedenhancements$setExactValue(value);
         ci.cancel();
     }
     @org.spongepowered.asm.mixin.injection.Inject(method = "validate", at = @org.spongepowered.asm.mixin.injection.At("HEAD"), cancellable = true)

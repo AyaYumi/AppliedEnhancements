@@ -42,7 +42,7 @@ com.appliedenhancements.api.client
 
 ## 1.1.0-forge 精确规划与元数据
 
-在服务器线程调用 `AelisExactCraftingService.begin`，然后异步等待结果。数量必须为不超过 256 位十进制数字的正整数。目前仅支持 `REPORT_MISSING_ITEMS`；传入 `CRAFT_LESS` 会明确报错。
+在服务器线程调用 `AelisExactCraftingService.begin`，然后异步等待结果。API 不再限制 256 位数字，非正数量按空订单处理。`REPORT_MISSING_ITEMS` 和 `CRAFT_LESS` 均接受；原生减少数量的每次尝试使用独立精确请求上下文。
 
 ```java
 var request = AelisCraftingRequest.of(outputKey, new BigInteger("10000000000000000000"));
@@ -58,7 +58,7 @@ AelisExecutionRequirement requirement = metadata.executionRequirement();
 
 当 `Result.shouldFallback()` 为 true 时，通过 `fallbackCategory()` 获取稳定的 `AelisFallbackReason`，无需解析字符串。未知原因返回 `OTHER`，异常返回 `INTERNAL_ERROR`，成功或分支失败返回 `NONE`。AELIS 和旧 MaxFast 结果均提供此查询，原始诊断文本继续保留。
 
-关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，精确服务仍受 `enable_big_integer_planning` 控制。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.1.0-forge` 构建。
+关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，显式精确服务不再受 `enable_big_integer_planning` 阻止。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.1.0-forge` 构建。
 
 ## 开发环境依赖
 

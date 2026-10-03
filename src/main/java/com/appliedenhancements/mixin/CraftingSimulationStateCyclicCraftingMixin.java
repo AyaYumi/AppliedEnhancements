@@ -275,7 +275,7 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
         }
         long current = ((CraftingSimulationStateLongSafetyAccessor) parent)
                 .appliedenhancements$getCrafts().getOrDefault(pattern, 0L);
-        if (com.appliedenhancements.Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+        if ((com.appliedenhancements.Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)
                 && (appliedenhancements$apiPath == AelisCalculationPath.AELIS || appliedenhancements$previewOnly)
                 && count > Long.MAX_VALUE - current && current >= 0 && count >= 0) {
             ((AelisBigIntegerCraftingTracker) parent).appliedenhancements$setPreviewOnly(true);

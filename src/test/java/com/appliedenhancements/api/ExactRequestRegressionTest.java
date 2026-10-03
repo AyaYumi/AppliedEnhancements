@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ExactRequestRegressionTest {
     @Test void literalInputAndWireNeverWrapOrRound() {
-        for (var text : new String[]{"9223372036854775807", "9223372036854775808", "9999999999999999999", "99999999999999999999", "9".repeat(256)}) {
+        for (var text : new String[]{"9223372036854775807", "9223372036854775808", "9999999999999999999", "99999999999999999999", "9".repeat(256), "9".repeat(257), "9".repeat(1_024)}) {
             var value = ExactAmountParser.parse(text, new DecimalFormat(), 1).orElseThrow();
             assertEquals(new BigInteger(text), value);
             var payload = new ExactCraftingAmountPayload(42, text, true, false);
@@ -21,7 +21,7 @@ class ExactRequestRegressionTest {
                 assertEquals(payload, ExactCraftingAmountPayload.STREAM_CODEC.decode(buffer));
             } finally { buffer.release(); }
         }
-        assertTrue(ExactAmountParser.parse("9".repeat(257), new DecimalFormat(), 1).isEmpty());
+        assertEquals(new BigInteger("9".repeat(4096)), ExactAmountParser.parse("9".repeat(4096), new DecimalFormat(), 1).orElseThrow());
         assertTrue(ExactAmountParser.parse("-1", new DecimalFormat(), 1).isEmpty());
         assertTrue(ExactAmountParser.parse("0", new DecimalFormat(), 1).isEmpty());
     }
