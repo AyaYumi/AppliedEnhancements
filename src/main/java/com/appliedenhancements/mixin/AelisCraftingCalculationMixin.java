@@ -277,7 +277,7 @@ public abstract class AelisCraftingCalculationMixin
                         result.logicalNodeCount(), Long.MAX_VALUE / 8);
             }
             if (Config.AELIS_DIAGNOSTICS.get()) {
-                com.appliedenhancements.AppliedEnhancements.LOGGER.info(
+                com.appliedenhancements.runtime.AelisPlanningLog.trace(
                         "AELIS applied: key={}, amount={}, simulation={}, uniqueNodes={}, mergedOccurrences={}, barriers={}, logicalNodes={}, compileMs={}, executeMs={}",
                         requestedKey, requestedAmount, isSimulation(),
                         result.uniqueNodes(), result.mergedOccurrences(),
@@ -294,7 +294,7 @@ public abstract class AelisCraftingCalculationMixin
                     "AELIS encountered an internal compatibility error and fell back to AE2",
                     result.error());
         } else if (Config.AELIS_DIAGNOSTICS.get()) {
-            com.appliedenhancements.AppliedEnhancements.LOGGER.info(
+            com.appliedenhancements.runtime.AelisPlanningLog.trace(
                     "AELIS fallback: key={}, amount={}, simulation={}, reason={}, uniqueNodes={}, mergedOccurrences={}, barriers={}, compileMs={}, executeMs={}",
                     requestedKey, requestedAmount, isSimulation(),
                     result.fallbackReason(), result.uniqueNodes(),

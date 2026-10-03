@@ -1,7 +1,6 @@
 package com.appliedenhancements.api;
 
 import appeng.api.stacks.AEKey;
-import com.appliedenhancements.AppliedEnhancements;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -61,7 +60,7 @@ public final class NetworkItemContextMenuApi {
             try {
                 provided = registration.provider().createEntries(context);
             } catch (RuntimeException failure) {
-                AppliedEnhancements.LOGGER.warn(
+                com.appliedenhancements.runtime.AelisPlanningLog.warn(
                         "Network item context-menu provider {} failed",
                         registration.id(), failure);
                 continue;

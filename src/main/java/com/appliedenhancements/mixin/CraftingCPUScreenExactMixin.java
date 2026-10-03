@@ -1,19 +1,31 @@
 package com.appliedenhancements.mixin;
 
-import appeng.api.stacks.AEKey;
 import appeng.client.gui.me.crafting.CraftingCPUScreen;
 import appeng.menu.me.crafting.CraftingStatusEntry;
+import appeng.menu.me.crafting.CraftingStatus;
 import com.appliedenhancements.runtime.ExactCraftingStatus;
-import com.llamalad7.mixinextras.injector.wrapoperation.*;
-import com.llamalad7.mixinextras.sugar.Local;
 import org.spongepowered.asm.mixin.Mixin;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(value = CraftingCPUScreen.class, remap = false)
 public abstract class CraftingCPUScreenExactMixin {
-    @WrapOperation(method = "postUpdate", at = @At(value = "NEW", target = "appeng/menu/me/crafting/CraftingStatusEntry"))
-    private CraftingStatusEntry appliedenhancements$copyExact(long serial, AEKey key, long stored, long active, long pending,
-            Operation<CraftingStatusEntry> original, @Local(name = "entry") CraftingStatusEntry incoming) {
-        return ExactCraftingStatus.copy(incoming, original.call(serial, key, stored, active, pending));
+    // UELM merges through a lambda and adds an external-pending constructor field.
+    // Copy before native sorting so exact quantities also determine display order.
+    @WrapOperation(method = "postUpdate", at = @At(value = "INVOKE",
+            target = "Ljava/util/Collections;sort(Ljava/util/List;)V"))
+    private void appliedenhancements$copyExact(java.util.List<CraftingStatusEntry> merged, Operation<Void> original,
+            @Local(argsOnly = true) CraftingStatus incoming) {
+        var updates = new java.util.HashMap<Long, CraftingStatusEntry>();
+        for (var entry : incoming.getEntries()) {
+            if (!entry.isDeleted()) updates.put(entry.getSerial(), entry);
+        }
+        for (var entry : merged) {
+            var source = updates.get(entry.getSerial());
+            if (source != null) ExactCraftingStatus.copy(source, entry);
+        }
+        original.call(merged);
     }
 }

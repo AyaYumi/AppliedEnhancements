@@ -7,23 +7,45 @@ import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
 import appeng.me.storage.NetworkStorage;
 import com.appliedenhancements.storage.InfiniteStorageAmounts;
+import com.appliedenhancements.storage.InfiniteStorageCellRegistry;
+import com.appliedenhancements.storage.InfiniteStorageSupport;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.appliedenhancements.Config;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Infinite semantics apply only to explicitly marked, mounted cells. */
 @Mixin(value = NetworkStorage.class, remap = false)
 public abstract class NetworkStorageMixin {
+    @Unique private final InfiniteStorageCellRegistry.MountedClassifier
+            appliedenhancements$infiniteCells = new InfiniteStorageCellRegistry.MountedClassifier();
+
+    @Inject(method = "mount", at = @At("RETURN"))
+    private void appliedenhancements$rememberMountedCell(int priority, MEStorage storage,
+            CallbackInfo callback) {
+        if (Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get()) {
+            appliedenhancements$infiniteCells.isInfinite(storage);
+        }
+    }
+
+    @Inject(method = "unmount", at = @At("RETURN"))
+    private void appliedenhancements$forgetUnmountedCell(MEStorage storage, CallbackInfo callback) {
+        appliedenhancements$infiniteCells.forget(storage);
+    }
+
     @WrapOperation(method = "extract", at = @At(value = "INVOKE",
             target = "Lappeng/api/storage/MEStorage;extract(Lappeng/api/stacks/AEKey;JLappeng/api/config/Actionable;Lappeng/api/networking/security/IActionSource;)J"))
     private long appliedenhancements$extractInfiniteCell(MEStorage storage, AEKey key, long amount,
             Actionable mode, IActionSource source, Operation<Long> original) {
         if (amount > 0 && Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get()
-                && com.appliedenhancements.storage.InfiniteStorageSupport.isInfinite(storage)) {
+                && !InfiniteStorageSupport.isPhysicalExtract()
+                && appliedenhancements$infiniteCells.isInfinite(storage)) {
             // A successful probe proves the configured key is accessible through this wrapper.
             // Do not modulate the backing cell: an explicit infinite source cannot be depleted.
             return original.call(storage, key, 1L, Actionable.SIMULATE, source) > 0 ? amount : 0;
@@ -54,8 +76,8 @@ public abstract class NetworkStorageMixin {
 
         var local = new KeyCounter();
         original.call(storage, local);
-        com.appliedenhancements.storage.InfiniteStorageSupport.observe(storage, local);
-        boolean infiniteStorage = com.appliedenhancements.storage.InfiniteStorageSupport.isInfinite(storage);
+        boolean infiniteStorage = appliedenhancements$infiniteCells.isInfinite(storage);
+        InfiniteStorageSupport.observe(storage, local, infiniteStorage);
 
         for (var entry : local) {
             var key = entry.getKey();

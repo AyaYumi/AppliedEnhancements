@@ -44,6 +44,16 @@ public abstract class ExternalStorageFacadeItemHandlerMixin {
         throw new AssertionError("Mixin shadow was not transformed");
     }
 
+    /** AE2 15 may retry a slot after its item type changes; validate every retry. */
+    @WrapOperation(method = "extractFromHandler", at = @At(value = "INVOKE",
+            target = "Lappeng/me/storage/ExternalStorageFacade$ItemHandlerFacade;wrapHandlerExtract(Lnet/minecraftforge/items/IItemHandler;IIZ)I"))
+    private static int appliedenhancements$recheckExtractionType(IItemHandler handler, int slot,
+            int amount, boolean simulate, Operation<Integer> original, IItemHandler source,
+            int sourceSlot, AEItemKey requested, int maxExtract, Actionable mode) {
+        if (!requested.matches(handler.getStackInSlot(slot))) return 0;
+        return original.call(handler, slot, amount, simulate);
+    }
+
     @Unique
     private StorageBusSlotIndex<AEItemKey> appliedenhancements$slotIndex;
 

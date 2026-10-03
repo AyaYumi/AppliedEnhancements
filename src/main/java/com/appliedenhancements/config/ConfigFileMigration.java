@@ -1,6 +1,7 @@
 package com.appliedenhancements.config;
 
 import com.appliedenhancements.AppliedEnhancements;
+import com.appliedenhancements.CraftingOrderMode;
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import java.io.IOException;
@@ -43,7 +44,8 @@ public final class ConfigFileMigration {
         try (CommentedFileConfig common = openIfExists(commonPath);
                 CommentedFileConfig legacyPreAelis = openIfExists(legacyPreAelisPath)) {
             if (common != null && common.contains(NEW_LAYOUT_PROBE)
-                    && !common.contains(PRE_AELIS_LAYOUT_PROBE)) {
+                    && !common.contains(PRE_AELIS_LAYOUT_PROBE)
+                    && !hasLegacyCraftingOrderSettings(common)) {
                 if (legacyPreAelis != null) {
                     legacyPreAelis.close();
                     archiveLegacyFile(legacyPreAelisPath);
@@ -52,11 +54,7 @@ public final class ConfigFileMigration {
             }
 
             MigratedValues values = new MigratedValues(
-                    readBoolean(common, "crafting.enable_long_range_crafting",
-                            readBoolean(legacyPreAelis,
-                                    "features.enableLongRangeCrafting", true)),
-                    clamp(readLong(common, "crafting.max_crafting_order_amount",
-                            Integer.MAX_VALUE), 1, Long.MAX_VALUE),
+                    readCraftingOrderMode(common, legacyPreAelis),
                     readBoolean(common, "crafting.enable_progress_display",
                             readBoolean(legacyPreAelis,
                                     "features.enableProgressDisplay", false)),
@@ -144,8 +142,7 @@ public final class ConfigFileMigration {
                 .build()) {
             output.load();
             output.clear();
-            output.set("crafting.enable_long_range_crafting", values.longRangeCrafting());
-            output.set("crafting.max_crafting_order_amount", values.maximumCraftingOrder());
+            output.set("crafting.max_crafting_order_amount", values.craftingOrderMode().name());
             output.set("crafting.enable_progress_display", values.progressDisplay());
             output.set("crafting.enable_enhanced_material_calculation",
                     values.enhancedMaterialCalculation());
@@ -201,6 +198,36 @@ public final class ConfigFileMigration {
         return value instanceof Number number ? number.longValue() : fallback;
     }
 
+    private static CraftingOrderMode readCraftingOrderMode(
+            CommentedConfig common, CommentedConfig legacyPreAelis) {
+        Object configured = common == null ? null : common.get("crafting.max_crafting_order_amount");
+        if (configured instanceof CraftingOrderMode mode) {
+            return mode;
+        }
+        if (configured instanceof String modeName) {
+            try {
+                return CraftingOrderMode.valueOf(modeName);
+            } catch (IllegalArgumentException ignored) {
+                // Fall through to the legacy boolean and numeric settings.
+            }
+        }
+        boolean enabled = readBoolean(common, "crafting.enable_long_range_crafting",
+                readBoolean(legacyPreAelis, "features.enableLongRangeCrafting", false));
+        long maximum = clamp(readLong(common, "crafting.max_crafting_order_amount",
+                Integer.MAX_VALUE), 1, Long.MAX_VALUE);
+        boolean bigInteger = readBoolean(common,
+                "crafting.aelis.enable_big_integer_planning", true);
+        return CraftingOrderMode.fromLegacy(enabled, maximum, bigInteger);
+    }
+
+    private static boolean hasLegacyCraftingOrderSettings(CommentedConfig common) {
+        if (common == null) {
+            return false;
+        }
+        return common.contains("crafting.enable_long_range_crafting")
+                || common.get("crafting.max_crafting_order_amount") instanceof Number;
+    }
+
     private static String readString(
             CommentedConfig config, String path, String fallback) {
         if (config == null) {
@@ -235,8 +262,7 @@ public final class ConfigFileMigration {
     }
 
     private record MigratedValues(
-            boolean longRangeCrafting,
-            long maximumCraftingOrder,
+            CraftingOrderMode craftingOrderMode,
             boolean progressDisplay,
             boolean enhancedMaterialCalculation,
             boolean automaticAelis,

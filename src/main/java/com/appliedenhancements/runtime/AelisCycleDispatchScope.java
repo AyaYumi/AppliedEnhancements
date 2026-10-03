@@ -24,6 +24,11 @@ public final class AelisCycleDispatchScope implements AutoCloseable {
         return open(() -> runtime);
     }
 
+    public static AelisCycleRuntimeController currentRuntime() {
+        var current = CURRENT.get();
+        return current == null ? null : current.get();
+    }
+
     public static Iterable<ICraftingProvider> providers(
             IPatternDetails pattern, Iterable<ICraftingProvider> providers) {
         var current = CURRENT.get();

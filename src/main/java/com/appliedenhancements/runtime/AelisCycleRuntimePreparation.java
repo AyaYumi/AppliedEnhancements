@@ -6,7 +6,6 @@ import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.execution.ExecutingCraftingJob;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.api.AelisCycleExecutionPlan;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
 import com.appliedenhancements.mixin.ExecutingCraftingJobCycleAccessor;
@@ -43,7 +42,7 @@ public final class AelisCycleRuntimePreparation {
             return AelisCycleRuntimeController.withCyclePhase(prepared, new AelisCycleRuntimeController.State(
                     state.stepIndex(), state.remainingCrafts(), pending));
         } catch (RuntimeException unavailable) {
-            AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Could not prepare saved AELIS cycle phase; previous runtime retained", unavailable);
             return runtime;
         }
@@ -58,7 +57,7 @@ public final class AelisCycleRuntimePreparation {
             return prepare(runtime, taskCounts(access.appliedenhancements$getTasks()),
                     access.appliedenhancements$getWaitingFor().list, level);
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
-            AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Could not inspect saved AE2 cycle phase; previous runtime retained", unavailable);
             return runtime;
         }

@@ -2,7 +2,11 @@
 
 [English documentation](API_INTEGRATION.md)
 
-本文面向希望接入 Applied Enhancements `1.0.8-forge` 的 Forge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+当前 `1.1.0-forge` 源码默认使用 AE2 `15.4.10`，声明 `[15.4.10,16)` 依赖范围，
+CI 分别构建原版 AE2 15.4.10 与 UELM 15.5.4。公开 API 使用 AE2 类型；CPU 显示内部钩子属于
+独立兼容实现，依赖更新后仍需实际运行验证。
+
+本文面向希望接入 Applied Enhancements `1.1.0-forge` 的 Forge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -12,11 +16,13 @@
 | Java | `17` | 编译与运行目标 |
 | Forge | `47.4.20` | 构建与运行验证版本；当前声明范围：`[47.4.10,)` |
 | Applied Energistics 2 | `15.4.10` | 声明范围：`[15.4.10,16)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.0.8-forge` | 本文档对应版本 |
+| Applied Enhancements | `1.1.0-forge` | 本文档对应版本 |
 
-Forge 构建保留公开的规划器和提供者 API，并适配 AE2 15.4.10。网络使用 Forge SimpleChannel，协议为 `1.0.6-forge-1`；客户端和服务端必须同时使用 Forge 构建，不能混用 Minecraft 1.21.1 的 JAR。
+`1.1.0-forge` 保留既有公共 API，并增加 `AelisBatchExecutionContext` 共享投料事务。客户端与服务端使用同一构建，内部载荷协议为 `1.1.0-forge-1`。使用本版共享批量接口时，编译和运行最低版本设为 `1.1.0-forge`。
 
-`1.0.8-forge` 保留 `1.0.7-forge` 的公共 Java API 签名和 SimpleChannel 协议。向原生 AE2 或 AdvancedAE 量子 CPU 提交循环计划的接入方，应按下方示例将最低版本设为 `1.0.8-forge`，以包含针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 顺序调整。
+BigInteger 计划不做统一 CPU 能力预检。long 投影饱和不会强制 `simulation()`，也不会改写 CPU 的提交结果。服务端接入方应通过 `AelisExactCraftingPlanApi.read(plan)` 读取精确数量；`AelisCycleExecutionApi.copyMetadata` 会保留这些字段。旧名 `isPreviewOnly` 现在只表示投影发生饱和。标准 long 字段仍是投影，未适配 CPU 接受订单不代表已支持完整 BigInteger 执行。
+
+`AelisExactCraftingPlanApi.getBytes(plan)` 以 BigInteger 返回整份计划向上取整后的存储字节估计；没有精确元数据时使用原生字节数。状态累计保留精确小数字节，`copyMetadata` 保留最终整数。该字段同步到确认页标题，不新增 CPU 能力检查。
 
 稳定兼容范围仅包括以下包：
 
@@ -34,7 +40,7 @@ com.appliedenhancements.api.client
 - `com.github.appliedenhancements`；
 - 其他未位于公共 API 包中的桥接类、载荷和常量。
 
-## 1.0.9-fix 精确规划与元数据
+## 1.1.0-forge 精确规划与元数据
 
 在服务器线程调用 `AelisExactCraftingService.begin`，然后异步等待结果。数量必须为不超过 256 位十进制数字的正整数。目前仅支持 `REPORT_MISSING_ITEMS`；传入 `CRAFT_LESS` 会明确报错。
 
@@ -52,41 +58,32 @@ AelisExecutionRequirement requirement = metadata.executionRequirement();
 
 当 `Result.shouldFallback()` 为 true 时，通过 `fallbackCategory()` 获取稳定的 `AelisFallbackReason`，无需解析字符串。未知原因返回 `OTHER`，异常返回 `INTERNAL_ERROR`，成功或分支失败返回 `NONE`。AELIS 和旧 MaxFast 结果均提供此查询，原始诊断文本继续保留。
 
-关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，精确服务仍受 `enable_big_integer_planning` 控制。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.0.9-fix` 构建。
+关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，精确服务仍受 `enable_big_integer_planning` 控制。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.1.0-forge` 构建。
 
 ## 开发环境依赖
 
 项目暂未发布独立 Maven API 构件。接入方可以把发行 JAR 放入自己项目的 `libs` 目录，并以 `compileOnly` 方式引用：
 
 ```groovy
-repositories {
-    mavenCentral()
-    maven { url = "https://api.modrinth.com/maven" }
-    flatDir { dirs "libs" }
-}
 dependencies {
     // 接入方通常已经直接依赖 AE2；其类型出现在本模组的公共签名中。
-    implementation fg.deobf("maven.modrinth:ae2:15.4.10")
-    // AE2 必需前置，Modrinth Maven 不会自动传递该依赖。
-    runtimeOnly fg.deobf("org.appliedenergistics:guideme:20.1.7")
+    compileOnly "org.appliedenergistics:appliedenergistics2:15.4.10"
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.8-forge")
+    compileOnly files("libs/appliedenhancements-1.1.0-forge.jar")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.0.8-forge")
+    runtimeOnly files("libs/appliedenhancements-1.1.0-forge.jar")
 }
 ```
 
-也可以在 Applied Enhancements 源码目录执行 `./gradlew publish`，将完整模组发布到该目录的 `repo` 本地 Maven 仓库。消费坐标为 `com.appliedenhancements:appliedenhancements:1.0.8-forge`，POM 声明 AE2 编译依赖及 GuideME／MixinExtras 运行依赖。接入方将 `flatDir` 替换为 `maven { url = uri("../AppliedEnhancements/repo") }`，按实际检出目录调整路径，并保留 Modrinth 与 Maven Central 仓库。此任务不上传到公共 Maven 服务。
-
-如果接入代码会无条件加载公共 API，应在 `mods.toml` 中声明硬依赖：
+如果接入代码会无条件加载公共 API，应在 `forge.mods.toml` 中声明硬依赖：
 
 ```toml
 [[dependencies.yourmod]]
 modId="appliedenhancements"
-mandatory=true
-versionRange="[1.0.8-forge,1.1)"
+type="required"
+versionRange="[1.1.0-forge,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -96,8 +93,8 @@ side="BOTH"
 ```toml
 [[dependencies.yourmod]]
 modId="appliedenhancements"
-mandatory=false
-versionRange="[1.0.8-forge,1.1)"
+type="optional"
+versionRange="[1.1.0-forge,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -146,13 +143,11 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.8-forge` 的 SimpleChannel 协议为 `1.0.6-forge-1`。内置网络只同步部分服务端功能配置、计算进度和规划路径显示，不同步第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.1.0-forge` 的内部载荷协议为 `1.1.0-forge-1`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
 ### 从 1.0.3 规划器 API 迁移
-
-此处说明源码迁移。1.21.1 NeoForge 接入方须使用 Java 17、Forge 和 AE2 15 重新编译；下述兼容入口不提供跨 Minecraft／加载器的二进制兼容。
 
 `MaxFastCraftingPlanner` 作为已弃用兼容入口继续支持基于 `1.0.3` 编译的接入，包括原有 `PauseCheckpoint`、`ProgressListener`、`Result`、`createConfigured(...)`、`create(...)`、`tryExecute(...)` 签名。它将规划委托给 AELIS，不恢复旧实现，也不把当前界面或配置重新改名为 MAX_FAST。
 
@@ -273,6 +268,8 @@ replacement = AelisCycleExecutionApi.copyMetadata(plan, replacement);
 
 ## 2. 循环感知 CPU 执行
 
+批量接入须同时遵循 [共享投料事务](BATCH_EXECUTION_API.md)，尤其是首份抽料与额外抽料使用同一视图、真实次数与材料所有权确认。
+
 AE2 原生 CPU 和 AdvancedAE 量子 CPU 已自动支持。需要接收 AELIS 循环计划的自定义 `ICraftingCPU` 必须实现 `AelisCycleAwareCpu`，并读取公共运行时元数据：
 
 ```java
@@ -320,7 +317,7 @@ if (cyclePlan != null) {
 
 不能只实现标记接口。忽略执行顺序、受保护输入、最终产物暂存或状态持久化的 CPU 仍可能卡死。
 
-以下是源码保留的 Data Energistics 接入协议，本 Forge 分支尚未完成该组合的实机验证。内置原版与量子 CPU 接入支持 Data Energistics 已标记订单包裹的无实体输出结算，适用于自动规划和直接 API 下单。量子 CPU 只为成功派发后实际登记的包裹产量创建完成记录，原版 CPU 会校正 DE 原有记录的批量计数。虚拟包裹结算后仍须满足循环阶段结束条件；手动取消不受该等待条件影响。独立 CPU 若自行实现虚拟产物，应沿用 DE 的语义，不能用实体包裹或请求方实际接收量代替完成记录。
+内置原版与量子 CPU 接入支持 Data Energistics 已标记订单包裹的无实体输出结算，适用于自动规划和直接 API 下单。量子 CPU 只为成功派发后实际登记的包裹产量创建完成记录，原版 CPU 会校正 DE 原有记录的批量计数。虚拟包裹结算后仍须满足循环阶段结束条件；手动取消不受该等待条件影响。独立 CPU 若自行实现虚拟产物，应沿用 DE 的语义，不能用实体包裹或请求方实际接收量代替完成记录。
 
 ### 公共 CPU 接入辅助方法
 
@@ -335,13 +332,11 @@ if (cyclePlan != null) {
 | `CompoundTag writeRuntime(AelisCycleRuntimeController runtime)` | 序列化非 null 控制器的计划、阶段和待返还状态 |
 | `Optional<AelisCycleRuntimeController> readRuntime(CompoundTag tag)` | 恢复支持的运行时格式，包括旧 v1。空值表示状态缺失、无效或版本不支持；原本保存了循环元数据的订单不能静默当普通订单继续运行 |
 
-Forge／AE2 15 使用静态物品与流体注册表进行 NBT 序列化，优先使用上表无需注册表参数的重载。带 `HolderLookup.Provider` 的重载仍保留，会检查参数非 null 后委托给相同实现。
-
 应在构造 CPU 任务表之前调用 `preparePlan`；仅调用 `getPlan` 不会替换该任务表。受保护库存只属于本次提取尝试，不能跨样板或跨运行时推进缓存复用。`dispatchedCrafts` 本身不推进控制器。没有受保护输入的步骤是合法的，但该辅助方法无法推导其实际执行次数；宿主必须自己确定次数，将其限制在 `remainingCrafts()` 内，再调用 `patternDispatched`。
 
-从 `1.0.7-forge` 起，内置原生 AE2 和 AdvancedAE 量子 CPU 接入在当前步骤没有受保护输入时，将单次 Provider 派发按一次合成计数；存在受保护输入时仍严格计数，Provider 拒绝或派发失败时恢复循环运行状态。此修复不改变公共 `dispatchedCrafts` 的约定：独立 CPU 对此类步骤仍需自行确定实际次数，包括自身执行的批量。受保护输入表为空并不一定表示样板本身没有原料。
+`1.1.0-forge` 保留 Forge 分支针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 优先级调整（1100 改为 900），将原生和 AdvancedAE 接入排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
 
-`1.0.8-forge` 针对 AE2 Crafting Time 兼容反馈，将原生和 AdvancedAE CPU Mixin 优先级从 1100 改为 900，排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
+本版原生 AE2 与 AdvancedAE 接入让首份抽料、批量扩展和回滚共享同一份循环保护库存视图。使用 `AelisBatchExecutionContext.beginDispatch` 登记真实次数，原生 Provider 钩子识别已有事务，避免重复推进。拒收恢复运行账本；已转移材料所有权后须确认接受。独立 CPU 应读取实际批量次数，不能将受保护输入表为空解释为样板没有原料。
 
 ```java
 plan = AelisCycleExecutionApi.preparePlan(plan);
@@ -382,7 +377,7 @@ if (jobTag.contains("cycleRuntime")) {
 在接入模组中创建：
 
 ```text
-src/main/resources/data/appliedenhancements/tags/items/infinite_storage_cells.json
+src/main/resources/data/appliedenhancements/tags/item/infinite_storage_cells.json
 ```
 
 示例：
@@ -437,7 +432,7 @@ public final class ExampleInfiniteInventory
 
 ```java
 event.enqueueWork(() -> PatternDuplicateApi.registerOutputResolver(
-        new ResourceLocation("examplemod", "custom_patterns"),
+        ResourceLocation.fromNamespaceAndPath("examplemod", "custom_patterns"),
         100,
         (patternStack, level) -> {
             if (!isExamplePattern(patternStack)) {
@@ -492,7 +487,7 @@ Set<PatternSlotRef> duplicates =
 
 ```java
 event.enqueueWork(() -> PatternTerminalIntegrationApi.register(
-        new ResourceLocation("examplemod", "pattern_terminal"),
+        ResourceLocation.fromNamespaceAndPath("examplemod", "pattern_terminal"),
         PatternTerminalIntegrationApi.Family.AE2_PATTERN_ACCESS,
         "examplemod.client.gui.ExamplePatternAccessScreen"));
 ```
@@ -513,8 +508,7 @@ AE2 系列界面会继承内置样板管理终端的独立第二行工具栏，�
 - AE2 样板管理终端；
 - AE2WTLib 无线样板管理终端；
 - ExtendedAE 扩展样板管理终端；
-- ExtendedAE 无线扩展样板管理终端；
-- ExtendedAE 与 AE2WTLib 接入的通用无线扩展样板终端（`GuiUWirelessExPAT`）。
+- ExtendedAE 无线扩展样板管理终端。
 
 完全自定义的行模型不能仅靠注册自动获得功能，应直接使用 `PatternDuplicateApi`、`PatternBatchMoveApi` 和 `PatternQuickMoveSession` 实现自己的界面层。
 
@@ -546,7 +540,7 @@ public final class ExamplePatternMenu extends AbstractContainerMenu
 
 ```java
 event.enqueueWork(() -> PatternBatchMoveApi.registerMenuHandler(
-        new ResourceLocation("examplemod", "pattern_menu"),
+        ResourceLocation.fromNamespaceAndPath("examplemod", "pattern_menu"),
         100,
         new PatternBatchMoveApi.MenuHandler() {
             @Override
@@ -623,13 +617,13 @@ public void onClose() {
 
 ## 8. 网络物品右键菜单扩展
 
-从 `1.0.5` 起，内置物品操作菜单使用独立的“打开物品操作菜单”绑定，默认 **Alt＋右键**；样板快速移动的剪切、粘贴使用“打开样板移动菜单”，默认 **右键**。两项均检查 Forge 修饰键和 GUI 状态。旧共享绑定保留给样板移动，因此已保存的右键设置不会覆盖新的物品操作默认值。已注册的兼容界面会自动采用这一区分，注册菜单条目不会修改任何绑定。完全自定义的界面需要自行分开处理两类输入。本 Forge 构建使用 SimpleChannel 协议 `1.0.6-forge-1`，客户端与服务端须安装相同版本。
+从 `1.0.5` 起，内置物品操作菜单使用独立的“打开物品操作菜单”绑定，默认 **Alt＋右键**；样板快速移动的剪切、粘贴使用“打开样板移动菜单”，默认 **右键**。两项均检查 Forge 修饰键和 GUI 状态。旧共享绑定保留给样板移动，因此已保存的右键设置不会覆盖新的物品操作默认值。已注册的兼容界面会自动采用这一区分，注册菜单条目不会修改任何绑定。完全自定义的界面需要自行分开处理两类输入。本次拆分不改变公共 Java API 签名，当前整体构建的内部载荷协议为 `1.1.0-forge-1`。
 
 在 Client Setup 中注册菜单项提供器：
 
 ```java
 event.enqueueWork(() -> NetworkItemContextMenuApi.register(
-        new ResourceLocation("examplemod", "inspect_item"),
+        ResourceLocation.fromNamespaceAndPath("examplemod", "inspect_item"),
         100,
         context -> {
             if (!context.key().getId().getNamespace().equals("examplemod")) {
@@ -699,7 +693,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 
 ## 发布前检查清单
 
-`1.0.8-forge` 构建与 `371` 项单元测试（含无受保护输入 Provider 派发的回归测试）、此前服务端启动／NBT 检查及独立整合包中的普通合成、AELIS 和样板管理结果见 [发行验证范围](../README_ZH.md#验证范围)。此前 NeoForge 的 GameTest 不能视为本分支验证；独立 CPU 仍需验证真实循环执行、持久化、虚拟产物及多人联机等接入边界。
+当前验证方法与范围见 [开发与验证](DEVELOPMENT.md)。构建运行公共接口、循环、库存预留和数量保护单元测试；独立 CPU 仍须验证自己的实际派发、回滚和取消边界。
 
 - [ ] 只从稳定 API 包导入类型。
 - [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。
@@ -714,3 +708,6 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 - [ ] `PatternQuickMoveSession` 在关闭界面时清除。
 - [ ] 网络物品菜单的自定义服务端动作重新验证所有客户端字段。
 - [ ] 已在 AE2 `15.4.10` 和目标整合包中完成客户端与服务端验证。
+## 大整数执行扩展
+
+CPU 的通用大整数计划、交付账本和存档接入见 [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md)。没有 Omni 专用白名单，也不以本 API 统一拒绝其他 CPU。

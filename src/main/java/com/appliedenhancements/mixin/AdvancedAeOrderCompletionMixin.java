@@ -13,7 +13,6 @@ import appeng.api.stacks.GenericStack;
 import appeng.crafting.CraftingLink;
 import appeng.crafting.inv.ListCraftingInventory;
 import appeng.me.service.CraftingService;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.runtime.DataEnergisticsOrderCompletion;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -106,7 +105,7 @@ public abstract class AdvancedAeOrderCompletionMixin {
         try {
             long completed = insert(key, amount, Actionable.MODULATE);
             if (completed != amount) {
-                AppliedEnhancements.LOGGER.error("Quantum CPU could not settle virtual order completion {} x{}", key, amount);
+                com.appliedenhancements.runtime.AelisPlanningLog.error("Quantum CPU could not settle virtual order completion {} x{}", key, amount);
                 if (hasJob() && getLastLink() == link) cancel();
             }
         } finally {
@@ -146,7 +145,7 @@ public abstract class AdvancedAeOrderCompletionMixin {
                 && amount > 0 && amount <= getWaitingFor(appliedenhancements$orderKey)) {
             appliedenhancements$pendingOrderCompletion = amount;
         } else {
-            AppliedEnhancements.LOGGER.warn("Ignoring mismatched quantum CPU virtual order completion state");
+            com.appliedenhancements.runtime.AelisPlanningLog.warn("Ignoring mismatched quantum CPU virtual order completion state");
         }
     }
 

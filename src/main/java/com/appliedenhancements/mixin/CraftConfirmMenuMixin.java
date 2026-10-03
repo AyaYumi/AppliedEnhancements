@@ -18,7 +18,6 @@ import appeng.menu.MenuOpener;
 import appeng.menu.me.crafting.CraftAmountMenu;
 import appeng.menu.me.crafting.CraftConfirmMenu;
 import com.appliedenhancements.runtime.NativeCraftingMenuCompat;
-import org.spongepowered.asm.mixin.injection.Group;
 import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
 import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
@@ -69,7 +68,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
     @Override public boolean appliedenhancements$planExact(AEKey what, BigInteger requested) {
         var request = new com.appliedenhancements.api.AelisExactRequest(requested);
-        if (!Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return false;
+        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()
+                || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return false;
         return appliedenhancements$planRequested(what, request.projection(), CalculationStrategy.REPORT_MISSING_ITEMS, requested);
     }
     @Unique
@@ -263,20 +263,11 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         }
     }
 
-    @Group(name = "nativePlanAmount", min = 1, max = 1)
-    @Inject(method = "planJob(Lappeng/api/stacks/AEKey;ILappeng/api/networking/crafting/CalculationStrategy;)Z",
-            at = @At("HEAD"), require = 0)
-    private void appliedenhancements$beforeIntPlan(AEKey what, int amount,
-            CalculationStrategy strategy, CallbackInfoReturnable<Boolean> callback) {
-        appliedenhancements$cancelProgressBeforePlan(amount, strategy);
-    }
-
-    @Group(name = "nativePlanAmount", min = 1, max = 1)
-    @Inject(method = "planJob(Lappeng/api/stacks/AEKey;JLappeng/api/networking/crafting/CalculationStrategy;)Z",
-            at = @At("HEAD"), require = 0)
-    private void appliedenhancements$beforeLongPlan(AEKey what, long amount,
-            CalculationStrategy strategy, CallbackInfoReturnable<Boolean> callback) {
-        appliedenhancements$cancelProgressBeforePlan(amount, strategy);
+    // Forge's runtime remapper may resolve a missing int/long overload by name.
+    // Callback-only injection works for both upstream and UELM signatures.
+    @Inject(method = "planJob", at = @At("HEAD"))
+    private void appliedenhancements$beforeNativePlan(CallbackInfoReturnable<Boolean> callback) {
+        appliedenhancements$cancelProgressBeforePlan(0, CalculationStrategy.REPORT_MISSING_ITEMS);
     }
 
     @Unique
@@ -304,10 +295,10 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             CalculationStrategy strategy, BigInteger exact) {
         var menu = (CraftConfirmMenu) (Object) this;
         if (menu.isClientSide() || what == null || requestedAmount <= 0 || strategy == null
-                || !Config.ENABLE_LONG_RANGE_CRAFTING.get()) {
+                || !Config.MAX_CRAFTING_ORDER_AMOUNT.get().isEnabled()) {
             return false;
         }
-        long maximumAmount = Config.MAX_CRAFTING_ORDER_AMOUNT.get();
+        long maximumAmount = Long.MAX_VALUE;
         if (NativeCraftingLongSafety.exceedsConfiguredLimit(requestedAmount, maximumAmount)) {
             menu.getPlayer().sendSystemMessage(Component.translatable(
                     "message.appliedenhancements.crafting_amount_too_large", maximumAmount));
@@ -448,6 +439,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             long amount,
             CalculationStrategy strategy,
             Operation<Future<ICraftingPlan>> original) {
+        appliedenhancements$requestedAmount = amount;
+        appliedenhancements$calculationStrategy = strategy;
         var progressTask = appliedenhancements$startProgressTask(
                 Config.ENABLE_PROGRESS_DISPLAY.get());
         var progress = progressTask.progress();
@@ -641,43 +634,45 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         }
     }
 
-    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(method = "startJob")
+    // Regex selectors retain the descriptor during Forge's permissive remap
+    // fallback; an absent overload must never bind to the other signature.
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(
+            method = "name=/^startJob$/ desc=/^\\(\\)V$/", require = 0)
     private void appliedenhancements$ownReservationThroughoutStart(Operation<Void> original) {
-        var reservation = this.result == appliedenhancements$reservedPlan ? appliedenhancements$inventoryReservation : null;
-        if (reservation == null) { original.call(); return; }
-        reservation.submit(() -> { original.call(); return null; });
+        appliedenhancements$startWithReservation(() -> original.call());
     }
 
-    @WrapOperation(method = "startJob", at = @At(value = "INVOKE",
-            target = "Lappeng/api/networking/crafting/ICraftingService;submitJob(Lappeng/api/networking/crafting/ICraftingPlan;Lappeng/api/networking/crafting/ICraftingRequester;Lappeng/api/networking/crafting/ICraftingCPU;ZLappeng/api/networking/security/IActionSource;)Lappeng/api/networking/crafting/ICraftingSubmitResult;"))
-    private ICraftingSubmitResult appliedenhancements$submitWithReservedInventory(
-            ICraftingService craftingService,
-            ICraftingPlan plan,
-            ICraftingRequester requester,
-            ICraftingCPU target,
-            boolean prioritizePower,
-            IActionSource source,
-            Operation<ICraftingSubmitResult> original) {
+    // UELM's allow-missing overload submits through a concrete service and an
+    // additional enum. Protect the entire native call instead of its descriptor.
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(
+            method = "name=/^startJob$/ desc=/^\\(Z\\)V$/", require = 0)
+    private void appliedenhancements$ownReservationThroughoutUelmStart(boolean allowMissing, Operation<Void> original) {
+        appliedenhancements$startWithReservation(() -> original.call(allowMissing));
+    }
+
+    @Unique
+    private void appliedenhancements$startWithReservation(Runnable start) {
         if (!ManualCraftingInventoryLock.enabled()) {
             appliedenhancements$releaseInventoryReservation();
         }
-        var reservation = plan == appliedenhancements$reservedPlan
+        var reservation = this.result == appliedenhancements$reservedPlan
                 ? appliedenhancements$inventoryReservation
                 : null;
         try {
-            ICraftingSubmitResult submitResult = reservation == null
-                    ? original.call(
-                            craftingService, plan, requester, target, prioritizePower, source)
-                    : reservation.submit(() -> original.call(
-                            craftingService, plan, requester, target, prioritizePower, source));
-            if (submitResult.successful()) {
-                appliedenhancements$releaseInventoryReservation();
-            }
-            return submitResult;
+            if (reservation == null) start.run();
+            else reservation.submit(() -> { start.run(); return null; });
         } catch (RuntimeException | Error failure) {
             appliedenhancements$releaseInventoryReservation();
             throw failure;
         }
+    }
+
+    @WrapOperation(method = "name=/^startJob$/ desc=/^\\(Z?\\)V$/", at = @At(value = "INVOKE",
+            target = "Lappeng/api/networking/crafting/ICraftingSubmitResult;successful()Z"))
+    private boolean appliedenhancements$releaseSuccessfulReservation(ICraftingSubmitResult result, Operation<Boolean> original) {
+        boolean successful = original.call(result);
+        if (successful) appliedenhancements$releaseInventoryReservation();
+        return successful;
     }
 
     @Unique
@@ -786,7 +781,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             return;
         }
         appliedenhancements$idleTicksWithoutPlanning = 0;
-        AppliedEnhancements.LOGGER.warn(
+        com.appliedenhancements.runtime.AelisPlanningLog.warn(
                 "Crafting plan screen #{} had no planning job for {} ticks; closing it (what={}, amount={})",
                 menu.containerId, APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS,
                 this.whatToCraft, NativeCraftingMenuCompat.amount(menu));

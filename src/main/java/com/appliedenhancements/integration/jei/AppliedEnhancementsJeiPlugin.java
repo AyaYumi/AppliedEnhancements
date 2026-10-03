@@ -23,7 +23,7 @@ public final class AppliedEnhancementsJeiPlugin implements IModPlugin {
     public void onRuntimeAvailable(IJeiRuntime runtime) {
         handler = new JeiItemContextMenuHandler(runtime);
         OptionalJeiItemContextMenu.install(handler);
-        AppliedEnhancements.LOGGER.info(
+        com.appliedenhancements.runtime.AelisPlanningLog.trace(
                 "JEI ingredient context menu integration enabled");
     }
 

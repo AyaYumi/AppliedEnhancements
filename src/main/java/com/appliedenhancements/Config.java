@@ -9,8 +9,7 @@ public final class Config {
     public static final ForgeConfigSpec SPEC;
 
     // Crafting
-    public static final ForgeConfigSpec.BooleanValue ENABLE_LONG_RANGE_CRAFTING;
-    public static final ForgeConfigSpec.LongValue MAX_CRAFTING_ORDER_AMOUNT;
+    public static final ForgeConfigSpec.EnumValue<CraftingOrderMode> MAX_CRAFTING_ORDER_AMOUNT;
     public static final ForgeConfigSpec.BooleanValue ENABLE_PROGRESS_DISPLAY;
     public static final ForgeConfigSpec.BooleanValue ENABLE_ENHANCED_MATERIAL_CALCULATION;
 
@@ -43,29 +42,19 @@ public final class Config {
                 .translation("appliedenhancements.config.section.crafting")
                 .push("crafting");
 
-        ENABLE_LONG_RANGE_CRAFTING = builder
-                .comment(
-                        "Enable crafting orders above Integer.MAX_VALUE; BigInteger planning also supports orders above long.",
-                        "启用超过 Integer.MAX_VALUE 的合成订单；配合大整数规划可超过 long。",
-                        "Default / 默认值: false")
-                .translation("appliedenhancements.config.enable_long_range_crafting")
-                .define("enable_long_range_crafting", false);
-
         MAX_CRAFTING_ORDER_AMOUNT = builder
                 .comment(
-                        "Maximum amount allowed for a single AE2 autocrafting order.",
-                        "Long.MAX_VALUE means no long ceiling when BigInteger planning is enabled; smaller values remain explicit limits.",
-                        "开启大整数规划时，Long.MAX_VALUE 表示不设 long 上限；较小值仍为明确限额。",
-                        "Values above Integer.MAX_VALUE (2,147,483,647) use long-range crafting.",
-                        "单次 AE2 自动合成订单允许的最大数量。",
-                        "超过 Integer.MAX_VALUE（2,147,483,647）时使用超大数量合成路径。",
-                        "Default / 默认值: Integer.MAX_VALUE (2,147,483,647)")
+                        "Select the crafting order handling mode.",
+                        "DISABLED leaves AE2's native handling untouched.",
+                        "LONG_MAX enables the long-valued path up to Long.MAX_VALUE.",
+                        "BIG_INTEGER also enables exact orders above Long.MAX_VALUE.",
+                        "选择合成订单处理模式。",
+                        "DISABLED 保持 AE2 原生处理，不接管合成数量。",
+                        "LONG_MAX 启用 long 数值路径，最大为 Long.MAX_VALUE。",
+                        "BIG_INTEGER 额外启用超过 Long.MAX_VALUE 的精确大整数订单。",
+                        "Default / 默认值: DISABLED")
                 .translation("appliedenhancements.config.max_crafting_order_amount")
-                .defineInRange(
-                        "max_crafting_order_amount",
-                        (long) Integer.MAX_VALUE,
-                        1L,
-                        Long.MAX_VALUE);
+                .defineEnum("max_crafting_order_amount", CraftingOrderMode.DISABLED);
 
         ENABLE_PROGRESS_DISPLAY = builder
                 .comment(
@@ -138,9 +127,9 @@ public final class Config {
         AELIS_DIAGNOSTICS = builder
                 .comment(
                         "Enable detailed AELIS planning diagnostics.",
-                        "WARNING: This produces a large amount of log output.",
+                        "Repeated templates share a server-wide one-minute rate limit.",
                         "启用 AELIS 规划诊断详情。",
-                        "警告：这会产生大量日志输出。",
+                        "重复消息模板共享服务器全局一分钟限流。",
                         "Default / 默认值: false")
                 .translation("appliedenhancements.config.aelis_diagnostics")
                 .define("enable_diagnostics", false);

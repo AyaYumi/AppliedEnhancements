@@ -41,9 +41,19 @@ public abstract class NumberEntryWidgetAccessor implements LongNumberEntryWidget
     @org.spongepowered.asm.mixin.injection.Inject(method = "addQty", at = @org.spongepowered.asm.mixin.injection.At("HEAD"), cancellable = true)
     private void appliedenhancements$addExact(long delta, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
         if (!appliedenhancements$exactInput) return;
-        var value = appliedenhancements$getExactValue().orElse(java.math.BigInteger.ZERO)
-                .add(java.math.BigInteger.valueOf(delta).multiply(java.math.BigInteger.valueOf(type.amountPerUnit())))
-                .max(java.math.BigInteger.valueOf(minValue));
+        var current = appliedenhancements$getExactValue().orElse(java.math.BigInteger.ZERO);
+        var unit = java.math.BigInteger.valueOf(type.amountPerUnit());
+        var value = current.add(java.math.BigInteger.valueOf(delta).multiply(unit));
+
+        // Match AE2's native NumberEntryWidget: the field starts at one
+        // internal unit, while the +/- buttons represent a new quantity. A
+        // step larger than one therefore replaces that initial unit instead
+        // of producing 1 + step (for example 1001 for +1000).
+        if (current.equals(unit) && delta > 1) {
+            value = value.subtract(unit);
+        }
+
+        value = value.max(java.math.BigInteger.valueOf(minValue));
         if (maxValue != Long.MAX_VALUE || !com.appliedenhancements.network.ServerConfigSyncState.isBigIntegerEnabled())
             value = value.min(java.math.BigInteger.valueOf(maxValue));
         if (value.toString().length() <= 256) appliedenhancements$setExactValue(value);

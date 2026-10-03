@@ -3,13 +3,14 @@ package com.appliedenhancements.network;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.appliedenhancements.CraftingOrderMode;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 
 class ServerConfigSyncPayloadTest {
     @Test
     void roundTripsTheFullLongRange() {
-        var expected = new ServerConfigSyncPayload(Long.MAX_VALUE, true, false, true);
+        var expected = new ServerConfigSyncPayload(CraftingOrderMode.BIG_INTEGER, false, true);
         var buffer = new net.minecraft.network.FriendlyByteBuf(Unpooled.buffer());
         try {
             ServerConfigSyncPayload.STREAM_CODEC.encode(buffer, expected);
@@ -22,8 +23,7 @@ class ServerConfigSyncPayloadTest {
 
     @Test
     void rejectsInvalidMaximums() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new ServerConfigSyncPayload(0, true, true, true));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ServerConfigSyncPayload(-1, true, true, false));
     }
 }

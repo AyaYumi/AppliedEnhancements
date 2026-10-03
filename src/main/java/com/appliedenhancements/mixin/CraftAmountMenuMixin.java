@@ -11,7 +11,6 @@ import appeng.menu.MenuOpener;
 import appeng.menu.me.crafting.CraftAmountMenu;
 import appeng.menu.me.crafting.CraftConfirmMenu;
 import appeng.menu.slot.AppEngSlot;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
 import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
@@ -38,8 +37,8 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         var menu = (CraftAmountMenu) (Object) this;
         if (menu.isClientSide() || whatToCraft == null || amount.signum() <= 0) return;
         if (amount.bitLength() <= 63) { appliedenhancements$confirmLong(amount.longValueExact(), missing, autoStart); return; }
-        if (!Config.ENABLE_LONG_RANGE_CRAFTING.get() || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
-                || Config.MAX_CRAFTING_ORDER_AMOUNT.get() != Long.MAX_VALUE) return;
+        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()
+                || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return;
         new com.appliedenhancements.api.AelisExactRequest(amount);
         if (!(menu.getPlayer() instanceof ServerPlayer player) || menu.getLocator() == null
                 || !(menu.getTarget() instanceof IActionHost target) || target.getActionableNode() == null) return;
@@ -54,7 +53,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
                     confirm.broadcastChanges(); return;
                 }
             } catch (RuntimeException failure) {
-                AppliedEnhancements.LOGGER.error("Exact crafting request failed", failure);
+                com.appliedenhancements.runtime.AelisPlanningLog.error("Exact crafting request failed", failure);
             }
             appliedenhancements$closePlanScreen(player, confirm);
             player.sendSystemMessage(Component.translatable("message.appliedenhancements.crafting_plan_stalled"));
@@ -84,7 +83,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
             return;
         }
 
-        if (!Config.ENABLE_LONG_RANGE_CRAFTING.get()) {
+        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().isEnabled()) {
             if (amount <= NativeCraftingMenuCompat.maximumNativeAmount(menu)) {
                 NativeCraftingMenuCompat.confirm(menu, amount, craftMissingAmount, autoStart);
             } else {
@@ -114,7 +113,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         }
 
         // Check maximum crafting amount
-        long maximumAmount = Config.MAX_CRAFTING_ORDER_AMOUNT.get();
+        long maximumAmount = Long.MAX_VALUE;
         if (amount > maximumAmount) {
             menu.getPlayer().sendSystemMessage(Component.translatable(
                     "message.appliedenhancements.crafting_amount_too_large",
@@ -139,7 +138,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         // screen forever, so refuse to open one for a target that cannot plan.
         if (!(menu.getTarget() instanceof IActionHost targetHost)
                 || targetHost.getActionableNode() == null) {
-            AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Long-range crafting target {} has no actionable grid node (what={}, amount={})",
                     menu.getTarget(), this.whatToCraft, amount);
             player.sendSystemMessage(Component.translatable(
@@ -165,7 +164,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
             // setPlan(null)). The exception would otherwise vanish in the packet
             // handler and leave the player on an endless "calculating" screen, so
             // fall through to AE2's own planner.
-            AppliedEnhancements.LOGGER.error(
+            com.appliedenhancements.runtime.AelisPlanningLog.error(
                     "Long-range crafting plan failed for {} x {}; falling back to AE2's native planner",
                     what, amount, failure);
         }

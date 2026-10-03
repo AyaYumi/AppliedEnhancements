@@ -4,6 +4,7 @@ import appeng.api.config.Actionable;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.inv.ICraftingInventory;
+import com.appliedenhancements.api.AelisCycleExecutionPlan;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
 import com.appliedenhancements.util.SaturatingLongMath;
 import java.util.HashMap;
@@ -24,44 +25,67 @@ public final class AelisCycleDispatch {
         if (!runtime.canDispatch(patternDefinition, Set.of())) {
             return null;
         }
+        if (source instanceof GuardedInventory guarded
+                && guarded.runtime == runtime && guarded.patternDefinition.equals(patternDefinition)
+                && guarded.initialState.equals(runtime.snapshot())) {
+            // Omni guards the whole attempt before AE2's inner hook guards the first
+            // extraction. Reuse that exact view instead of subtracting seed floors twice.
+            return source;
+        }
         var current = runtime.currentStep()
                 .filter(step -> step.patternDefinition().equals(patternDefinition))
                 .orElse(null);
-        return new ICraftingInventory() {
-            private final Map<AEKey, Long> extracted = new HashMap<>();
+        return new GuardedInventory(runtime, patternDefinition, source, current);
+    }
 
-            @Override
-            public void insert(AEKey key, long amount, Actionable mode) {
-                source.insert(key, amount, mode);
-                if (mode == Actionable.MODULATE) {
-                    extracted.computeIfPresent(key, (ignored, value) -> Math.max(0, value - amount));
-                }
-            }
+    private static final class GuardedInventory implements ICraftingInventory {
+        private final AelisCycleRuntimeController runtime;
+        private final AEKey patternDefinition;
+        private final ICraftingInventory source;
+        private final AelisCycleExecutionPlan.Step current;
+        private final AelisCycleRuntimeController.State initialState;
+        private final Map<AEKey, Long> extracted = new HashMap<>();
 
-            @Override
-            public long extract(AEKey key, long amount, Actionable mode) {
-                long available = source.extract(key, Long.MAX_VALUE, Actionable.SIMULATE);
-                long maximum;
-                if (current == null) {
-                    maximum = runtime.maximumConsumableAmount(key, available);
-                } else {
-                    Long perCraft = current.inputsPerCraft().get(key);
-                    maximum = perCraft == null ? available : Math.min(available, Math.max(0,
-                            SaturatingLongMath.multiply(perCraft, runtime.remainingCrafts())
-                                    - extracted.getOrDefault(key, 0L)));
-                }
-                long result = source.extract(key, Math.min(amount, maximum), mode);
-                if (mode == Actionable.MODULATE && result > 0) {
-                    extracted.merge(key, result, SaturatingLongMath::add);
-                }
-                return result;
-            }
+        private GuardedInventory(AelisCycleRuntimeController runtime, AEKey patternDefinition,
+                ICraftingInventory source, AelisCycleExecutionPlan.Step current) {
+            this.runtime = runtime;
+            this.patternDefinition = patternDefinition;
+            this.source = source;
+            this.current = current;
+            this.initialState = runtime.snapshot();
+        }
 
-            @Override
-            public Iterable<AEKey> findFuzzyTemplates(AEKey key) {
-                return source.findFuzzyTemplates(key);
+        @Override
+        public void insert(AEKey key, long amount, Actionable mode) {
+            source.insert(key, amount, mode);
+            if (mode == Actionable.MODULATE) {
+                extracted.computeIfPresent(key, (ignored, value) -> Math.max(0, value - amount));
             }
-        };
+        }
+
+        @Override
+        public long extract(AEKey key, long amount, Actionable mode) {
+            long available = source.extract(key, Long.MAX_VALUE, Actionable.SIMULATE);
+            long maximum;
+            if (current == null) {
+                maximum = runtime.maximumConsumableAmount(key, available);
+            } else {
+                Long perCraft = current.inputsPerCraft().get(key);
+                maximum = perCraft == null ? available : Math.min(available, Math.max(0,
+                        SaturatingLongMath.multiply(perCraft, runtime.remainingCrafts())
+                                - extracted.getOrDefault(key, 0L)));
+            }
+            long result = source.extract(key, Math.min(amount, maximum), mode);
+            if (mode == Actionable.MODULATE && result > 0) {
+                extracted.merge(key, result, SaturatingLongMath::add);
+            }
+            return result;
+        }
+
+        @Override
+        public Iterable<AEKey> findFuzzyTemplates(AEKey key) {
+            return source.findFuzzyTemplates(key);
+        }
     }
 
     public static long dispatchedCrafts(AelisCycleRuntimeController runtime,

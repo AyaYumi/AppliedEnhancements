@@ -4,7 +4,6 @@ import appeng.api.crafting.IPatternDetails;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.crafting.inv.ListCraftingInventory;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
 import com.github.appliedenhancements.crafting.aelis.AelisLegacyCycleRecovery;
@@ -42,7 +41,7 @@ public final class AdvancedAeCycleRecovery {
             return AelisCycleRuntimePreparation.prepare(runtime,
                     AelisCycleRuntimePreparation.taskCounts(tasks), waitingFor.list, level);
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
-            AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Could not inspect saved quantum CPU cycle phase; previous runtime retained", unavailable);
             return runtime;
         }
@@ -74,7 +73,7 @@ public final class AdvancedAeCycleRecovery {
             }
             for (var entry : required.entrySet()) {
                 if (available.getOrDefault(entry.getKey(), 0L) < entry.getValue()) {
-                    AppliedEnhancements.LOGGER.warn(
+                    com.appliedenhancements.runtime.AelisPlanningLog.warn(
                             "Saved quantum CPU cycle tasks do not cover the remaining schedule; order retained unchanged");
                     return;
                 }
@@ -104,11 +103,11 @@ public final class AdvancedAeCycleRecovery {
                 tasks.putAll(previous);
                 throw failure;
             }
-            AppliedEnhancements.LOGGER.info(
+            com.appliedenhancements.runtime.AelisPlanningLog.trace(
                     "Normalized saved quantum CPU cycle tasks: patterns={}, step={}, remainingCrafts={}",
                     replacement.size(), state.stepIndex(), state.remainingCrafts());
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
-            AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Could not normalize saved quantum CPU cycle tasks; order retained unchanged", unavailable);
         }
     }
@@ -126,7 +125,7 @@ public final class AdvancedAeCycleRecovery {
             var recovery = AelisLegacyCycleRecovery.prove(counts, inventory.list,
                     new GenericStack(output.what(), (Long) read(job, "remainingAmount")), Config.CYCLE_SEED_POLICY.get());
             if (recovery == null) {
-                AppliedEnhancements.LOGGER.warn("Legacy quantum CPU batch could not be safely restored; order retained unchanged");
+                com.appliedenhancements.runtime.AelisPlanningLog.warn("Legacy quantum CPU batch could not be safely restored; order retained unchanged");
                 return null;
             }
             var progressType = tasks.values().iterator().next().getClass();
@@ -150,11 +149,11 @@ public final class AdvancedAeCycleRecovery {
                 tasks.putAll(previous);
                 throw failure;
             }
-            AppliedEnhancements.LOGGER.info("Restored legacy quantum CPU cycle order: patterns={}, steps={}, seeds={}",
+            com.appliedenhancements.runtime.AelisPlanningLog.trace("Restored legacy quantum CPU cycle order: patterns={}, steps={}, seeds={}",
                     replacement.size(), recovery.cyclePlan().steps().size(), recovery.cyclePlan().minimumSeeds());
             return runtime;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
-            AppliedEnhancements.LOGGER.warn("Could not inspect legacy quantum CPU cycle order; inventory preserved", unavailable);
+            com.appliedenhancements.runtime.AelisPlanningLog.warn("Could not inspect legacy quantum CPU cycle order; inventory preserved", unavailable);
             return null;
         }
     }

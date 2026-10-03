@@ -18,13 +18,12 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.appliedenhancements.runtime.MolecularBalancedBatchScope;
 import com.appliedenhancements.api.AelisCycleExecutionApi;
+import com.appliedenhancements.api.AelisBatchExecutionContext;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
-import com.appliedenhancements.runtime.AelisCycleDispatch;
 import com.appliedenhancements.runtime.AelisCycleDispatchScope;
 import com.appliedenhancements.runtime.AelisCycleRuntimePreparation;
 import com.appliedenhancements.runtime.DataEnergisticsOrderCompletion;
 import com.appliedenhancements.runtime.NativeCraftingLongSafety;
-import com.appliedenhancements.AppliedEnhancements;
 
 import appeng.api.config.Actionable;
 import appeng.api.crafting.IPatternDetails;
@@ -135,7 +134,7 @@ public abstract class CraftingCpuLogicBatchMixin {
         }
     }
 
-    @WrapOperation(method = "executeCrafting", at = @At(value = "INVOKE",
+    @WrapOperation(method = "executeCrafting", require = 0, at = @At(value = "INVOKE",
             target = "Lappeng/api/networking/crafting/ICraftingProvider;pushPattern(Lappeng/api/crafting/IPatternDetails;[Lappeng/api/stacks/KeyCounter;)Z"))
     private boolean appliedenhancements$openProviderBatch(ICraftingProvider provider,
             IPatternDetails details, KeyCounter[] inputHolder, Operation<Boolean> original,
@@ -148,39 +147,27 @@ public abstract class CraftingCpuLogicBatchMixin {
         var virtualCompletion = completionJob == null ? null : DataEnergisticsOrderCompletion.beforeNativePush(
                 this, ((ExecutingCraftingJobCycleAccessor) completionJob).appliedenhancements$getFinalOutput(),
                 expectedOutputs);
-        var runtime = appliedenhancements$cycleRuntime;
-        AelisCycleRuntimeController.State previousState = null;
-        if (runtime != null && !runtime.isComplete()
-                && runtime.currentStep()
-                        .map(step -> step.patternDefinition()
-                                .equals(details.getDefinition()))
-                        .orElse(false)) {
-            previousState = runtime.snapshot();
-            runtime.patternDispatched(details.getDefinition(),
-                    AelisCycleDispatch.dispatchedProviderPush(
-                            runtime, details.getDefinition(), inputHolder));
-        }
-        boolean pushed;
+        AelisBatchExecutionContext.Dispatch dispatch;
         try {
-            pushed = original.call(provider, details, inputHolder);
-        } catch (RuntimeException | Error failure) {
-            if (previousState != null) {
-                appliedenhancements$cycleRuntime = AelisCycleRuntimeController.withCyclePhase(
-                        runtime.plan(), previousState);
+            dispatch = AelisBatchExecutionContext.beginProviderDispatch(
+                    appliedenhancements$cycleRuntime, details.getDefinition(), inputHolder);
+        } catch (IllegalStateException invalidBatch) {
+            com.appliedenhancements.runtime.AelisPlanningLog.warn("Rejected invalid AELIS provider batch: {}", invalidBatch.getMessage());
+            return false;
+        }
+        try (dispatch) {
+            boolean pushed = original.call(provider, details, inputHolder);
+            if (pushed) {
+                dispatch.accepted();
+                if (job == completionJob && virtualCompletion != null) {
+                    virtualCompletion.reconcileAcceptedPush();
+                }
             }
-            throw failure;
+            return pushed;
         }
-        if (!pushed && previousState != null) {
-            appliedenhancements$cycleRuntime = AelisCycleRuntimeController.withCyclePhase(
-                    runtime.plan(), previousState);
-        }
-        if (pushed && job == completionJob && virtualCompletion != null) {
-            virtualCompletion.reconcileAcceptedPush();
-        }
-        return pushed;
     }
 
-    @WrapOperation(method = "executeCrafting", at = @At(value = "INVOKE",
+    @WrapOperation(method = "executeCrafting", require = 0, at = @At(value = "INVOKE",
             target = "Lappeng/crafting/execution/CraftingCpuHelper;extractPatternInputs(Lappeng/api/crafting/IPatternDetails;Lappeng/crafting/inv/ICraftingInventory;Lnet/minecraft/world/level/Level;Lappeng/api/stacks/KeyCounter;Lappeng/api/stacks/KeyCounter;)[Lappeng/api/stacks/KeyCounter;"))
     private KeyCounter[] appliedenhancements$guardCyclePatternInputs(
             IPatternDetails details,
@@ -388,7 +375,7 @@ public abstract class CraftingCpuLogicBatchMixin {
                         data.getCompound(APPLIEDENHANCEMENTS_CYCLE_RUNTIME_TAG)).orElse(null)
                 : null;
         if (hasRuntime && appliedenhancements$cycleRuntime == null) {
-            AppliedEnhancements.LOGGER.error(
+            com.appliedenhancements.runtime.AelisPlanningLog.error(
                     "Cancelling AE2 crafting job because its AELIS cycle runtime state is invalid");
             cancel();
         } else if (hasRuntime) {

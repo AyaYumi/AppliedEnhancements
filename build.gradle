@@ -23,7 +23,7 @@ minecraft {
         configureEach {
             workingDirectory project.file(findProperty('run_directory') ?: 'run')
             property 'forge.logging.markers', 'REGISTRIES'
-            property 'forge.logging.console.level', 'debug'
+            property 'forge.logging.console.level', 'info'
 
             mods {
                 "${mod_id}" {
@@ -61,7 +61,7 @@ mixin {
 jarJar.enable()
 
 tasks.named('jarJar', Jar).configure {
-    archiveClassifier = project.hasProperty('uelm') ? 'uelm' : ''
+    archiveClassifier = (project.hasProperty('uelm') || project.hasProperty('ae2_uelm_version')) ? 'uelm' : ''
     includeEmptyDirs = false
     preserveFileTimestamps = false
     reproducibleFileOrder = true
@@ -75,6 +75,11 @@ sourceSets.main.resources {
 }
 
 repositories {
+    maven {
+        name = 'AE2UELM'
+        url = 'https://repo.expandium.net/releases'
+        content { includeGroup 'appeng' }
+    }
     maven {
         name = 'MinecraftForgeReleases'
         url = 'https://maven.minecraftforge.net/releases/'
@@ -116,7 +121,9 @@ configurations {
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
-    if (project.hasProperty('uelm')) {
+    if (project.hasProperty('ae2_uelm_version')) {
+        api fg.deobf("appeng:appliedenergistics2-forge:${project.property('ae2_uelm_version')}")
+    } else if (project.hasProperty('uelm')) {
         api files(project.property('uelm'))
     } else {
         api fg.deobf("maven.modrinth:ae2:${ae2_version}")
@@ -167,7 +174,7 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
-    archiveClassifier = project.hasProperty('uelm') ? 'slim-uelm' : 'slim'
+    archiveClassifier = (project.hasProperty('uelm') || project.hasProperty('ae2_uelm_version')) ? 'slim-uelm' : 'slim'
     manifest {
         attributes([
                 'Specification-Title'    : mod_id,
@@ -213,7 +220,6 @@ tasks.withType(ProcessResources).configureEach {
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
-    exclude('**/AelisBigIntegerTransactionalTest.java')
 }
 
 idea {
@@ -227,3 +233,38 @@ idea {
 reobf { jarJar {} }
 tasks.named("jarJar").configure { finalizedBy "reobfJarJar" }
 tasks.named("build").configure { dependsOn "jarJar" }
+
+// Current source documentation ships with both regular and UELM runtime jars.
+tasks.withType(Jar).configureEach {
+    from('LICENSE')
+    from('docs') { include '*.md'; into 'docs' }
+}
+
+tasks.register('apiJavadoc', Javadoc) {
+    group = 'documentation'
+    description = 'Generate public planning, batch, storage and client integration API docs.'
+    dependsOn tasks.named('classes')
+    source = sourceSets.main.java.matching { include 'com/appliedenhancements/api/**/*.java' }
+    classpath = sourceSets.main.compileClasspath + sourceSets.main.output
+    destinationDir = layout.buildDirectory.dir('docs/api').get().asFile
+    options.encoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+    options.memberLevel = JavadocMemberLevel.PUBLIC
+    options.addBooleanOption('Xdoclint:none', true)
+    options.windowTitle = 'Applied Enhancements 1.1.0 Forge API'
+}
+
+// MixinGradle writes these alongside compiler output; include and track the refmap.
+def mixinRefmap = layout.buildDirectory.file("tmp/compileJava/${mod_id}.refmap.json")
+tasks.named('compileJava', JavaCompile).configure {
+    options.incremental = false
+    outputs.files(mixinRefmap, layout.buildDirectory.file('tmp/compileJava/compileJava-refmap.json'),
+            layout.buildDirectory.file('tmp/compileJava/compileJava-mappings.tsrg'))
+}
+tasks.named('processResources', ProcessResources).configure {
+    dependsOn tasks.named('compileJava')
+    from(mixinRefmap)
+}
+tasks.withType(Jar).configureEach {
+    filesMatching("${mod_id}.refmap.json") { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
+}

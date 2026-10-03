@@ -15,7 +15,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class NetworkHandler {
-    private static final String PROTOCOL = "1.0.9-forge-1";
+    private static final String PROTOCOL = "1.1.0-forge-1";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             AppliedEnhancements.id("main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 

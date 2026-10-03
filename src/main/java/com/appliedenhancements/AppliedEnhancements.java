@@ -46,13 +46,14 @@ public class AppliedEnhancements {
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
+        event.enqueueWork(com.appliedenhancements.runtime.AelisSmartCycleBatchProvider::registerOmniAdapters);
         LOGGER.info(
-                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, longRangeCrafting={}, progressDisplay={}, automaticAelis={}, aelisBigIntegerPlanning={}",
+                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, craftingOrderMode={}, progressDisplay={}, automaticAelis={}, aelisBigIntegerPlanning={}",
                 Config.ENABLE_PATTERN_CACHING.get(),
                 Config.ENABLE_STORAGE_BUS_SLOT_INDEX.get(),
                 Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
                 Config.ENABLE_IO_BUS_OPTIMIZATION.get(),
-                Config.ENABLE_LONG_RANGE_CRAFTING.get(),
+                Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
                 Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get(),
                 Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get());

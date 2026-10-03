@@ -11,6 +11,7 @@ import appeng.me.storage.DriveWatcher;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.mixin.AelisChildSimulationStateAccessor;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -18,19 +19,57 @@ import java.util.Set;
 public final class InfiniteStorageSupport {
     private record Probe(IActionSource source, Set<AEKey> keys) {}
     private static final ThreadLocal<Probe> PROBE = new ThreadLocal<>();
+    private static final ThreadLocal<Boolean> PHYSICAL_EXTRACT = new ThreadLocal<>();
 
     private InfiniteStorageSupport() {}
 
-    public static boolean isInfinite(MEStorage storage) {
+    public static StorageCell mountedCell(MEStorage storage) {
         // Drives and ME chests both wrap cells; inspect identity only, and always probe
         // extraction through the original outer wrapper so its restrictions remain active.
         for (int depth = 0; storage != null && depth < 32; depth++) {
-            if (storage instanceof StorageCell cell) return InfiniteStorageCellRegistry.isInfinite(cell);
-            if (storage instanceof DriveWatcher drive) return InfiniteStorageCellRegistry.isInfinite(drive.getCell());
-            if (!(storage instanceof com.appliedenhancements.mixin.DelegatingMEInventoryAccessor wrapper)) return false;
+            if (storage instanceof StorageCell cell) return cell;
+            if (storage instanceof DriveWatcher drive) return drive.getCell();
+            if (!(storage instanceof com.appliedenhancements.mixin.DelegatingMEInventoryAccessor wrapper)) return null;
             storage = wrapper.appliedenhancements$getDelegate();
         }
-        return false;
+        return null;
+    }
+
+    public static boolean isPhysicalExtract() {
+        return Boolean.TRUE.equals(PHYSICAL_EXTRACT.get());
+    }
+
+    /** Rechecks sentinel-only entries against source-aware, finite storage amounts. */
+    public static void reconcilePlanningSnapshot(KeyCounter list, MEStorage storage,
+            IActionSource source, Set<AEKey> infiniteKeys) {
+        reconcilePlanningSnapshot(list, storage, source, infiniteKeys,
+                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get());
+    }
+
+    static void reconcilePlanningSnapshot(KeyCounter list, MEStorage storage,
+            IActionSource source, Set<AEKey> infiniteKeys, boolean enabled) {
+        if (!enabled) return;
+        var unmarkedSentinels = new ArrayList<AEKey>();
+        for (var entry : list) {
+            if (entry.getLongValue() == Long.MAX_VALUE
+                    && !infiniteKeys.contains(entry.getKey())) {
+                unmarkedSentinels.add(entry.getKey());
+            }
+        }
+        IActionSource effectiveSource = source == null ? IActionSource.empty() : source;
+        Boolean previous = PHYSICAL_EXTRACT.get();
+        PHYSICAL_EXTRACT.set(true);
+        try {
+            for (AEKey key : unmarkedSentinels) {
+                list.set(key, Math.max(0L, storage.extract(
+                        key, Long.MAX_VALUE, Actionable.SIMULATE, effectiveSource)));
+            }
+        } finally {
+            if (previous == null) PHYSICAL_EXTRACT.remove();
+            else PHYSICAL_EXTRACT.set(previous);
+        }
+        list.removeZeros();
+        for (AEKey key : infiniteKeys) list.set(key, Long.MAX_VALUE);
     }
 
     public static Set<AEKey> snapshot(MEStorage storage, IActionSource source) {
@@ -46,9 +85,9 @@ public final class InfiniteStorageSupport {
         }
     }
 
-    public static void observe(MEStorage storage, KeyCounter contents) {
+    public static void observe(MEStorage storage, KeyCounter contents, boolean infiniteStorage) {
         Probe probe = PROBE.get();
-        if (probe == null || !isInfinite(storage)) return;
+        if (probe == null || !infiniteStorage) return;
         for (var entry : contents) {
             // Go through the mounted wrapper, preserving extraction filters and source checks.
             if (entry.getLongValue() > 0

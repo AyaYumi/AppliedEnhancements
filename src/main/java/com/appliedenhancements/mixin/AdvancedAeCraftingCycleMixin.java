@@ -14,11 +14,10 @@ import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.inv.ICraftingInventory;
 import appeng.crafting.inv.ListCraftingInventory;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.api.AelisCycleExecutionApi;
+import com.appliedenhancements.api.AelisBatchExecutionContext;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
 import com.appliedenhancements.runtime.AelisCycleDispatchScope;
-import com.appliedenhancements.runtime.AelisCycleDispatch;
 import com.appliedenhancements.runtime.AdvancedAeCycleRecovery;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -98,21 +97,18 @@ public abstract class AdvancedAeCraftingCycleMixin {
             target = "Lappeng/api/networking/crafting/ICraftingProvider;pushPattern(Lappeng/api/crafting/IPatternDetails;[Lappeng/api/stacks/KeyCounter;)Z"))
     private boolean appliedenhancements$advanceCycle(ICraftingProvider provider,
             IPatternDetails pattern, KeyCounter[] inputs, Operation<Boolean> original) {
-        var runtime = appliedenhancements$cycleRuntime;
-        long crafts = AelisCycleDispatch.dispatchedProviderPush(
-                runtime, pattern.getDefinition(), inputs);
-        var previous = crafts > 0 ? runtime.snapshot() : null;
-        if (previous != null) {
-            runtime.patternDispatched(pattern.getDefinition(), crafts);
-        }
-        boolean accepted = false;
+        AelisBatchExecutionContext.Dispatch dispatch;
         try {
-            accepted = original.call(provider, pattern, inputs);
+            dispatch = AelisBatchExecutionContext.beginProviderDispatch(
+                    appliedenhancements$cycleRuntime, pattern.getDefinition(), inputs);
+        } catch (IllegalStateException invalidBatch) {
+            com.appliedenhancements.runtime.AelisPlanningLog.warn("Rejected invalid AELIS quantum CPU batch: {}", invalidBatch.getMessage());
+            return false;
+        }
+        try (dispatch) {
+            boolean accepted = original.call(provider, pattern, inputs);
+            if (accepted) dispatch.accepted();
             return accepted;
-        } finally {
-            if (!accepted && previous != null) {
-                appliedenhancements$cycleRuntime = AelisCycleRuntimeController.withCyclePhase(runtime.plan(), previous);
-            }
         }
     }
 
@@ -186,7 +182,7 @@ public abstract class AdvancedAeCraftingCycleMixin {
         appliedenhancements$cycleRuntime = saved
                 ? AelisCycleExecutionApi.readRuntime(tag.getCompound(APPLIEDENHANCEMENTS_CYCLE_TAG)).orElse(null) : null;
         if (saved && appliedenhancements$cycleRuntime == null) {
-            AppliedEnhancements.LOGGER.error("Invalid AELIS quantum CPU cycle state; cancelling job safely");
+            com.appliedenhancements.runtime.AelisPlanningLog.error("Invalid AELIS quantum CPU cycle state; cancelling job safely");
             cancel();
         } else if (saved) {
             AdvancedAeCycleRecovery.reconcile(this, appliedenhancements$cycleRuntime);

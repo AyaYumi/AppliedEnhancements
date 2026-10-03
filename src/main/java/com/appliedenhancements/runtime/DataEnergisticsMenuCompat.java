@@ -1,6 +1,5 @@
 package com.appliedenhancements.runtime;
 
-import com.appliedenhancements.AppliedEnhancements;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -67,7 +66,7 @@ public final class DataEnergisticsMenuCompat {
             long amount = field.getLong(confirmMenu);
             return amount > 0 ? OptionalLong.of(amount) : OptionalLong.empty();
         } catch (IllegalAccessException | RuntimeException unavailable) {
-            AppliedEnhancements.LOGGER.debug(
+            com.appliedenhancements.runtime.AelisPlanningLog.debug(
                     "Could not read optional Data Energistics crafting amount",
                     unavailable);
             return OptionalLong.empty();
