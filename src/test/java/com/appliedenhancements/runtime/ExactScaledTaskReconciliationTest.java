@@ -58,9 +58,22 @@ class ExactScaledTaskReconciliationTest {
         assertEquals(Map.of(original, 2L), result.projected());
     }
 
-    @Test void unknownAdditionalTaskIsNotSilentlyDropped() {
-        assertThrows(IllegalStateException.class, () -> ExactScaledTaskReconciliation.reconcile(
+    @Test void unknownAdditionalTaskRestoresAuthoritativeOriginalWork() {
+        var result = assertDoesNotThrow(() -> ExactScaledTaskReconciliation.reconcile(
                 Map.of(batch, 1L, pattern(), 1L), Map.of(original, total), resolver(4)));
+        assertEquals(Map.of(original, total), result.exact());
+        assertEquals(Map.of(original, Long.MAX_VALUE - 1), result.projected());
+    }
+
+    @Test void unavailableOrInvalidMultiplierRestoresOriginalWork() {
+        for (var resolver : java.util.List.<Function<IPatternDetails, ExactScaledTaskReconciliation.ScaledTask>>of(
+                p -> { throw new IllegalStateException("Unavailable optional ABI"); },
+                p -> null, p -> new ExactScaledTaskReconciliation.ScaledTask(original, 0),
+                p -> new ExactScaledTaskReconciliation.ScaledTask(pattern(), 4))) {
+            var result = assertDoesNotThrow(() -> ExactScaledTaskReconciliation.reconcile(
+                    Map.of(batch, 1L), Map.of(original, total), resolver));
+            assertEquals(Map.of(original, total), result.exact());
+        }
     }
 
     @Test void ordinaryAndAbsentMetadataPlansAreUntouched() {
@@ -106,10 +119,12 @@ class ExactScaledTaskReconciliationTest {
         assertSame(nativeBatch, result.exact().keySet().stream().filter(p -> p == nativeBatch).findFirst().orElseThrow());
     }
 
-    @Test void nativeFiniteWorkMismatchIsRejectedInsteadOfLosingOrInventingCrafts() {
+    @Test void nativeFiniteWorkMismatchIsRepairedWithExactRemainder() {
         var nativeBatch = new com.extendedae_plus.api.crafting.ScaledProcessingPattern(original, 7);
-        assertThrows(IllegalStateException.class, () -> ExactScaledTaskReconciliation.reconcile(
+        var result = assertDoesNotThrow(() -> ExactScaledTaskReconciliation.reconcile(
                 Map.of(nativeBatch, 2L), Map.of(original, BigInteger.valueOf(15))));
+        assertEquals(Map.of(nativeBatch, BigInteger.TWO, original, BigInteger.ONE), result.exact());
+        assertEquals(Map.of(nativeBatch, 2L, original, 1L), result.projected());
     }
 
     private static IPatternDetails pattern() {

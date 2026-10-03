@@ -15,6 +15,12 @@ public final class AelisCraftingPlanRewrite {
 
     public static ICraftingPlan rewriteOrdinaryPatterns(
             ICraftingPlan plan, UnaryOperator<ICraftingPlan> rewrite) {
+        try { return rewriteKnownPatterns(plan, rewrite); }
+        catch (RuntimeException | LinkageError unavailable) { return plan; }
+    }
+
+    private static ICraftingPlan rewriteKnownPatterns(
+            ICraftingPlan plan, UnaryOperator<ICraftingPlan> rewrite) {
         var cycle = AelisCycleExecutionApi.getPlan(plan).orElse(null);
         boolean external = plan.patternTimes().keySet().stream()
                 .anyMatch(com.appliedenhancements.api.AelisSmartDoublingApi::isExternallyManaged);

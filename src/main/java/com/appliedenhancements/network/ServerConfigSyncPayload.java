@@ -49,8 +49,7 @@ public record ServerConfigSyncPayload(
                 Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
                 Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
-                Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()
-                        && Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get());
+                Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger());
     }
 
     public static void register(PayloadRegistrar registrar) {

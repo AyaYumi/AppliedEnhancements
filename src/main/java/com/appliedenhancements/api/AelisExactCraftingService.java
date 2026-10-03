@@ -3,7 +3,6 @@ package com.appliedenhancements.api;
 import appeng.api.networking.crafting.*;
 import appeng.api.stacks.*;
 import appeng.crafting.CraftingCalculation;
-import com.appliedenhancements.Config;
 import com.appliedenhancements.runtime.ExactRequestScope;
 import java.math.BigInteger;
 import java.util.concurrent.*;
@@ -33,7 +32,11 @@ public final class AelisExactCraftingService {
             throw new IllegalStateException("Exact planning must begin on the server thread");
         if (requester == null || requester.getGridNode() == null)
             throw new IllegalArgumentException("A connected crafting requester is required");
-        if (!Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) throw new IllegalStateException("BigInteger planning is disabled");
+        if (exactRequest.amount().signum() == 0) {
+            return CompletableFuture.completedFuture(new appeng.crafting.CraftingPlan(
+                    new GenericStack(request.output(), 0), 0, false, false,
+                    new KeyCounter(), new KeyCounter(), new KeyCounter(), java.util.Map.of()));
+        }
         CraftingCalculation calculation;
         try (var scope = new ExactRequestScope(exactRequest)) {
             calculation = new CraftingCalculation(level, requester.getGridNode().getGrid(), requester,
@@ -45,7 +48,10 @@ public final class AelisExactCraftingService {
                 if (plan == null) throw new IllegalStateException("Exact calculation returned no plan");
                 var copy = AelisCycleExecutionApi.copyMetadata(plan, plan);
                 ((com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier) copy)
-                        .appliedenhancements$setBigIntegerFinalAmount(exactRequest.amount());
+                        .appliedenhancements$setBigIntegerFinalAmount(
+                                plan.finalOutput().amount() == exactRequest.projection()
+                                        && AelisExactCraftingPlanApi.read(plan).path() == AelisPlanPath.AELIS
+                                        ? exactRequest.amount() : BigInteger.valueOf(plan.finalOutput().amount()));
                 return copy;
             }
         });

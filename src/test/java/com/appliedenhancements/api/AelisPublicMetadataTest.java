@@ -23,14 +23,17 @@ class AelisPublicMetadataTest {
     private static final AEKey INPUT = new TestAEKey("input");
     private static final BigInteger HUGE = BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE);
 
-    @Test void requestPreservesExactAmountAndRejectsUnsupportedSearch() {
+    @Test void requestPreservesLargeAmountsAndAcceptsCraftLess() {
         assertEquals(HUGE, AelisCraftingRequest.of(OUTPUT, HUGE).amount());
-        assertEquals(BigInteger.ONE, AelisCraftingRequest.of(OUTPUT, 1L).amount());
-        assertThrows(IllegalArgumentException.class, () -> AelisCraftingRequest.of(OUTPUT, 0));
-        assertThrows(IllegalArgumentException.class,
-                () -> AelisCraftingRequest.of(OUTPUT, BigInteger.TEN.pow(256)));
-        assertThrows(IllegalArgumentException.class,
-                () -> new AelisCraftingRequest(OUTPUT, HUGE, CalculationStrategy.CRAFT_LESS));
+        assertEquals(BigInteger.ZERO, AelisCraftingRequest.of(OUTPUT, 0).amount());
+        assertEquals(BigInteger.ZERO, AelisCraftingRequest.of(OUTPUT, -1).amount());
+        var enormous = BigInteger.TEN.pow(1_024);
+        assertEquals(enormous, AelisCraftingRequest.of(OUTPUT, enormous).amount());
+        assertEquals(CalculationStrategy.CRAFT_LESS,
+                new AelisCraftingRequest(OUTPUT, enormous, CalculationStrategy.CRAFT_LESS).strategy());
+        var request = new AelisExactRequest(enormous);
+        assertSame(request, request.attempt(Long.MAX_VALUE, Long.MAX_VALUE));
+        assertEquals(BigInteger.valueOf(23), request.attempt(23, Long.MAX_VALUE).amount());
     }
 
     @Test void categorizesExistingPlannerFallbackReasons() {

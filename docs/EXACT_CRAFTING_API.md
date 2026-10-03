@@ -32,11 +32,11 @@ Future<ICraftingPlan> pending = AelisExactCraftingService.begin(
 
 旧的 `begin(level, requester, output, amount)` 和 carrier 读取方法继续保留，以兼容已有接入。
 
-请求必须为不超过 256 位的正整数。目前仅支持 `REPORT_MISSING_ITEMS`；传入 `CRAFT_LESS` 会明确抛出 `IllegalArgumentException`。也可通过 `AelisCraftingRequest.of(outputKey, amount)` 从 `long` 或 `BigInteger` 创建请求。
+请求没有 256 位 API 限制，非正数按空订单处理；`REPORT_MISSING_ITEMS` 和 `CRAFT_LESS` 均可使用。也可通过 `AelisCraftingRequest.of(outputKey, amount)` 从 `long` 或 `BigInteger` 创建请求。
 
 ## 自动规划与显式调用
 
-关闭 `crafting.aelis.enable_automatic_planner` 后，普通 AE2 请求保持原生规划；第三方主动调用 `AelisCraftingPlanner.tryExecute` 或 `AelisExactCraftingService.begin` 仍可使用对应扩展。精确服务仍受 `crafting.aelis.enable_big_integer_planning` 控制。调用方无需自行管理线程作用域。
+关闭 `crafting.aelis.enable_automatic_planner` 后，普通 AE2 请求保持原生规划；第三方主动调用 `AelisCraftingPlanner.tryExecute` 或 `AelisExactCraftingService.begin` 仍可使用对应扩展。显式精确服务不再受 `crafting.aelis.enable_big_integer_planning` 阻止。调用方无需自行管理线程作用域。
 
 `AelisCraftingPlanner.Result` 和兼容入口 `MaxFastCraftingPlanner.Result` 新增 `fallbackCategory()`，返回 `AelisFallbackReason`。先用 `shouldFallback()` 判断是否需要回退，再按分类处理；成功或分支失败返回 `NONE`，异常返回 `INTERNAL_ERROR`，未知原因返回 `OTHER`。原有 `fallbackReason()` 字符串保留用于诊断，调用方无需解析其文本。
 
@@ -56,10 +56,10 @@ Future<ICraftingPlan> pending = AelisExactCraftingService.begin(
 没有统一的 CPU 能力预检、强制仅选 Omni、或“先执行 long 上限这么多就算成功”的降单逻辑。
 原生/其他 CPU 不会因为安装 API 就自动获得大整数执行能力；其实现需要读取下列接口。
 
-大整数规划由 `crafting.aelis.enable_big_integer_planning` 配置控制，默认开启，同时需开启长数量输入。
+自动 AELIS 的大整数算术偏好由 `crafting.aelis.enable_big_integer_planning` 控制，默认开启；显式精确请求不受该开关阻止。终端输入仍按所选订单模式。
 `crafting.max_crafting_order_amount` 选择 `BIG_INTEGER` 才接管超 long 订单；`LONG_MAX` 仅接管 long 范围，`DISABLED` 保持原生处理。
-网络输入最多 256 位十进制正整数，这是载荷资源预算，不是 CPU 能力检查。
-不支持精确求解的配方分支会报规划失败，不回退成截断的原生订单。
+已移除 256 位订单限制，输入和网络接受更长数字；网络传输仍有 1,048,576 字符的载荷边界，不属于 CPU 能力拒绝。
+优化失败后允许回到原生 AE 继续计算。原生仅接受 long 投影，回退结果按实际计算数量记录；不能把接受提交当成任意精度执行保证。
 
 ## CPU 获取精确计划
 
@@ -113,7 +113,7 @@ plan = AelisExactCraftingPlanApi.attachExecutionMetadata(plan, output, tasks, in
 
 ## 本次验证
 
-- 单元测试覆盖 19/20 位输入、256 位载荷、跨 long 的交付账本、取消范围恢复。
+- 单元测试覆盖 19/20 位输入、超过 256 位载荷、跨 long 的交付账本、取消范围恢复。
 - 开发服务器验证真实 Mixin 下的大整数材料规划。
 - Omni 开发服务器验证真实 CPU 的任务提交计数、SIMULATE 不扣量、实际交付跨 long、NBT 保存恢复、最后一个产物才完成。
 - 开发验证用的是受控配方和合成的提供者接受回调，不等同于运行整合包中所有机器配方。

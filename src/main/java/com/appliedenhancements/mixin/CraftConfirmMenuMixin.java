@@ -25,7 +25,6 @@ import com.appliedenhancements.runtime.CraftingProgressTaskBinding;
 import com.appliedenhancements.runtime.DataEnergisticsMenuCompat;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.appliedenhancements.runtime.TerminalAwareFuture;
-import com.github.appliedenhancements.crafting.aelis.AelisOrderedChoicePlanningRejectedException;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressHandle;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressRequester;
@@ -65,8 +64,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
     @Override public boolean appliedenhancements$planExact(AEKey what, BigInteger requested) {
         var request = new com.appliedenhancements.api.AelisExactRequest(requested);
-        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()
-                || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return false;
+        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()) return false;
         return appliedenhancements$planRequested(what, request.projection(), CalculationStrategy.REPORT_MISSING_ITEMS, requested);
     }
     @Unique
@@ -341,7 +339,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         }
         try {
             Future<ICraftingPlan> rawJob = exact != null
-                    ? com.appliedenhancements.api.AelisExactCraftingService.begin(menu.getLevel(), effectiveRequester, what, exact)
+                    ? com.appliedenhancements.api.AelisExactCraftingService.begin(menu.getLevel(), effectiveRequester,
+                            new com.appliedenhancements.api.AelisCraftingRequest(what, exact, strategy))
                     : grid.getCraftingService().beginCraftingCalculation(
                     menu.getLevel(),
                     effectiveRequester,
@@ -361,7 +360,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     private void appliedenhancements$replanLong(CallbackInfo callback) {
         var menu = (CraftConfirmMenu) (Object) this;
         if (!menu.isClientSide() && appliedenhancements$exactRequestedAmount != null && whatToCraft != null) {
-            if (!appliedenhancements$planExact(whatToCraft, appliedenhancements$exactRequestedAmount)) menu.goBack();
+            if (!appliedenhancements$planRequested(whatToCraft,
+                    new com.appliedenhancements.api.AelisExactRequest(appliedenhancements$exactRequestedAmount).projection(),
+                    CalculationStrategy.CRAFT_LESS, appliedenhancements$exactRequestedAmount)) menu.goBack();
             callback.cancel(); return;
         }
         if (menu.isClientSide() || appliedenhancements$requestedAmount <= Integer.MAX_VALUE
@@ -473,18 +474,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                         return;
                     }
                     appliedenhancements$finishFailedProgress(progressTask, failure);
-                    var orderedChoiceRejection =
-                            AelisOrderedChoicePlanningRejectedException.find(failure);
-                    if (com.github.appliedenhancements.crafting.aelis.AelisPlanningLimitException.causedBy(failure)) {
-                        ((CraftConfirmMenu) (Object) this).getPlayer().sendSystemMessage(
-                                Component.translatable("message.appliedenhancements.planning_path_limit"));
-                    } else if (orderedChoiceRejection != null) {
-                        ((CraftConfirmMenu) (Object) this).getPlayer().sendSystemMessage(
-                                Component.translatable(
-                                        "message.appliedenhancements.ordered_choice_native_too_large",
-                                        orderedChoiceRejection.requestedItems(),
-                                        orderedChoiceRejection.maxLinearNativeItems()));
-                    }
+
                 },
                 () -> {
                     if (appliedenhancements$progressBinding.isCurrent(progressTask)

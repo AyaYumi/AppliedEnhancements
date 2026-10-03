@@ -10,8 +10,9 @@ batching; true preserves the external wrapper and bypasses a second local scale.
 
 Optional wrappers are read through cached class access to `getOriginal()` and their
 native multiplier. They do not need or receive `AelisScaledPattern`. Exact task
-metadata is still checked: native splits and remainders are retained when their
-weighted sum equals the source work. A saturated long preview keeps a BigInteger
+metadata retains native splits when their weighted sum matches the source work.
+A mismatched finite projection is repaired with an exact remainder; unreadable or
+unrecognized rewrites restore original exact tasks instead of rejecting planning. A saturated long preview keeps a BigInteger
 ledger, so bypassing a second scale does not truncate the requested output. Unknown
 wrappers cannot be inferred from their name or from the presence of a provider mod.
 
@@ -25,5 +26,5 @@ EAEP 每个样板启用倍增时才绕过；仅安装附属不会绕过全部任
 倍率包装也直接保留。Omni 使用同一查询跳过再次包装和运行时批量扩展，关闭倍增的
 普通样板继续走本地批量路径。
 
-绕过倍率不等于丢弃数量记录。Applied 仍验证原生拆分和尾数的总合成量，保留大整数
-任务账本。可选接口发现按类缓存，开关实时读取，不访问 AE 网络、不新增每 tick 全网扫描。
+绕过倍率不等于丢弃数量记录。Applied 保留大整数任务账本；有限投影不一致时补足尾数，
+无法识别或读取倍率改写时恢复原始任务继续，不再抛规划拒绝异常。可选接口发现按类缓存，开关实时读取，不访问 AE 网络、不新增每 tick 全网扫描。

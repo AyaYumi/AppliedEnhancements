@@ -36,8 +36,7 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         var menu = (CraftAmountMenu) (Object) this;
         if (menu.isClientSide() || whatToCraft == null || amount.signum() <= 0) return;
         if (amount.bitLength() <= 63) { appliedenhancements$confirmLong(amount.longValueExact(), missing, autoStart); return; }
-        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()
-                || !Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) return;
+        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()) return;
         new com.appliedenhancements.api.AelisExactRequest(amount);
         if (!(menu.getPlayer() instanceof ServerPlayer player) || menu.getLocator() == null
                 || !(menu.getTarget() instanceof IActionHost target) || target.getActionableNode() == null) return;

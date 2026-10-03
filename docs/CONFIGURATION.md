@@ -6,11 +6,11 @@ in the active instance. Edit existing sections and restart both sides.
 
 | Path | Default | Behavior / range |
 | --- | --- | --- |
-| `crafting.max_crafting_order_amount` | DISABLED | DISABLED native; LONG_MAX long input; BIG_INTEGER exact input up to 256 decimal digits |
+| `crafting.max_crafting_order_amount` | DISABLED | DISABLED native; LONG_MAX long input; BIG_INTEGER exact input without the former 256-digit order limit |
 | `crafting.enable_progress_display` | false | Calculation progress and planner-path display |
 | `crafting.enable_enhanced_material_calculation` | false | Enhanced preview stock/crafting/missing statistics |
 | `crafting.aelis.enable_automatic_planner` | false | Automatic AELIS interception and manual-plan stock reservations |
-| `crafting.aelis.enable_big_integer_planning` | true | Exact intermediate demand and plan metadata; does not independently enable automatic AELIS |
+| `crafting.aelis.enable_big_integer_planning` | true | Exact automatic AELIS arithmetic preference; explicit exact service requests remain exact even when false |
 | `crafting.aelis.max_nodes` | 100000 | 1000–1,000,000 nodes per attempt |
 | `crafting.aelis.compile_budget_ms` | 2000 | 100–30000 ms per compile attempt |
 | `crafting.aelis.enable_diagnostics` | false | Optional process summaries, one-minute global template limit |
@@ -57,7 +57,7 @@ without modifying the operation's rejection, retry, cancellation or owned inputs
 
 上表覆盖当前全部 17 项配置，注释与界面翻译支持中英文。订单模式为三选一：
 关闭接管、long 上限、大整数。自动 AELIS 与大整数规划分别控制自动介入和精确
-算术；需要按使用场景开启，不能把 long 投影当作完整订单或无限来源。
+算术偏好；显式精确请求不受偏好开关阻止，不能把 long 投影当作完整订单或无限来源。
 
 无限元件通过标签、运行标记或明确兼容来源识别；普通大容量元件不会因数字很大
 被视为无限。修改已有节后重启，旧配置迁移会保存备份。诊断仅在排查时开启，

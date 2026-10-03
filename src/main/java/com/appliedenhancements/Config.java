@@ -96,10 +96,10 @@ public final class Config {
                 .comment(
                         "Use exact BigInteger arithmetic for AELIS orders and intermediate demands above Long.MAX_VALUE.",
                         "Long projections are for compatibility; CPUs decide execution and can read the exact execution API.",
-                        "When disabled, AELIS retains the legacy long-overflow fallback behavior.",
+                        "When disabled, automatic AELIS uses legacy long arithmetic; explicit exact API requests remain exact.",
                         "对超过 Long.MAX_VALUE 的订单和 AELIS 中间需求使用精确 BigInteger 算术。",
                         "long 投影仅供兼容；由 CPU 自行决定执行，并可读取精确执行 API。",
-                        "关闭后，AELIS 保留原有的 long 溢出回退行为。",
+                        "关闭后，自动 AELIS 使用原有 long 算术；显式精确 API 请求仍使用大整数。",
                         "Default / 默认值: true")
                 .translation("appliedenhancements.config.enable_aelis_big_integer_planning")
                 .define("enable_big_integer_planning", true);

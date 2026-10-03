@@ -10,8 +10,7 @@ public final class ServerConfigSyncState {
     private static volatile Values synchronizedValues;
     private static volatile Boolean exactEnabled;
     public static boolean isBigIntegerEnabled() {
-        return current().craftingOrderMode().supportsBigInteger()
-                && (exactEnabled == null ? Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() : exactEnabled);
+        return current().craftingOrderMode().supportsBigInteger();
     }
 
     private ServerConfigSyncState() {
