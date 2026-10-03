@@ -58,6 +58,14 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
         appliedenhancements$ignoredSeeds.put(key, available);
     }
 
+    @Inject(method = "addCrafting", at = @At("HEAD"))
+    private void appliedenhancements$recordNativeCrafting(IPatternDetails details, long count,
+            CallbackInfo callback) {
+        if (CraftingPlannerIntervention.enabled()) {
+            appliedenhancements$recordBigIntegerCrafting(details, count);
+        }
+    }
+
     @Unique
     private final Map<AEKey, Long> appliedenhancements$cyclicCraftAmounts =
             new LinkedHashMap<>();

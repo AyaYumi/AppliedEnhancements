@@ -1,5 +1,17 @@
 # Changes / 本版变更
 
+## 1.1.1 — native arithmetic interception removal / 移除原生算术拦截
+
+- Removed Applied's native AE2 64-bit planner rejection and all five rejection Mixins. Maximum-valued cobblestone/water inventory and returned byproducts no longer trigger `UnsafeNativeCraftingRequestException` from this mod.
+- Retained exact native task accumulation, CPU progress projections, marked infinite-source handling, smart-doubling compatibility and TPS budgets. Native AE2 arithmetic now runs without this rejection; paired Omni still saturates its shared KeyCounter.
+- Other operation checks remain unchanged and are listed in [the interception inventory](remaining-interceptions.md) for review.
+
+中文
+
+- 删除 Applied 对原生 AE2 64 位规划算术的拒绝逻辑和五处拦截 Mixin，圆石／水库存上限与副产物不再触发本模组的该异常。
+- 保留精确任务累计、CPU 进度投影、已标记无限来源处理、原生智能倍增兼容与 TPS 工作预算。取消拒绝不代表原生 long 算术变成任意精度；配套 Omni 的 KeyCounter 饱和处理仍保留。
+- 其他检查尚未删除，已整理成带编号的清单供确认。
+
 ## 1.1.1
 
 - Native smart-doubling patterns bypass local plan rewrites. EAEP enabled state is checked per pattern; Useless/EAEP wrappers keep their native interfaces and exact multiplier, without adding `AelisScaledPattern`.

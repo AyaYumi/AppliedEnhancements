@@ -23,7 +23,6 @@ import com.appliedenhancements.Config;
 import com.appliedenhancements.runtime.CraftingProgressSnapshotOrder;
 import com.appliedenhancements.runtime.CraftingProgressTaskBinding;
 import com.appliedenhancements.runtime.DataEnergisticsMenuCompat;
-import com.appliedenhancements.runtime.NativeCraftingLongSafety;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.appliedenhancements.runtime.TerminalAwareFuture;
 import com.github.appliedenhancements.crafting.aelis.AelisOrderedChoicePlanningRejectedException;
@@ -294,13 +293,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                 || !Config.MAX_CRAFTING_ORDER_AMOUNT.get().isEnabled()) {
             return false;
         }
-        long maximumAmount = Long.MAX_VALUE;
-        if (NativeCraftingLongSafety.exceedsConfiguredLimit(requestedAmount, maximumAmount)) {
-            menu.getPlayer().sendSystemMessage(Component.translatable(
-                    "message.appliedenhancements.crafting_amount_too_large", maximumAmount));
-            return false;
-        }
-
         appliedenhancements$cancelProgress();
         appliedenhancements$releaseInventoryReservation();
         appliedenhancements$calculationStrategy = strategy;
@@ -492,11 +484,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                                         "message.appliedenhancements.ordered_choice_native_too_large",
                                         orderedChoiceRejection.requestedItems(),
                                         orderedChoiceRejection.maxLinearNativeItems()));
-                    } else if (NativeCraftingLongSafety.causedByUnsafeArithmetic(failure)) {
-                        ((CraftConfirmMenu) (Object) this).getPlayer().sendSystemMessage(
-                                Component.translatable(
-                                        "message.appliedenhancements.crafting_amount_unsafe",
-                                        requestedAmount));
                     }
                 },
                 () -> {

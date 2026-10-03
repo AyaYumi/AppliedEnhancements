@@ -21,3 +21,5 @@ Planning futures are asynchronous; never block the server thread on get().
 本版新增原生智能倍增状态查询，保留共享批量投料上下文。能力上限不代替真实材料、机器容量或持久所有权。
 客户端接口只在客户端加载，可选附属兼容类只在对应模组存在时加载。历史个人机器
 验证报告已移出项目，公开文档描述当前源码契约与可重复验证方法。
+
+[Remaining interceptions / 剩余拦截清单](remaining-interceptions.md) — numbered operation checks, fallbacks and TPS limits across both maintained Minecraft versions.

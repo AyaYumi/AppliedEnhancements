@@ -36,6 +36,12 @@ stock reserved by other open confirmations is excluded from new plans and
 extraction. Current explicitly infinite sources are excluded from finite locks;
 marking is determined by the current cell and access, not by a Long.MAX_VALUE count.
 
+## Native arithmetic and remaining checks
+
+Applied no longer rejects native AE2 plans for 64-bit arithmetic overflow. Exact
+task accounting and saturated progress projections remain. Other rejection,
+fallback and performance controls are documented in [the interception inventory](remaining-interceptions.md).
+
 ## Migration and logs
 
 Old split/pre-AELIS options migrate to the current functional sections with backups.

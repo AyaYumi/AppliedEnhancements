@@ -23,7 +23,7 @@ import com.appliedenhancements.api.AelisCycleRuntimeController;
 import com.appliedenhancements.runtime.AelisCycleDispatchScope;
 import com.appliedenhancements.runtime.AelisCycleRuntimePreparation;
 import com.appliedenhancements.runtime.DataEnergisticsOrderCompletion;
-import com.appliedenhancements.runtime.NativeCraftingLongSafety;
+import com.appliedenhancements.runtime.CraftingAmountProjection;
 
 import appeng.api.config.Actionable;
 import appeng.api.crafting.IPatternDetails;
@@ -237,9 +237,9 @@ public abstract class CraftingCpuLogicBatchMixin {
                     .appliedenhancements$getValue();
             for (var output : task.getKey().getOutputs()) {
                 if (template.matches(output)) {
-                    count = NativeCraftingLongSafety.saturatingAddNonNegative(
+                    count = CraftingAmountProjection.saturatingAddNonNegative(
                             count,
-                            NativeCraftingLongSafety.saturatingMultiplyNonNegative(
+                            CraftingAmountProjection.saturatingMultiplyNonNegative(
                                     output.amount(), taskCount));
                 }
             }
@@ -262,9 +262,9 @@ public abstract class CraftingCpuLogicBatchMixin {
             long taskCount = ((ExecutingCraftingTaskProgressAccessor) task.getValue())
                     .appliedenhancements$getValue();
             for (var stack : task.getKey().getOutputs()) {
-                long amount = NativeCraftingLongSafety.saturatingMultiplyNonNegative(
+                long amount = CraftingAmountProjection.saturatingMultiplyNonNegative(
                         stack.amount(), taskCount);
-                output.set(stack.what(), NativeCraftingLongSafety.saturatingAddNonNegative(
+                output.set(stack.what(), CraftingAmountProjection.saturatingAddNonNegative(
                         output.get(stack.what()), amount));
             }
         }
@@ -275,7 +275,7 @@ public abstract class CraftingCpuLogicBatchMixin {
     private static void appliedenhancements$mergeDisplayedItems(
             KeyCounter target, KeyCounter source) {
         for (var entry : source) {
-            target.set(entry.getKey(), NativeCraftingLongSafety.saturatingAddNonNegative(
+            target.set(entry.getKey(), CraftingAmountProjection.saturatingAddNonNegative(
                     target.get(entry.getKey()), entry.getLongValue()));
         }
     }
