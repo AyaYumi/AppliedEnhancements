@@ -1,6 +1,5 @@
 package com.appliedenhancements.integration.jei;
 
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.client.menu.NetworkItemContextMenu;
 import com.appliedenhancements.client.menu.NetworkItemContextMenu.ActionEntry;
 import com.appliedenhancements.client.menu.OptionalJeiItemContextMenu;
@@ -63,7 +62,7 @@ final class JeiItemContextMenuHandler
         try {
             openCaptured(screen, mouseX, mouseY, hovered.orElseThrow());
         } catch (RuntimeException failure) {
-            AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Failed to build JEI ingredient context menu", failure);
             menu.close();
         }

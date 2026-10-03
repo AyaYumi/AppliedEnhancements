@@ -4,8 +4,8 @@ import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
 import java.time.Duration;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.LongSupplier;
 
 /** Keeps repeated crafting and compatibility failures from flooding logs. */
@@ -29,11 +29,34 @@ public final class AelisPlanningLog {
         }
     }
 
+    /** Detailed process messages remain opt-in and share the global template window. */
+    public static void trace(String message, Object... arguments) {
+        diagnostic(message, message, arguments);
+    }
+
+    public static void warn(String message, Object... arguments) {
+        warning(message, message, arguments);
+    }
+
+    public static void error(String message, Object... arguments) {
+        if (AppliedEnhancements.LOGGER.isErrorEnabled() && LIMITER.permit("error:" + message)) {
+            AppliedEnhancements.LOGGER.error(message, arguments);
+        }
+    }
+
+    public static void debug(String message, Object... arguments) {
+        if (AppliedEnhancements.LOGGER.isDebugEnabled() && LIMITER.permit("debug:" + message)) {
+            AppliedEnhancements.LOGGER.debug(message, arguments);
+        }
+    }
+
     static final class RateLimiter {
         private final long intervalNanos;
         private final int maximumCategories;
         private final LongSupplier clock;
-        private final ConcurrentHashMap<String, Long> lastEmission = new ConcurrentHashMap<>();
+        private final Map<String, Long> lastEmission = new HashMap<>();
+        private boolean overflowRecorded;
+        private long overflowEmission;
 
         RateLimiter(long intervalNanos, int maximumCategories, LongSupplier clock) {
             if (intervalNanos <= 0 || maximumCategories <= 0) {
@@ -44,22 +67,21 @@ public final class AelisPlanningLog {
             this.clock = Objects.requireNonNull(clock, "clock");
         }
 
-        boolean permit(String category) {
+        synchronized boolean permit(String category) {
             Objects.requireNonNull(category, "category");
-            if (!lastEmission.containsKey(category)
-                    && lastEmission.size() >= maximumCategories) {
-                lastEmission.clear();
-            }
             long now = clock.getAsLong();
-            var permitted = new AtomicBoolean();
-            lastEmission.compute(category, (ignored, previous) -> {
-                if (previous == null || now - previous >= intervalNanos) {
-                    permitted.set(true);
-                    return now;
-                }
-                return previous;
-            });
-            return permitted.get();
+            var previous = lastEmission.get(category);
+            if (previous != null && now - previous < intervalNanos) return false;
+            if (previous == null && lastEmission.size() >= maximumCategories) {
+                // Preserve known categories. Excess categories share one bounded
+                // window instead of clearing history and letting retries flood logs.
+                if (overflowRecorded && now - overflowEmission < intervalNanos) return false;
+                overflowRecorded = true;
+                overflowEmission = now;
+                return true;
+            }
+            lastEmission.put(category, now);
+            return true;
         }
     }
 }

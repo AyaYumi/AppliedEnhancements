@@ -4,7 +4,12 @@
 
 Exact CPU execution: see [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md) for CPU-independent exact plans, output progress and persistence. OmniSequence is one consumer, not an execution whitelist.
 
-This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.0.9-fix`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+The current `1.1.0` source defaults to AE2 `19.2.18` and retains
+the `[19.2.17,)` dependency range. CI builds both supported patches. Public API
+signatures use AE2 types; internal CPU display hooks are isolated compatibility
+implementation and require runtime verification after dependency changes.
+
+This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.1.0`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 ## Compatibility baseline
 
@@ -13,10 +18,10 @@ This guide is intended for NeoForge mod authors integrating with Applied Enhance
 | Minecraft | `1.21.1` | Declared game range: `[1.21.1]` |
 | Java | `21` | Compilation and runtime target |
 | NeoForge | `21.1.220` | Build/runtime validation version; currently declared range: `[21.1.220,)` |
-| Applied Energistics 2 | `19.2.17` | Declared range: `[19.2.17,)`; public signatures directly reference AE2 types |
-| Applied Enhancements | `1.0.9-fix` | Version covered by this guide |
+| Applied Energistics 2 | `19.2.18` | Declared range: `[19.2.17,)`; public signatures directly reference AE2 types |
+| Applied Enhancements | `1.1.0` | Version covered by this guide |
 
-Version `1.0.9-fix` preserves the public Java API signatures from `1.0.8`, adds stable BigInteger request and plan metadata types, and advances the internal payload protocol to `9` for exact BigInteger crafted, missing, supplied-from-storage totals and storage byte estimates. Existing callers can adopt this release without changing legacy API calls, but networked clients and servers must use the same release. Integrations that submit cycle plans to native AE2 or AdvancedAE quantum CPUs should require `1.0.9` or newer, as in the dependency examples below.
+Version `1.1.0` retains existing public APIs and adds `AelisBatchExecutionContext` for shared extraction/ownership transactions. Clients and servers use the same build; the internal payload protocol remains `9`. Consumers of this new context must require `1.1.0` at compile time and runtime.
 
 BigInteger plans are submitted without a universal CPU capability precheck. A saturated long projection does not force `simulation()` or override the CPU's submission result. Server-side integrations should read exact quantities through `AelisExactCraftingPlanApi.read(plan)`; `AelisCycleExecutionApi.copyMetadata` preserves them. The legacy `isPreviewOnly` marker now only indicates a saturated projection. The standard long fields remain projections, so acceptance by an unadapted CPU does not establish exact BigInteger execution support.
 
@@ -38,7 +43,7 @@ The following are implementation details and do not carry source or binary compa
 - `com.github.appliedenhancements`;
 - bridges, payloads, constants, and other classes outside the public API packages.
 
-## Exact planning and metadata in 1.0.9-fix
+## Exact planning and metadata in 1.1.0
 
 Call `AelisExactCraftingService.begin` on the server thread, then wait asynchronously for the result. A request must have a positive quantity of at most 256 decimal digits. Only `REPORT_MISSING_ITEMS` is supported; `CRAFT_LESS` is rejected explicitly.
 
@@ -56,7 +61,7 @@ The immutable snapshot exposes final output, bytes, crafted/missing/stored/infin
 
 When `Result.shouldFallback()` is true, `fallbackCategory()` supplies a stable `AelisFallbackReason` instead of requiring string parsing. Unknown details map to `OTHER`, errors to `INTERNAL_ERROR`, and success or branch failure to `NONE`. Both the AELIS and legacy MaxFast results expose this query; diagnostic text remains available.
 
-Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and the exact service remains gated by `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.0.9-fix` build when using the new types.
+Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and the exact service remains gated by `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.1.0` build when using the new types.
 
 ## Development dependency
 
@@ -66,13 +71,13 @@ Applied Enhancements does not yet publish a separate Maven API artifact. Place t
 dependencies {
     // Integrations normally depend on AE2 directly because its types appear
     // in the public Applied Enhancements signatures.
-    compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
+    compileOnly "org.appliedenergistics:appliedenergistics2:19.2.18"
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly files("libs/appliedenhancements-1.0.9-fix.jar")
+    compileOnly files("libs/appliedenhancements-1.1.0.jar")
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly files("libs/appliedenhancements-1.0.9-fix.jar")
+    runtimeOnly files("libs/appliedenhancements-1.1.0.jar")
 }
 ```
 
@@ -82,7 +87,7 @@ If your integration unconditionally loads Applied Enhancements API classes, decl
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.9,)"
+versionRange="[1.1.0,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -93,7 +98,7 @@ If all API references are isolated behind an optional compatibility layer, decla
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.9,)"
+versionRange="[1.1.0,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -142,7 +147,7 @@ The main integration types are listed below; exact request and metadata types ar
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.0.9-fix` uses internal payload protocol `9`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.0` uses internal payload protocol `9`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 
@@ -272,6 +277,8 @@ Always use the returned plan: custom implementations may be wrapped. These metho
 
 ## 2. Cycle-aware CPU execution
 
+Batch CPU integrations also follow the [shared extraction transaction](BATCH_EXECUTION_API.md): one inventory view for initial and extra extraction, actual count and durable ownership confirmation.
+
 AE2's native CPU and AdvancedAE quantum CPUs are supported automatically. A custom `ICraftingCPU` that can receive AELIS cycle plans must implement `AelisCycleAwareCpu` and use the public runtime metadata:
 
 ```java
@@ -336,9 +343,9 @@ External CPU integrations can perform normalization, guarded input access and pe
 
 Call `preparePlan` before constructing the CPU's task map; reading `getPlan` alone does not replace that map. A guarded inventory belongs to one extraction attempt and cannot be cached across pattern changes or runtime advancement. `dispatchedCrafts` does not advance the controller. A step with no protected inputs is valid, but this helper cannot infer its actual firing count; the host must provide a verified count bounded by `remainingCrafts()` before calling `patternDispatched`.
 
-Version `1.0.9-fix` retains the Forge CPU Mixin priority adjustment (1100 to 900) for the AE2 Crafting Time compatibility report. This orders the native and AdvancedAE integrations after default-priority mixins; successful builds and unit tests do not establish runtime compatibility with other addons.
+Version `1.1.0` retains the Forge CPU Mixin priority adjustment (1100 to 900) for the AE2 Crafting Time compatibility report. This orders the native and AdvancedAE integrations after default-priority mixins; successful builds and unit tests do not establish runtime compatibility with other addons.
 
-Since `1.0.7`, the built-in native AE2 and AdvancedAE quantum CPU integrations count a single provider push as one craft when the active step has no protected inputs. They retain strict counting when protected inputs are present and restore cycle runtime state when the provider rejects or fails the push. This fix does not change the public `dispatchedCrafts` contract: custom CPUs must determine their own actual count for such steps, including any batching they perform. An empty protected-input map does not necessarily mean the pattern itself has no ingredients.
+The current native AE2 and AdvancedAE integrations share one protected inventory across the first extraction, batch expansion and rollback. `AelisBatchExecutionContext.beginDispatch` registers the actual accepted craft count; native provider hooks recognize the enclosing transaction and avoid advancing twice. Rejection restores the runtime ledger; confirm acceptance once material ownership transfers. Custom CPUs must use their actual batch count. An empty protected-input map does not imply a recipe has no ingredients.
 
 ```java
 plan = AelisCycleExecutionApi.preparePlan(plan);
@@ -629,7 +636,7 @@ Disabling the session clears selection and the cut buffer. `clear()` clears buff
 
 ## 8. Network-item context-menu extensions
 
-Starting with `1.0.5`, built-in item-action menus use their own configurable binding, **Open Item Actions Menu**, defaulting to **Alt + right-click**. Pattern Quick Move Cut/Paste uses **Open Pattern Quick Move Menu**, defaulting to **right-click**. Both bindings honor NeoForge modifiers and GUI context. The old shared binding is retained for pattern Quick Move, so a saved right-click mapping does not overwrite the new item-action default. Compatible registered screens receive this separation automatically; registering menu entries does not change either binding. Custom screens own their input routing and must keep the two actions separate. Public Java API signatures and payload protocol `3` are unchanged by this split.
+Starting with `1.0.5`, built-in item-action menus use their own configurable binding, **Open Item Actions Menu**, defaulting to **Alt + right-click**. Pattern Quick Move Cut/Paste uses **Open Pattern Quick Move Menu**, defaulting to **right-click**. Both bindings honor NeoForge modifiers and GUI context. The old shared binding is retained for pattern Quick Move, so a saved right-click mapping does not overwrite the new item-action default. Compatible registered screens receive this separation automatically; registering menu entries does not change either binding. Custom screens own their input routing and must keep the two actions separate. The split retains public API signatures; the current overall build uses payload protocol `9`.
 
 Register entry providers during Client Setup:
 
@@ -709,7 +716,7 @@ These features require AE2 Java types, client UI integration, or server-authorit
 
 ## Pre-release integration checklist
 
-See the [release validation scope](../README.md#validation) for the `1.0.9-fix` build and repository unit suite, including public API metadata coverage, the regression test for provider pushes without protected inputs, existing API/seed integration records, and earlier keybinding and crafting runtime results. The separate runtime harness and dependency-provided GameTests are not the repository's default unit suite; a custom CPU must still verify its own integration boundaries.
+See [development and verification](DEVELOPMENT.md) for current build and regression instructions. The unit suite covers public metadata, cycle dispatch, inventory reservations and exact quantity protection. Custom CPUs must also verify their real admission, rollback and cancellation boundaries.
 
 - [ ] Imports are limited to the stable API packages.
 - [ ] Optional compatibility classes cannot load when Applied Enhancements is absent.

@@ -207,3 +207,31 @@ idea {
         downloadJavadoc = true
     }
 }
+
+// Ship current source documentation, while generated JavaDoc remains a build artifact.
+tasks.named('jar', Jar).configure {
+    includeEmptyDirs = false
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from('LICENSE')
+    from('docs') {
+        include '*.md'
+        into 'docs'
+    }
+}
+
+tasks.register('apiJavadoc', Javadoc) {
+    group = 'documentation'
+    description = 'Generate public planning, batch, storage and client integration API docs.'
+    dependsOn tasks.named('classes')
+    source = sourceSets.main.java.matching {
+        include 'com/appliedenhancements/api/**/*.java'
+    }
+    classpath = sourceSets.main.compileClasspath + sourceSets.main.output
+    destinationDir = layout.buildDirectory.dir('docs/api').get().asFile
+    options.encoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+    options.memberLevel = JavadocMemberLevel.PUBLIC
+    options.addBooleanOption('Xdoclint:none', true)
+    options.windowTitle = 'Applied Enhancements 1.1.0 API'
+}

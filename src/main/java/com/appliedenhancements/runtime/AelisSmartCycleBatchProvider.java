@@ -32,7 +32,6 @@ public final class AelisSmartCycleBatchProvider {
     private static final int USEFUL_COIL_TIER = 10;
     /** Keep one native Useless submission comfortably below an AE2 tick. */
     private static final long ADAPTIVE_TARGET_NANOS = 8_000_000L;
-    private static volatile long lastDiagnosticNanos;
     private static final AdaptiveSegmentController ADAPTIVE_SEGMENTS =
             new AdaptiveSegmentController();
 
@@ -43,12 +42,7 @@ public final class AelisSmartCycleBatchProvider {
         if (!Config.AELIS_DIAGNOSTICS.get()) {
             return;
         }
-        long now = System.nanoTime();
-        if (now - lastDiagnosticNanos < 2_000_000_000L) {
-            return;
-        }
-        lastDiagnosticNanos = now;
-        com.appliedenhancements.AppliedEnhancements.LOGGER.info(
+        com.appliedenhancements.runtime.AelisPlanningLog.trace(
                 "Useless alloy-furnace bigint adapter: outcome={}, provider={}, requested={}, admitted={}, coilTier={}, freeThreads={}",
                 outcome,
                 provider == null ? "null" : provider.getClass().getName(),
@@ -134,7 +128,7 @@ public final class AelisSmartCycleBatchProvider {
         } catch (ClassNotFoundException unavailable) {
             // OmniSequence is optional for AppliedEnhancements.
         } catch (ReflectiveOperationException | RuntimeException | LinkageError failure) {
-            com.appliedenhancements.AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Could not register the Useless alloy-furnace bigint adapter",
                     failure);
         }
@@ -205,7 +199,7 @@ public final class AelisSmartCycleBatchProvider {
         } catch (ClassNotFoundException unavailable) {
             // OmniSequence is optional for AppliedEnhancements.
         } catch (ReflectiveOperationException | RuntimeException | LinkageError failure) {
-            com.appliedenhancements.AppliedEnhancements.LOGGER.warn(
+            com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Could not register the Useless alloy-furnace immediate-output adapter",
                     failure);
         }
@@ -555,10 +549,16 @@ public final class AelisSmartCycleBatchProvider {
                             requested, BigInteger.ZERO, coil, 0);
                     return BigInteger.ZERO;
                 }
+                // The boolean flag selects whether queued crafting outputs are
+                // counted as occupied AE tasks.  A queued output is already
+                // bounded separately by Useless' native bigint push and must
+                // not consume a parallel task slot here: doing so makes a
+                // second recipe report zero capacity while the machine still
+                // has an active task slot available.
                 int remainingThreads = Math.max(0, getRemainingAETaskCount == null
                         ? (int) getMaxAETaskCount.invoke(controller)
                         : (int) getRemainingAETaskCount.invoke(
-                                controller, true));
+                                controller, false));
                 int machineThreads = Math.max(1,
                         (int) getMaxAETaskCount.invoke(controller));
                 long operations = (long) operationsPerPush.invoke(null, pattern);

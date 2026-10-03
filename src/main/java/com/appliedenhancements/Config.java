@@ -127,9 +127,9 @@ public final class Config {
         AELIS_DIAGNOSTICS = builder
                 .comment(
                         "Enable detailed AELIS planning diagnostics.",
-                        "WARNING: This produces a large amount of log output.",
+                        "Repeated templates share a server-wide one-minute rate limit.",
                         "启用 AELIS 规划诊断详情。",
-                        "警告：这会产生大量日志输出。",
+                        "重复消息模板共享服务器全局一分钟限流。",
                         "Default / 默认值: false")
                 .translation("appliedenhancements.config.aelis_diagnostics")
                 .define("enable_diagnostics", false);

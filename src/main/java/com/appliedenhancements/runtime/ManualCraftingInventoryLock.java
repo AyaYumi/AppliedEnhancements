@@ -75,7 +75,8 @@ public final class ManualCraftingInventoryLock {
             long requested,
             Actionable mode,
             IActionSource source) {
-        if (!enabled() || storage == null || what == null || requested <= 0) {
+        if (com.appliedenhancements.storage.InfiniteStorageSupport.isPhysicalExtract()
+                || !enabled() || storage == null || what == null || requested <= 0) {
             return requested;
         }
         var queries = AVAILABILITY_QUERIES.get();

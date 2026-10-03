@@ -17,7 +17,6 @@ import appeng.me.helpers.PlayerSource;
 import appeng.menu.MenuOpener;
 import appeng.menu.me.crafting.CraftAmountMenu;
 import appeng.menu.me.crafting.CraftConfirmMenu;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
 import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
 import com.appliedenhancements.Config;
@@ -774,7 +773,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             return;
         }
         appliedenhancements$idleTicksWithoutPlanning = 0;
-        AppliedEnhancements.LOGGER.warn(
+        com.appliedenhancements.runtime.AelisPlanningLog.warn(
                 "Crafting plan screen #{} had no planning job for {} ticks; closing it (what={}, amount={})",
                 menu.containerId, APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS,
                 this.whatToCraft, this.amount);

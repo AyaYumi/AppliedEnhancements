@@ -1,7 +1,7 @@
-# 大整数规划与 CPU 执行 API（1.21.1 / 1.0.9-fix 修订版）
+# 大整数规划与 CPU 执行 API（1.21.1 / 1.1.0）
 
 此 API 不依赖 DataEnergistics，也不引用 OmniSequence。OmniSequence 是接入示例，不是允许执行的 CPU 白名单。
-客户端与服务端须使用本次同一构建（网络协议 9）；接入方须使用包含这些类的新版 1.0.9-fix JAR 编译和运行。
+客户端与服务端须使用本次同一构建（网络协议 9）；接入方须使用包含这些类的1.1.0 JAR 编译和运行。
 
 ## 稳定的计划元数据 API
 
@@ -57,7 +57,7 @@ Future<ICraftingPlan> pending = AelisExactCraftingService.begin(
 原生/其他 CPU 不会因为安装 API 就自动获得大整数执行能力；其实现需要读取下列接口。
 
 大整数规划由 `crafting.aelis.enable_big_integer_planning` 配置控制，默认开启，同时需开启长数量输入。
-`MAX_CRAFTING_ORDER_AMOUNT` 为 Long.MAX_VALUE 时允许精确超 long 订单；设置更小值仍作为明确的订单限额。
+`crafting.max_crafting_order_amount` 选择 `BIG_INTEGER` 才接管超 long 订单；`LONG_MAX` 仅接管 long 范围，`DISABLED` 保持原生处理。
 网络输入最多 256 位十进制正整数，这是载荷资源预算，不是 CPU 能力检查。
 不支持精确求解的配方分支会报规划失败，不回退成截断的原生订单。
 
@@ -120,3 +120,10 @@ plan = AelisExactCraftingPlanApi.attachExecutionMetadata(plan, output, tasks, in
 - 万象样板回归：412 项单元测试通过；使用无用之物 2.3.6.3 的真实石头万象样板、智能倍增和提交前二次改写，验证 19 位、20 位及 51 位订单的整批/余数守恒、拒收不扣量、成功接收扣量、取消与存档恢复。NeoForge 21.1.248 + DataEnergistics 3.2.2 + NeoEcoAE 21.2.0-beta3 + LDLib 2.2.39.a 组合验证通过。提供者接受回调仍为受控测试，不声称外部机器能一次收下超 long 材料。
 
 上述游戏内验证来自历史独立开发环境；当前仓库不包含该临时验证源码或对应 Gradle 开关，普通发布 JAR 不包含测试类。当前修订通过仓库单元测试和构建验证，未重新运行上述游戏内场景。
+
+
+## 共享批量投料
+
+本版新增 `AelisBatchExecutionContext`，使循环保护库存、首份抽料、额外批量、
+Provider 钩子和失败回滚使用同一事务。精确计划的存在不代替材料所有权。
+CPU 接入须遵循 [批量执行 API](BATCH_EXECUTION_API.md)。

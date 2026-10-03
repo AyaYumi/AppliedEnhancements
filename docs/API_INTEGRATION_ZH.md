@@ -2,7 +2,11 @@
 
 [English documentation](API_INTEGRATION.md)
 
-本文面向希望接入 Applied Enhancements `1.0.9-fix` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+当前 `1.1.0` 源码默认使用 AE2 `19.2.18`，声明 `[19.2.17,)` 依赖范围，
+CI 构建两个受支持补丁版本。公开 API 使用 AE2 类型；CPU 显示内部钩子属于
+独立兼容实现，依赖更新后仍需实际运行验证。
+
+本文面向希望接入 Applied Enhancements `1.1.0` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -11,10 +15,10 @@
 | Minecraft | `1.21.1` | 声明的游戏范围：`[1.21.1]` |
 | Java | `21` | 编译与运行目标 |
 | NeoForge | `21.1.220` | 构建与运行验证版本；当前声明范围：`[21.1.220,)` |
-| Applied Energistics 2 | `19.2.17` | 声明范围：`[19.2.17,)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.0.9-fix` | 本文档对应版本 |
+| Applied Energistics 2 | `19.2.18` | 声明范围：`[19.2.17,)`；公共接口直接引用 AE2 类型 |
+| Applied Enhancements | `1.1.0` | 本文档对应版本 |
 
-`1.0.9-fix` 保留 `1.0.8` 的公共 Java API 签名，新增稳定的 BigInteger 请求和计划元数据类型，并为精确 BigInteger 待合成、缺失、库存供应总量及存储字节估计同步将内部载荷协议提升到 `9`。已有接入方升级时无须修改旧 API 调用，但联网的客户端与服务端必须使用同一发行版。向原生 AE2 或 AdvancedAE 量子 CPU 提交循环计划的接入方，应按下方示例将最低版本设为 `1.0.9` 或更高。
+`1.1.0` 保留既有公共 API，并增加 `AelisBatchExecutionContext` 共享投料事务。客户端与服务端使用同一构建，内部载荷协议仍为 `9`。使用本版共享批量接口时，编译和运行最低版本设为 `1.1.0`。
 
 BigInteger 计划不做统一 CPU 能力预检。long 投影饱和不会强制 `simulation()`，也不会改写 CPU 的提交结果。服务端接入方应通过 `AelisExactCraftingPlanApi.read(plan)` 读取精确数量；`AelisCycleExecutionApi.copyMetadata` 会保留这些字段。旧名 `isPreviewOnly` 现在只表示投影发生饱和。标准 long 字段仍是投影，未适配 CPU 接受订单不代表已支持完整 BigInteger 执行。
 
@@ -36,7 +40,7 @@ com.appliedenhancements.api.client
 - `com.github.appliedenhancements`；
 - 其他未位于公共 API 包中的桥接类、载荷和常量。
 
-## 1.0.9-fix 精确规划与元数据
+## 1.1.0 精确规划与元数据
 
 在服务器线程调用 `AelisExactCraftingService.begin`，然后异步等待结果。数量必须为不超过 256 位十进制数字的正整数。目前仅支持 `REPORT_MISSING_ITEMS`；传入 `CRAFT_LESS` 会明确报错。
 
@@ -54,7 +58,7 @@ AelisExecutionRequirement requirement = metadata.executionRequirement();
 
 当 `Result.shouldFallback()` 为 true 时，通过 `fallbackCategory()` 获取稳定的 `AelisFallbackReason`，无需解析字符串。未知原因返回 `OTHER`，异常返回 `INTERNAL_ERROR`，成功或分支失败返回 `NONE`。AELIS 和旧 MaxFast 结果均提供此查询，原始诊断文本继续保留。
 
-关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，精确服务仍受 `enable_big_integer_planning` 控制。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.0.9-fix` 构建。
+关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，精确服务仍受 `enable_big_integer_planning` 控制。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.1.0` 构建。
 
 ## 开发环境依赖
 
@@ -63,13 +67,13 @@ AelisExecutionRequirement requirement = metadata.executionRequirement();
 ```groovy
 dependencies {
     // 接入方通常已经直接依赖 AE2；其类型出现在本模组的公共签名中。
-    compileOnly "org.appliedenergistics:appliedenergistics2:19.2.17"
+    compileOnly "org.appliedenergistics:appliedenergistics2:19.2.18"
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly files("libs/appliedenhancements-1.0.9-fix.jar")
+    compileOnly files("libs/appliedenhancements-1.1.0.jar")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly files("libs/appliedenhancements-1.0.9-fix.jar")
+    runtimeOnly files("libs/appliedenhancements-1.1.0.jar")
 }
 ```
 
@@ -79,7 +83,7 @@ dependencies {
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="required"
-versionRange="[1.0.9,)"
+versionRange="[1.1.0,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -90,7 +94,7 @@ side="BOTH"
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 type="optional"
-versionRange="[1.0.9,)"
+versionRange="[1.1.0,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -139,7 +143,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.0.9-fix` 的内部载荷协议为 `9`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.1.0` 的内部载荷协议为 `9`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
@@ -264,6 +268,8 @@ replacement = AelisCycleExecutionApi.copyMetadata(plan, replacement);
 
 ## 2. 循环感知 CPU 执行
 
+批量接入须同时遵循 [共享投料事务](BATCH_EXECUTION_API.md)，尤其是首份抽料与额外抽料使用同一视图、真实次数与材料所有权确认。
+
 AE2 原生 CPU 和 AdvancedAE 量子 CPU 已自动支持。需要接收 AELIS 循环计划的自定义 `ICraftingCPU` 必须实现 `AelisCycleAwareCpu`，并读取公共运行时元数据：
 
 ```java
@@ -328,9 +334,9 @@ if (cyclePlan != null) {
 
 应在构造 CPU 任务表之前调用 `preparePlan`；仅调用 `getPlan` 不会替换该任务表。受保护库存只属于本次提取尝试，不能跨样板或跨运行时推进缓存复用。`dispatchedCrafts` 本身不推进控制器。没有受保护输入的步骤是合法的，但该辅助方法无法推导其实际执行次数；宿主必须自己确定次数，将其限制在 `remainingCrafts()` 内，再调用 `patternDispatched`。
 
-`1.0.9-fix` 保留 Forge 分支针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 优先级调整（1100 改为 900），将原生和 AdvancedAE 接入排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
+`1.1.0` 保留 Forge 分支针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 优先级调整（1100 改为 900），将原生和 AdvancedAE 接入排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
 
-从 `1.0.7` 起，内置原生 AE2 和 AdvancedAE 量子 CPU 接入在当前步骤没有受保护输入时，将单次 Provider 派发按一次合成计数；存在受保护输入时仍严格计数，Provider 拒绝或派发失败时恢复循环运行状态。此修复不改变公共 `dispatchedCrafts` 的约定：独立 CPU 对此类步骤仍需自行确定实际次数，包括自身执行的批量。受保护输入表为空并不一定表示样板本身没有原料。
+本版原生 AE2 与 AdvancedAE 接入让首份抽料、批量扩展和回滚共享同一份循环保护库存视图。使用 `AelisBatchExecutionContext.beginDispatch` 登记真实次数，原生 Provider 钩子识别已有事务，避免重复推进。拒收恢复运行账本；已转移材料所有权后须确认接受。独立 CPU 应读取实际批量次数，不能将受保护输入表为空解释为样板没有原料。
 
 ```java
 plan = AelisCycleExecutionApi.preparePlan(plan);
@@ -611,7 +617,7 @@ public void onClose() {
 
 ## 8. 网络物品右键菜单扩展
 
-从 `1.0.5` 起，内置物品操作菜单使用独立的“打开物品操作菜单”绑定，默认 **Alt＋右键**；样板快速移动的剪切、粘贴使用“打开样板移动菜单”，默认 **右键**。两项均检查 NeoForge 修饰键和 GUI 状态。旧共享绑定保留给样板移动，因此已保存的右键设置不会覆盖新的物品操作默认值。已注册的兼容界面会自动采用这一区分，注册菜单条目不会修改任何绑定。完全自定义的界面需要自行分开处理两类输入。本次拆分不改变公共 Java API 签名，内部载荷协议仍为 `3`。
+从 `1.0.5` 起，内置物品操作菜单使用独立的“打开物品操作菜单”绑定，默认 **Alt＋右键**；样板快速移动的剪切、粘贴使用“打开样板移动菜单”，默认 **右键**。两项均检查 NeoForge 修饰键和 GUI 状态。旧共享绑定保留给样板移动，因此已保存的右键设置不会覆盖新的物品操作默认值。已注册的兼容界面会自动采用这一区分，注册菜单条目不会修改任何绑定。完全自定义的界面需要自行分开处理两类输入。本次拆分不改变公共 Java API 签名，当前整体构建的内部载荷协议为 `9`。
 
 在 Client Setup 中注册菜单项提供器：
 
@@ -687,7 +693,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 
 ## 发布前检查清单
 
-`1.0.9-fix` 构建与仓库单元测试（含公共 API 元数据覆盖、无受保护输入 Provider 派发的回归测试）、已有 API 和种子接入验证记录，以及此前按键和合成运行结果见 [发行验证范围](../README_ZH.md#验证范围)。独立运行验证环境和依赖模组自带的 GameTest 不属于仓库默认单元测试；独立 CPU 仍需验证自己的接入边界。
+当前验证方法与范围见 [开发与验证](DEVELOPMENT.md)。构建运行公共接口、循环、库存预留和数量保护单元测试；独立 CPU 仍须验证自己的实际派发、回滚和取消边界。
 
 - [ ] 只从稳定 API 包导入类型。
 - [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。

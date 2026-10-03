@@ -2,7 +2,6 @@ package com.appliedenhancements.mixin;
 
 import appeng.client.gui.widgets.CPUSelectionList;
 import appeng.core.localization.Tooltips;
-import appeng.menu.me.crafting.CraftingStatusMenu;
 import com.appliedenhancements.constants.InfiniteConstants;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -11,8 +10,6 @@ import net.minecraft.network.chat.MutableComponent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Displays infinite storage and parallelism compactly in AE2 CPU selection screens.
@@ -20,15 +17,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(value = CPUSelectionList.class, remap = false)
 public abstract class CPUSelectionListMixin {
-    @Inject(method = "formatStorage", at = @At("HEAD"), cancellable = true)
-    private void appliedenhancements$formatInfiniteStorage(
-            CraftingStatusMenu.CraftingCpuListEntry cpu,
-            CallbackInfoReturnable<String> callback) {
-        if (cpu.storage() == InfiniteConstants.INFINITE_STORAGE) {
-            callback.setReturnValue("9.2E");
-        }
-    }
-
     @WrapOperation(method = "getTooltip", at = @At(value = "INVOKE",
             target = "Lappeng/core/localization/Tooltips;ofNumber(J)Lnet/minecraft/network/chat/MutableComponent;"))
     private MutableComponent appliedenhancements$tooltipInfiniteParallelism(

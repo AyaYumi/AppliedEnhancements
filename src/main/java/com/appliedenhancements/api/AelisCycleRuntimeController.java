@@ -250,6 +250,15 @@ public final class AelisCycleRuntimeController {
         return new State(stepIndex, remainingCrafts, pendingOutputs);
     }
 
+    /** Restores a rejected dispatch in place so its shared extraction view remains valid. */
+    public void restore(State state) {
+        var validated = new AelisCycleRuntimeController(plan, state, true);
+        stepIndex = validated.stepIndex;
+        remainingCrafts = validated.remainingCrafts;
+        pendingOutputs.clear();
+        pendingOutputs.putAll(validated.pendingOutputs);
+    }
+
     public record State(int stepIndex, long remainingCrafts, Map<AEKey, Long> pendingOutputs) {
         public State(int stepIndex, long remainingCrafts) {
             this(stepIndex, remainingCrafts, Map.of());

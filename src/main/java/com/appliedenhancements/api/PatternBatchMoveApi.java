@@ -1,6 +1,5 @@
 package com.appliedenhancements.api;
 
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.network.PatternBatchMovePayload;
 import java.util.Collection;
 import java.util.Comparator;
@@ -85,7 +84,7 @@ public final class PatternBatchMoveApi {
                 }
             }
         } catch (RuntimeException failure) {
-            AppliedEnhancements.LOGGER.error(
+            com.appliedenhancements.runtime.AelisPlanningLog.error(
                     "Pattern batch move handler failed for menu {}",
                     menu.getClass().getName(), failure);
             return Result.failure(Failure.APPLY_FAILED);

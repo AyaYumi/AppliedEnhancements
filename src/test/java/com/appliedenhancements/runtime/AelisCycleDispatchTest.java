@@ -69,6 +69,22 @@ class AelisCycleDispatchTest {
     }
 
     @Test
+    void nestedCpuHooksShareGuardAndDoNotSubtractSeedFloorTwice() {
+        var runtime = runtime();
+        var inventory = new ListCraftingInventory(ignored -> {});
+        inventory.insert(seed, 20, Actionable.MODULATE);
+        var guarded = AelisCycleDispatch.inventory(runtime, ordinaryPattern, inventory);
+        var nested = AelisCycleDispatch.inventory(runtime, ordinaryPattern, guarded);
+        assertSame(guarded, nested);
+        assertEquals(20 - runtime.requiredRetainedAmount(seed), nested.extract(seed, 100, Actionable.SIMULATE));
+        var cycle = AelisCycleDispatch.inventory(runtime, pattern, inventory);
+        assertSame(cycle, AelisCycleDispatch.inventory(runtime, pattern, cycle));
+        assertEquals(2, cycle.extract(seed, 2, Actionable.MODULATE));
+        assertEquals(4, AelisCycleDispatch.inventory(runtime, pattern, cycle)
+                .extract(seed, 100, Actionable.MODULATE));
+    }
+
+    @Test
     void batchAdvancesByActualCraftCountAndRejectsOverdispatch() {
         var inputs = new KeyCounter();
         inputs.add(seed, 6);
