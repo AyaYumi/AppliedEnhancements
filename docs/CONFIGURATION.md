@@ -1,6 +1,6 @@
 # Configuration / 配置参考
 
-Applied Enhancements **1.1.1-forge** generates `config/appliedenhancements-common.toml`
+Applied Enhancements **1.1.0-forge** generates `config/appliedenhancements-common.toml`
 in the active instance. Edit existing sections and restart both sides.
 [API index](README.md) · [Development](DEVELOPMENT.md)
 

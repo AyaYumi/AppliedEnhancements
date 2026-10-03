@@ -1,6 +1,10 @@
 # Applied Enhancements API / 接口文档
 
-Current: **1.1.1-forge**, Minecraft **1.20.1**, Java **17**, Forge **47.4.20+**,
+Current updated build keeps the 1.1.0-forge version requested by the maintainer and includes subsequent fixes. Use matching JAR contents on both sides, rather than relying on the version string alone.
+
+当前更新构建按维护者要求保留 1.1.0-forge 版本号，并包含后续修复。两端使用相同 JAR 内容，不能仅凭版本字符串判定构建一致。
+
+Current: **1.1.0-forge**, Minecraft **1.20.1**, Java **17**, Forge **47.4.20+**,
 AE2 **15.4.10+**. Network protocol **1.1.0-forge-1** requires matching client/server builds.
 
 | Contract | Documentation |

@@ -1,6 +1,6 @@
 # Native smart doubling / 原生智能倍增
 
-Current: 1.1.1-forge. [API index](README.md).
+Current: 1.1.0-forge. [API index](README.md).
 
 `AelisSmartDoublingApi.isExternallyManaged(pattern)` reads the EAEP
 `eap$allowScaling()` switch and recognizes existing EAEP/Useless scaled wrappers.

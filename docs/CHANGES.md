@@ -1,16 +1,18 @@
 # Changes / 本版变更
 
-## 1.1.1-forge
+## 1.1.0-forge — updated build / 更新构建
 
 - Native smart-doubling patterns bypass local plan rewrites. EAEP enabled state is checked per pattern; Useless/EAEP wrappers keep their native interfaces and exact multiplier, without adding `AelisScaledPattern`.
 - Preserve native provider splits and remainders while reconciling mixed local/external tasks. BigInteger task ledgers retain all work; unknown or inconsistent rewrites remain rejected with the pattern class in the error.
 - Added cached optional ABI access, both Useless submission overloads and regressions for enabled/disabled switches, mixed tasks, native split conservation and Forge permissive remapping. NeoForge additionally checks the installed EAEP 1.5.5 class.
+- Retained these fixes in the requested 1.1.0-forge release. Verified real EAEP 1.6.2 enabled/disabled patterns and native multiplier/remainder preservation in Project Infinity 0.1, alongside actual planning, submission and completion. Paired AE2 15.4.10 and UELM 15.5.4 engine checks pass with the same Applied JAR.
 
 中文
 
 - 已开启原生智能倍增的样板跳过本地改写，逐样板读取 EAEP 开关，EAEP/无用之物包装保留原生接口和倍率，不再附加 Applied 倍率接口。
 - 混合任务保留原生供应器分配、尾数及完整大整数数量；未知或数量不守恒的改写仍拒绝，并在异常里附带样板类名。
 - 可选接口按类缓存，覆盖两种提交入口，新增开关、混合任务、倍率拆分守恒及 Forge 方法匹配回归。
+- 按要求使用 1.1.0-forge 版本号并保留全部后续修复。在 Project Infinity 0.1 内验证真实 EAEP 1.6.2 开关、倍率和尾数，以及真实规划、提交和合成完成；同一份 Applied JAR 分别通过 AE2 15.4.10 和 UELM 15.5.4 双模组游戏回归。
 
 ## 1.1.0-forge
 
