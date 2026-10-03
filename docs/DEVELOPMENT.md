@@ -3,6 +3,14 @@
 Current source: Applied Enhancements 1.1.0-forge, Java 17, Forge 47.4.20.
 [API index](README.md) · [Configuration](CONFIGURATION.md)
 
+MixinGradle is pinned to the published `org.spongepowered:mixingradle:0.7.38`
+implementation through plugin resolution, using the Forge Maven mirror first.
+This avoids requesting a nonexistent JAR for Sponge's POM-only snapshot plugin
+marker when a clean CI runner resolves build plugins. Runtime classes are unchanged.
+
+MixinGradle 固定使用 0.7.38 正式实现，优先从 Forge Maven 镜像解析，避免干净 CI
+环境请求只有 POM 的快照插件标记对应的不存在 JAR。此次调整不修改游戏运行类。
+
 ## Build
 
 ```powershell
