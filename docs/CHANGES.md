@@ -1,5 +1,19 @@
 # Changes / 本版变更
 
+## 1.1.0-forge — crafting amount packet direction fix / 修复下单数量数据包方向
+
+- Split serverbound exact crafting requests from clientbound amount restoration. Clicking Next with enhanced quantity input no longer uses the client packet discriminator and disconnects the player in Forge.
+- Restore quantities above the native int range when returning from the confirmation page, including long-valued requests and exact BigInteger requests.
+- Keep request validation and tick budgets. The internal protocol is now `1.1.0-forge-2`; update both client and server to this build. Public API signatures and the release version remain unchanged.
+- Add regression coverage using Forge's actual packet-class registration and discriminator encoding in both directions.
+
+中文
+
+- 精确下单请求与返回数量页的同步拆为两个数据包类，修复增强数量输入点击“下一步”时被 Forge 判为方向错误并断开连接的问题。
+- 返回数量页时同步超 int 的 long 数量与精确 BigInteger 数量，避免返回后数值被截断。
+- 保留请求检查和 tick 工作预算；内部协议更新为 `1.1.0-forge-2`，客户端与服务端都需更新到本构建，公共 API 与发行版本号保持不变。
+- 新增使用 Forge 实际注册表和包编号编码的双向回归检查。
+
 ## 1.1.0-forge — selected planning rejection removal / 移除指定规划拒绝
 
 - Remove A03 ordered-choice/long replay rejection, A19 native fallback rejection and A07 selected-CPU cycle capability rejection. Optimizer budgets remain; failed optimization can continue through native AE.

@@ -15,7 +15,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class NetworkHandler {
-    private static final String PROTOCOL = "1.1.0-forge-1";
+    private static final String PROTOCOL = "1.1.0-forge-2";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             AppliedEnhancements.id("main"), () -> PROTOCOL, PROTOCOL::equals, PROTOCOL::equals);
 
@@ -36,8 +36,9 @@ public final class NetworkHandler {
                 CraftingCalculationPathPayload::handle, NetworkDirection.PLAY_TO_CLIENT);
         register(6, ExactCraftingAmountPayload.class, ExactCraftingAmountPayload.STREAM_CODEC,
                 ExactCraftingAmountPayload::handle, NetworkDirection.PLAY_TO_SERVER);
-        register(7, ExactCraftingAmountPayload.class, ExactCraftingAmountPayload.STREAM_CODEC,
-                ExactCraftingAmountPayload::handle, NetworkDirection.PLAY_TO_CLIENT);
+        // Forge indexes outgoing messages by class, so each direction needs its own type.
+        register(7, ExactCraftingAmountSyncPayload.class, ExactCraftingAmountSyncPayload.STREAM_CODEC,
+                ExactCraftingAmountSyncPayload::handle, NetworkDirection.PLAY_TO_CLIENT);
     }
 
     private static <T> void register(int id, Class<T> type, PacketCodec<FriendlyByteBuf, T> codec,

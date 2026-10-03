@@ -405,10 +405,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             DataEnergisticsMenuCompat.restoreAmountScreen(
                     menu, amountMenu, requestedAmount);
             amountMenu.broadcastChanges();
-            if (appliedenhancements$exactRequestedAmount != null) {
-                NetworkHandler.sendToPlayer(player, new com.appliedenhancements.network.ExactCraftingAmountPayload(
-                        amountMenu.containerId, appliedenhancements$exactRequestedAmount.toString(), false, false));
-            }
+            NetworkHandler.sendToPlayer(player, new com.appliedenhancements.network.ExactCraftingAmountSyncPayload(
+                    amountMenu.containerId, appliedenhancements$exactRequestedAmount != null
+                            ? appliedenhancements$exactRequestedAmount.toString() : Long.toString(requestedAmount)));
         }
         callback.cancel();
     }

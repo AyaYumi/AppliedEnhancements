@@ -1,6 +1,5 @@
 package com.appliedenhancements.network;
 
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.ae2.ExactCraftingMenuBridge;
 import java.math.BigInteger;
 import net.minecraft.network.FriendlyByteBuf;
@@ -24,7 +23,6 @@ public record ExactCraftingAmountPayload(int containerId, String amount, boolean
             var menu = receivingPlayer.containerMenu;
             if (menu.containerId != payload.containerId || !(menu instanceof ExactCraftingMenuBridge bridge)) return;
             var amount = new BigInteger(payload.amount);
-            if (receivingPlayer.level().isClientSide) bridge.appliedenhancements$setInitialExactAmount(amount);
-            else bridge.appliedenhancements$confirmExact(amount, payload.missing, payload.autoStart);
+            if (!receivingPlayer.level().isClientSide) bridge.appliedenhancements$confirmExact(amount, payload.missing, payload.autoStart);
     }
 }

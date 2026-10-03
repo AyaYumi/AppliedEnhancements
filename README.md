@@ -33,7 +33,7 @@ Data Energistics and other integrations remain optional. New addon versions need
 runtime verification when they change internal hooks.
 
 Build `build/libs/appliedenhancements-1.1.0-forge.jar` and install the same build on
-client and server. Internal network protocol is 1.1.0-forge-1. OmniSequence uses this separate
+client and server. Internal network protocol is 1.1.0-forge-2. OmniSequence uses this separate
 mod's shared API; it is not embedded into either JAR.
 
 ## Configuration and use
