@@ -1,5 +1,19 @@
 # Changes / 本版变更
 
+## 1.1.1
+
+- Native smart-doubling patterns bypass local plan rewrites. EAEP enabled state is checked per pattern; Useless/EAEP wrappers keep their native interfaces and exact multiplier, without adding `AelisScaledPattern`.
+- Preserve native provider splits and remainders while reconciling mixed local/external tasks. BigInteger task ledgers retain all work; unknown or inconsistent rewrites remain rejected with the pattern class in the error.
+- Restore the per-retry item identity check on AE2 19.2.17 external storage, including when optional indexes are disabled.
+- Added cached optional ABI access, both Useless submission overloads and regressions for enabled/disabled switches, mixed tasks, native split conservation and Forge permissive remapping. NeoForge additionally checks the installed EAEP 1.5.5 class.
+
+中文
+
+- 已开启原生智能倍增的样板跳过本地改写，逐样板读取 EAEP 开关，EAEP/无用之物包装保留原生接口和倍率，不再附加 Applied 倍率接口。
+- 混合任务保留原生供应器分配、尾数及完整大整数数量；未知或数量不守恒的改写仍拒绝，并在异常里附带样板类名。
+- 恢复 AE2 19.2.17 外部存储每次重试抽取前的物品类型检查，关闭可选索引时也生效。
+- 可选接口按类缓存，覆盖两种提交入口，新增开关、混合任务、倍率拆分守恒及 Forge 方法匹配回归。
+
 ## 1.1.0
 
 - Added AelisBatchExecutionContext: one protected extraction view, actual phase count,

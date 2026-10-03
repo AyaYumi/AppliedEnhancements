@@ -6,7 +6,7 @@
 
 [中文](README_ZH.md) · [API documentation](docs/README.md) · [Configuration](docs/CONFIGURATION.md)
 
-**1.1.0** extends AE2 crafting, storage access and pattern terminals on Minecraft
+**1.1.1** extends AE2 crafting, storage access and pattern terminals on Minecraft
 1.21.1 / NeoForge. It adds shared batch extraction/ownership transactions used by
 cycle-aware CPUs, while retaining existing planner and terminal APIs.
 
@@ -31,7 +31,7 @@ The default build uses AE2 19.2.18. ExtendedAE, AE2WTLib, JEI, AdvancedAE,
 Data Energistics and other integrations remain optional. New addon versions need
 runtime verification when they change internal hooks.
 
-Build `build/libs/appliedenhancements-1.1.0.jar` and install the same build on
+Build `build/libs/appliedenhancements-1.1.1.jar` and install the same build on
 client and server. Internal network protocol is 9. OmniSequence uses this separate
 mod's shared API; it is not embedded into either JAR.
 

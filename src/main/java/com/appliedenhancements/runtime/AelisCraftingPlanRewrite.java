@@ -16,16 +16,20 @@ public final class AelisCraftingPlanRewrite {
     public static ICraftingPlan rewriteOrdinaryPatterns(
             ICraftingPlan plan, UnaryOperator<ICraftingPlan> rewrite) {
         var cycle = AelisCycleExecutionApi.getPlan(plan).orElse(null);
-        if (cycle == null) {
+        boolean external = plan.patternTimes().keySet().stream()
+                .anyMatch(com.appliedenhancements.api.AelisSmartDoublingApi::isExternallyManaged);
+        if (cycle == null && !external) {
             var rewritten = rewrite.apply(plan);
             return rewritten == plan ? plan : AelisCycleExecutionApi.copyMetadata(plan, rewritten);
         }
-        var definitions = cycle.patternDefinitions();
+        var definitions = cycle == null ? java.util.Set.of() : cycle.patternDefinitions();
         var ordinary = new LinkedHashMap<IPatternDetails, Long>();
         var cyclic = new LinkedHashMap<IPatternDetails, Long>();
         AelisCyclePatternNormalization.normalize(plan.patternTimes(), cycle).forEach((pattern, times) ->
-                (definitions.contains(pattern.getDefinition()) ? cyclic : ordinary)
+                (com.appliedenhancements.api.AelisSmartDoublingApi.isExternallyManaged(pattern)
+                        || (cycle != null && definitions.contains(pattern.getDefinition())) ? cyclic : ordinary)
                         .put(pattern, times));
+        if (ordinary.isEmpty()) return plan;
         var rewritten = rewrite.apply(copy(plan, ordinary));
         var combined = new LinkedHashMap<>(rewritten.patternTimes());
         cyclic.forEach((pattern, times) -> combined.merge(pattern, times, Math::addExact));

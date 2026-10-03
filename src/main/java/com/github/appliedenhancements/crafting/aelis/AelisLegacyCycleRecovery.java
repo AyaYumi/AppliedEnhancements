@@ -6,7 +6,7 @@ import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import com.appliedenhancements.api.AelisCycleExecutionPlan;
 import com.appliedenhancements.api.AelisCycleSeedPolicy;
-import com.github.appliedenhancements.integration.ae2.AelisScaledPattern;
+import com.appliedenhancements.runtime.SmartDoublingPatternAccess;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -24,7 +24,7 @@ public final class AelisLegacyCycleRecovery {
 
     public static Recovery prove(Map<IPatternDetails, Long> remaining, KeyCounter inventory,
             GenericStack output, AelisCycleSeedPolicy policy) {
-        if (remaining.keySet().stream().noneMatch(AelisScaledPattern.class::isInstance)
+        if (remaining.keySet().stream().noneMatch(pattern -> SmartDoublingPatternAccess.resolve(pattern) != null)
                 || output == null || output.amount() <= 0) return null;
         var normalized = new LinkedHashMap<IPatternDetails, Long>();
         var originals = new LinkedHashMap<IPatternDetails, IPatternDetails>();
@@ -33,9 +33,10 @@ public final class AelisLegacyCycleRecovery {
                 IPatternDetails original = entry.getKey();
                 long times = entry.getValue();
                 if (times <= 0) continue;
-                while (original instanceof AelisScaledPattern scaled) {
-                    times = Math.multiplyExact(times, scaled.appliedenhancements$operationsPerPush());
-                    original = scaled.appliedenhancements$originalPattern();
+                SmartDoublingPatternAccess.Scale scaled;
+                while ((scaled = SmartDoublingPatternAccess.resolve(original)) != null) {
+                    times = Math.multiplyExact(times, scaled.multiplier());
+                    original = scaled.original();
                 }
                 normalized.merge(original, times, Math::addExact);
                 originals.put(entry.getKey(), original);

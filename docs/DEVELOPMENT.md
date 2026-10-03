@@ -1,6 +1,6 @@
 # Development and release / 开发与发布
 
-Current source: Applied Enhancements 1.1.0, Java 21, NeoForge 21.1.220.
+Current source: Applied Enhancements 1.1.1, Java 21, NeoForge 21.1.220.
 [API index](README.md) · [Configuration](CONFIGURATION.md)
 
 ## Build
@@ -17,7 +17,7 @@ its development runtime while retaining compilation.
 
 | Output | Purpose |
 | --- | --- |
-| `build/libs/appliedenhancements-1.1.0.jar` | Separate runtime mod |
+| `build/libs/appliedenhancements-1.1.1.jar` | Separate runtime mod |
 | `build/docs/api/index.html` | Generated public JavaDoc |
 | `build/reports/tests/test/index.html` | Unit regression report |
 
@@ -58,6 +58,6 @@ are archived outside the project, not used as release documentation.
 ## 中文
 
 先运行正常构建和 apiJavadoc，确认测试没有失败或跳过，再检查产物内容和哈希。
-使用当前 Gradle 属性，不把旧版本构建改名成 1.1.0。自动测试验证逻辑边界，整合包
+使用当前 Gradle 属性，不把旧版本构建改名成 1.1.1。自动测试验证逻辑边界，整合包
 运行和 TPS 需要实际环境；不要把单元测试当作性能承诺。日志限流保留首次故障，
 不会改变材料接收、取消、回滚或库存所有权。

@@ -2,7 +2,6 @@ package com.appliedenhancements.runtime;
 
 import appeng.api.crafting.IPatternDetails;
 import com.appliedenhancements.api.AelisCycleExecutionPlan;
-import com.github.appliedenhancements.integration.ae2.AelisScaledPattern;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -22,14 +21,15 @@ public final class AelisCyclePatternNormalization {
             IPatternDetails original = entry.getKey();
             long multiplier = 1;
             var visited = new IdentityHashMap<IPatternDetails, Boolean>();
-            while (original instanceof AelisScaledPattern scaled) {
+            SmartDoublingPatternAccess.Scale scaled;
+            while ((scaled = SmartDoublingPatternAccess.resolve(original)) != null) {
                 if (visited.put(original, Boolean.TRUE) != null) {
                     throw new IllegalArgumentException("Recursive scaled-pattern wrapper");
                 }
-                long operations = scaled.appliedenhancements$operationsPerPush();
+                long operations = scaled.multiplier();
                 if (operations <= 0) throw new IllegalArgumentException("Invalid scaled-pattern multiplier");
                 multiplier = Math.multiplyExact(multiplier, operations);
-                original = Objects.requireNonNull(scaled.appliedenhancements$originalPattern());
+                original = Objects.requireNonNull(scaled.original());
             }
             if (original != entry.getKey() && definitions.contains(original.getDefinition())) {
                 normalized.merge(original, Math.multiplyExact(entry.getValue(), multiplier), Math::addExact);

@@ -44,6 +44,15 @@ public abstract class ExternalStorageFacadeItemHandlerMixin {
         throw new AssertionError("Mixin shadow was not transformed");
     }
 
+    @WrapOperation(method = "extractFromHandler", at = @At(value = "INVOKE",
+            target = "Lappeng/me/storage/ExternalStorageFacade$ItemHandlerFacade;wrapHandlerExtract(Lnet/neoforged/neoforge/items/IItemHandler;IIZ)I"))
+    private static int appliedenhancements$recheckEveryExtractionRetry(IItemHandler inventory,
+            int slot, int amount, boolean simulate, Operation<Integer> original,
+            @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) AEItemKey requested) {
+        return requested.matches(inventory.getStackInSlot(slot))
+                ? original.call(inventory, slot, amount, simulate) : 0;
+    }
+
     @Unique
     private StorageBusSlotIndex<AEItemKey> appliedenhancements$slotIndex;
 
