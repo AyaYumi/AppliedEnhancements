@@ -40,8 +40,8 @@ public abstract class InfiniteCraftingSimulationMixin implements InfinitePlannin
         BigInteger used = appliedenhancements$infiniteUsed.merge(key, amount, BigInteger::add);
         requiredExtract.set(key, AelisBigIntegerMath.saturatingLong(used));
         if (used.bitLength() > 63) {
-            // Native CPUs still stage input quantities as long. Correct preview, no false shortage,
-            // but do not submit a truncated input budget as an executable job.
+            // Mark only the saturated compatibility projection; exact metadata remains executable.
+            // This marker does not reject submission or impose a CPU whitelist.
             ((com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier) this)
                     .appliedenhancements$setPreviewOnly(true);
         }

@@ -11,7 +11,6 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.AEKeyType;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
-import com.appliedenhancements.runtime.NativeCraftingLongSafety;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,8 +42,7 @@ class InfiniteStorageSupportTest {
         assertEquals(Long.MAX_VALUE, list.get(INFINITE));
         assertEquals(1, storage.probes);
         assertFalse(InfiniteStorageSupport.isPhysicalExtract());
-        assertEquals(1392, NativeCraftingLongSafety.addNonNegative(
-                list.get(WATER), 1350, "simulated inventory amount"));
+        assertEquals(1392, Math.addExact(list.get(WATER), 1350));
     }
 
     @Test
@@ -61,8 +59,6 @@ class InfiniteStorageSupportTest {
         InfiniteStorageSupport.reconcilePlanningSnapshot(genuineMaximum,
                 new ProbeStorage(Map.of(WATER, Long.MAX_VALUE)), null, Set.of(), true);
         assertEquals(Long.MAX_VALUE, genuineMaximum.get(WATER));
-        assertThrows(RuntimeException.class, () -> NativeCraftingLongSafety.addNonNegative(
-                genuineMaximum.get(WATER), 1350, "simulated inventory amount"));
     }
 
     @Test
