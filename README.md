@@ -14,7 +14,7 @@ cycle-aware CPUs, while retaining existing planner and terminal APIs.
 
 | Area | Behavior |
 | --- | --- |
-| Crafting orders | Native, long-range or exact BigInteger input modes; bounded 256-digit requests |
+| Crafting orders | Native, long-range or exact BigInteger input modes; exact quantities with a 1,048,576-character transport limit |
 | AELIS | Session-local planner, exact material/byte metadata, cycle solving and safe supported fallback |
 | Cycle execution | One protected inventory view for initial/batch extraction, phase limits, rollback and pending returns |
 | Manual confirmation | Finite stock reservations across open confirmations; explicitly infinite sources remain available |
@@ -32,8 +32,8 @@ Data Energistics and other integrations remain optional. New addon versions need
 runtime verification when they change internal hooks.
 
 Build `build/libs/appliedenhancements-1.1.1.jar` and install the same build on
-client and server. Internal network protocol is 9. OmniSequence uses this separate
-mod's shared API; it is not embedded into either JAR.
+client and server. Internal network protocol is 9. Addons use the separate public API; this mod is
+not embedded in their JARs.
 
 ## Configuration and use
 
@@ -69,11 +69,8 @@ MaxFast facade remains for existing 1.0.3 Java integrations.
 .\gradlew.bat clean build apiJavadoc --no-configuration-cache
 ```
 
-[Development](docs/DEVELOPMENT.md) describes Java 21 setup, both AE2 patch builds,
-unit coverage, artifact checks and generated JavaDoc. Unit regressions cover exact
-quantities, phase dispatch, shared transactions, refunds, reservations, infinite
-classification, config migration and terminal APIs. Full modpack TPS and optional
-client/server behavior still require an actual runtime environment.
+The build runs unit regressions for planning, exact quantities, shared transactions,
+refunds, reservations, infinite classification, config migration and terminal APIs.
 
 ## Known limits
 

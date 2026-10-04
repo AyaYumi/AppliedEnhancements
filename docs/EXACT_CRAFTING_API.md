@@ -1,6 +1,6 @@
 # 大整数规划与 CPU 执行 API（1.21.1 / 1.1.1）
 
-此 API 不依赖 DataEnergistics，也不引用 OmniSequence。OmniSequence 是接入示例，不是允许执行的 CPU 白名单。
+此 API 通过公开执行契约接入独立 CPU。
 客户端与服务端须使用本次同一构建（网络协议 9）；接入方须使用包含这些类的1.1.1 JAR 编译和运行。
 
 ## 稳定的计划元数据 API
@@ -111,19 +111,8 @@ plan = AelisExactCraftingPlanApi.attachExecutionMetadata(plan, output, tasks, in
 必须保留返回值（可能是包装计划）。投影的样板集合和精确集合应一致，精确次数是替换值，不是增量。
 包装或复制计划时使用 `AelisCycleExecutionApi.copyMetadata(source, target)`，可同时保留循环、材料、字节数和最终订单数量。
 
-## 本次验证
-
-- 单元测试覆盖 19/20 位输入、超过 256 位载荷、跨 long 的交付账本、取消范围恢复。
-- 开发服务器验证真实 Mixin 下的大整数材料规划。
-- Omni 开发服务器验证真实 CPU 的任务提交计数、SIMULATE 不扣量、实际交付跨 long、NBT 保存恢复、最后一个产物才完成。
-- 开发验证用的是受控配方和合成的提供者接受回调，不等同于运行整合包中所有机器配方。
-- 万象样板回归：412 项单元测试通过；使用无用之物 2.3.6.3 的真实石头万象样板、智能倍增和提交前二次改写，验证 19 位、20 位及 51 位订单的整批/余数守恒、拒收不扣量、成功接收扣量、取消与存档恢复。NeoForge 21.1.248 + DataEnergistics 3.2.2 + NeoEcoAE 21.2.0-beta3 + LDLib 2.2.39.a 组合验证通过。提供者接受回调仍为受控测试，不声称外部机器能一次收下超 long 材料。
-
-上述游戏内验证来自历史独立开发环境；当前仓库不包含该临时验证源码或对应 Gradle 开关，普通发布 JAR 不包含测试类。当前修订通过仓库单元测试和构建验证，未重新运行上述游戏内场景。
-
-
 ## 共享批量投料
 
-本版新增 `AelisBatchExecutionContext`，使循环保护库存、首份抽料、额外批量、
+`AelisBatchExecutionContext` 使循环保护库存、首份抽料、额外批量、
 Provider 钩子和失败回滚使用同一事务。精确计划的存在不代替材料所有权。
 CPU 接入须遵循 [批量执行 API](BATCH_EXECUTION_API.md)。

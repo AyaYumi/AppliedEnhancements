@@ -21,21 +21,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Validate JSON and document links
-        shell: python
-        run: |
-          import json, pathlib, re
-          root = pathlib.Path.cwd()
-          for source in (root / "src/main/resources").rglob("*.json"):
-              json.loads(source.read_text(encoding="utf-8"))
-          docs = list((root / "docs").glob("*.md")) + [root / "README.md", root / "README_ZH.md"]
-          for source in docs:
-              for target in re.findall(r"\]\(([^)]+)\)", source.read_text(encoding="utf-8")):
-                  target = target.strip("<>").split("#", 1)[0]
-                  if not target or re.match(r"[a-zA-Z][a-zA-Z0-9+.-]*:", target):
-                      continue
-                  if not (source.parent / target).exists():
-                      raise SystemExit(f"{source}: missing {target}")
+      - name: Validate repository files and public documentation
+        run: python .github/scripts/check_repository.py
+
       - name: Build and public API documentation
         run: bash gradlew -Pae2_version=${{ matrix.ae2 }} build apiJavadoc --no-configuration-cache
       - uses: actions/upload-artifact@v4

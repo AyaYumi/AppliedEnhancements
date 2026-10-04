@@ -215,7 +215,8 @@ tasks.named('jar', Jar).configure {
     reproducibleFileOrder = true
     from('LICENSE')
     from('docs') {
-        include '*.md'
+        include 'README.md', 'API_INTEGRATION.md', 'API_INTEGRATION_ZH.md', 'BATCH_EXECUTION_API.md',
+                'EXACT_CRAFTING_API.md', 'SMART_DOUBLING.md', 'CONFIGURATION.md', 'CHANGES.md'
         into 'docs'
     }
 }
@@ -233,5 +234,5 @@ tasks.register('apiJavadoc', Javadoc) {
     options.charSet = 'UTF-8'
     options.memberLevel = JavadocMemberLevel.PUBLIC
     options.addBooleanOption('Xdoclint:none', true)
-    options.windowTitle = 'Applied Enhancements 1.1.1 API'
+    options.windowTitle = "Applied Enhancements ${mod_version} API"
 }

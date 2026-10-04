@@ -2,10 +2,10 @@
 
 [中文文档](API_INTEGRATION_ZH.md)
 
-Exact CPU execution: see [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md) for CPU-independent exact plans, output progress and persistence. OmniSequence is one consumer, not an execution whitelist.
+Exact CPU execution: see [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md) for CPU-independent exact plans, output progress and persistence. Custom CPUs opt in through the public execution contracts.
 
 The current `1.1.1` source defaults to AE2 `19.2.18` and retains
-the `[19.2.17,)` dependency range. CI builds both supported patches. Public API
+the `[19.2.17,)` dependency range. Public API
 signatures use AE2 types; internal CPU display hooks are isolated compatibility
 implementation and require runtime verification after dependency changes.
 
@@ -342,8 +342,6 @@ External CPU integrations can perform normalization, guarded input access and pe
 | `Optional<AelisCycleRuntimeController> readRuntime(CompoundTag tag, HolderLookup.Provider registries)` | Restores supported runtime formats, including legacy v1. Empty indicates missing, invalid or unsupported state; do not silently resume a job that had saved cycle metadata as an ordinary order |
 
 Call `preparePlan` before constructing the CPU's task map; reading `getPlan` alone does not replace that map. A guarded inventory belongs to one extraction attempt and cannot be cached across pattern changes or runtime advancement. `dispatchedCrafts` does not advance the controller. A step with no protected inputs is valid, but this helper cannot infer its actual firing count; the host must provide a verified count bounded by `remainingCrafts()` before calling `patternDispatched`.
-
-Version `1.1.1` retains the Forge CPU Mixin priority adjustment (1100 to 900) for the AE2 Crafting Time compatibility report. This orders the native and AdvancedAE integrations after default-priority mixins; successful builds and unit tests do not establish runtime compatibility with other addons.
 
 The current native AE2 and AdvancedAE integrations share one protected inventory across the first extraction, batch expansion and rollback. `AelisBatchExecutionContext.beginDispatch` registers the actual accepted craft count; native provider hooks recognize the enclosing transaction and avoid advancing twice. Rejection restores the runtime ledger; confirm acceptance once material ownership transfers. Custom CPUs must use their actual batch count. An empty protected-input map does not imply a recipe has no ingredients.
 
@@ -716,7 +714,7 @@ These features require AE2 Java types, client UI integration, or server-authorit
 
 ## Pre-release integration checklist
 
-See [development and verification](DEVELOPMENT.md) for current build and regression instructions. The unit suite covers public metadata, cycle dispatch, inventory reservations and exact quantity protection. Custom CPUs must also verify their real admission, rollback and cancellation boundaries.
+Custom CPUs must verify their real admission, rollback and cancellation boundaries.
 
 - [ ] Imports are limited to the stable API packages.
 - [ ] Optional compatibility classes cannot load when Applied Enhancements is absent.

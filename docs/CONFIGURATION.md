@@ -1,8 +1,10 @@
 # Configuration / 配置参考
 
+Minecraft 1.21.1 / NeoForge.
+
 Applied Enhancements **1.1.1** generates `config/appliedenhancements-common.toml`
 in the active instance. Edit existing sections and restart both sides.
-[API index](README.md) · [Development](DEVELOPMENT.md)
+[API index](README.md)
 
 | Path | Default | Behavior / range |
 | --- | --- | --- |
@@ -40,7 +42,6 @@ marking is determined by the current cell and access, not by a Long.MAX_VALUE co
 
 Applied no longer rejects native AE2 plans for 64-bit arithmetic overflow. Exact
 task accounting and saturated progress projections remain. Other rejection,
-fallback and performance controls are documented in [the interception inventory](remaining-interceptions.md).
 
 ## Migration and logs
 
