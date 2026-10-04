@@ -237,7 +237,11 @@ tasks.named("build").configure { dependsOn "jarJar" }
 // Current source documentation ships with both regular and UELM runtime jars.
 tasks.withType(Jar).configureEach {
     from('LICENSE')
-    from('docs') { include '*.md'; into 'docs' }
+    from('docs') {
+        include 'README.md', 'API_INTEGRATION.md', 'API_INTEGRATION_ZH.md', 'BATCH_EXECUTION_API.md',
+                'EXACT_CRAFTING_API.md', 'SMART_DOUBLING.md', 'CONFIGURATION.md', 'CHANGES.md'
+        into 'docs'
+    }
 }
 
 tasks.register('apiJavadoc', Javadoc) {
@@ -251,7 +255,7 @@ tasks.register('apiJavadoc', Javadoc) {
     options.charSet = 'UTF-8'
     options.memberLevel = JavadocMemberLevel.PUBLIC
     options.addBooleanOption('Xdoclint:none', true)
-    options.windowTitle = 'Applied Enhancements 1.1.0 Forge API'
+    options.windowTitle = "Applied Enhancements ${mod_version} API"
 }
 
 // MixinGradle writes these alongside compiler output; include and track the refmap.

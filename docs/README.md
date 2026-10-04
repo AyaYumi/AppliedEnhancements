@@ -1,9 +1,5 @@
 # Applied Enhancements API / 接口文档
 
-Current updated build keeps the 1.1.0-forge version requested by the maintainer and includes subsequent fixes. Use matching JAR contents on both sides, rather than relying on the version string alone.
-
-当前更新构建按维护者要求保留 1.1.0-forge 版本号，并包含后续修复。两端使用相同 JAR 内容，不能仅凭版本字符串判定构建一致。
-
 Current: **1.1.0-forge**, Minecraft **1.20.1**, Java **17**, Forge **47.4.20+**,
 AE2 **15.4.10+**. Network protocol **1.1.0-forge-2** requires matching client/server builds.
 
@@ -14,7 +10,6 @@ AE2 **15.4.10+**. Network protocol **1.1.0-forge-2** requires matching client/se
 | One protected inventory view, actual batch count, ownership and rollback | [Shared batch execution](BATCH_EXECUTION_API.md) |
 | Native enabled-state queries and exact external task reconciliation | [Native smart doubling / 原生智能倍增](SMART_DOUBLING.md) |
 | All configuration paths/defaults and migration | [Configuration](CONFIGURATION.md) |
-| Build, JavaDoc, regression and release checks | [Development](DEVELOPMENT.md) |
 
 Public contracts live in `com.appliedenhancements.api` and its `client` subpackage.
 Planner implementation, runtime, Mixin, packet and optional reflection bridge
@@ -23,7 +18,4 @@ shade these packages into an addon. Mutate live game state on its server thread.
 Planning futures are asynchronous; never block the server thread on get().
 
 本版新增原生智能倍增状态查询，保留共享批量投料上下文。能力上限不代替真实材料、机器容量或持久所有权。
-客户端接口只在客户端加载，可选附属兼容类只在对应模组存在时加载。历史个人机器
-验证报告已移出项目，公开文档描述当前源码契约与可重复验证方法。
-
-[Remaining interceptions / 剩余拦截清单](remaining-interceptions.md) — numbered operation checks, fallbacks and TPS limits across both maintained Minecraft versions.
+客户端接口只在客户端加载，可选附属兼容类只在对应模组存在时加载。公开文档描述本分支当前源码的接口契约。

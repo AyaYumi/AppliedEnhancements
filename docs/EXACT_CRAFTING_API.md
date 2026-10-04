@@ -1,6 +1,6 @@
 # 大整数规划与 CPU 执行 API（1.20.1 / 1.1.0-forge）
 
-此 API 不依赖 DataEnergistics，也不引用 OmniSequence。OmniSequence 是接入示例，不是允许执行的 CPU 白名单。
+此 API 通过公开执行契约接入独立 CPU。
 客户端与服务端须使用本次同一构建（内部协议 `1.1.0-forge-2`）；接入方须使用包含这些类的 1.1.0-forge JAR 编译和运行。
 
 ## 稳定的计划元数据 API
@@ -111,15 +111,8 @@ plan = AelisExactCraftingPlanApi.attachExecutionMetadata(plan, output, tasks, in
 必须保留返回值（可能是包装计划）。投影的样板集合和精确集合应一致，精确次数是替换值，不是增量。
 包装或复制计划时使用 `AelisCycleExecutionApi.copyMetadata(source, target)`，可同时保留循环、材料、字节数和最终订单数量。
 
-## 验证范围
-
-本分支使用 Java 17、Forge 47.4.20 与 AE2 15.4.10／UELM 15.5.4。
-单元回归覆盖精确数量、循环推进、共享库存保护、拒收回滚和持久输出。
-1.21.1 开发环境中的历史运行结果不作为 Forge 1.20.1 的验证结论。
-外部机器、可选模组与性能还需要匹配版本的独立运行环境验证。
-
 ## 共享批量投料
 
-本版新增 `AelisBatchExecutionContext`，使循环保护库存、首份抽料、额外批量、
+`AelisBatchExecutionContext` 使循环保护库存、首份抽料、额外批量、
 Provider 钩子和失败回滚使用同一事务。精确计划的存在不代替材料所有权。
 CPU 接入须遵循 [批量执行 API](BATCH_EXECUTION_API.md)。

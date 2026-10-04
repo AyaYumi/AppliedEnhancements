@@ -77,7 +77,7 @@ dependencies {
 }
 ```
 
-如果接入代码会无条件加载公共 API，应在 `forge.mods.toml` 中声明硬依赖：
+如果接入代码会无条件加载公共 API，应在 `META-INF/mods.toml` 中声明硬依赖：
 
 ```toml
 [[dependencies.yourmod]]
@@ -333,8 +333,6 @@ if (cyclePlan != null) {
 | `Optional<AelisCycleRuntimeController> readRuntime(CompoundTag tag)` | 恢复支持的运行时格式，包括旧 v1。空值表示状态缺失、无效或版本不支持；原本保存了循环元数据的订单不能静默当普通订单继续运行 |
 
 应在构造 CPU 任务表之前调用 `preparePlan`；仅调用 `getPlan` 不会替换该任务表。受保护库存只属于本次提取尝试，不能跨样板或跨运行时推进缓存复用。`dispatchedCrafts` 本身不推进控制器。没有受保护输入的步骤是合法的，但该辅助方法无法推导其实际执行次数；宿主必须自己确定次数，将其限制在 `remainingCrafts()` 内，再调用 `patternDispatched`。
-
-`1.1.0-forge` 保留 Forge 分支针对 AE2 Crafting Time 兼容反馈的 CPU Mixin 优先级调整（1100 改为 900），将原生和 AdvancedAE 接入排在默认优先级 Mixin 之后；构建和单元测试通过不等于已验证与其他附属模组的运行兼容性。
 
 本版原生 AE2 与 AdvancedAE 接入让首份抽料、批量扩展和回滚共享同一份循环保护库存视图。使用 `AelisBatchExecutionContext.beginDispatch` 登记真实次数，原生 Provider 钩子识别已有事务，避免重复推进。拒收恢复运行账本；已转移材料所有权后须确认接受。独立 CPU 应读取实际批量次数，不能将受保护输入表为空解释为样板没有原料。
 
@@ -693,7 +691,7 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 
 ## 发布前检查清单
 
-当前验证方法与范围见 [开发与验证](DEVELOPMENT.md)。构建运行公共接口、循环、库存预留和数量保护单元测试；独立 CPU 仍须验证自己的实际派发、回滚和取消边界。
+独立 CPU 须验证自己的实际派发、回滚和取消边界。
 
 - [ ] 只从稳定 API 包导入类型。
 - [ ] 可选兼容代码已隔离，缺少 Applied Enhancements 时不会触发类加载。
@@ -710,4 +708,4 @@ KubeJS 仅支持通过物品标签标记无限磁盘。以下能力没有 KubeJS
 - [ ] 已在 AE2 `15.4.10` 和目标整合包中完成客户端与服务端验证。
 ## 大整数执行扩展
 
-CPU 的通用大整数计划、交付账本和存档接入见 [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md)。没有 Omni 专用白名单，也不以本 API 统一拒绝其他 CPU。
+CPU 的通用大整数计划、交付账本和存档接入见 [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md)。CPU 自行实现精确数量派发、回滚和持久化。

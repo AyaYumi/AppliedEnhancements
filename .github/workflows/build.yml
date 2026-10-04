@@ -20,19 +20,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Validate resources and docs
-        shell: python
-        run: |
-          import json, pathlib, re
-          root = pathlib.Path.cwd()
-          for source in (root / 'src/main/resources').rglob('*.json'):
-              json.loads(source.read_text(encoding='utf-8'))
-          docs = list((root / 'docs').glob('*.md')) + [root / 'README.md', root / 'README_ZH.md']
-          for source in docs:
-              for target in re.findall(r'\]\(([^)]+)\)', source.read_text(encoding='utf-8')):
-                  target = target.strip('<>').split('#', 1)[0]
-                  if target and not re.match(r'[a-zA-Z][a-zA-Z0-9+.-]*:', target) and not (source.parent / target).exists():
-                      raise SystemExit(f'{source}: missing {target}')
+      - name: Validate repository files and public documentation
+        run: python .github/scripts/check_repository.py
+
       - name: Build and test
         run: bash gradlew ${{ matrix.args }} build apiJavadoc --console=plain
       - uses: actions/upload-artifact@v4
