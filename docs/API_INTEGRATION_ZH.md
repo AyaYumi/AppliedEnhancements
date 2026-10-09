@@ -18,7 +18,7 @@
 | Applied Energistics 2 | `19.2.18` | 声明范围：`[19.2.17,)`；公共接口直接引用 AE2 类型 |
 | Applied Enhancements | `1.1.1` | 本文档对应版本 |
 
-`1.1.1` 保留 `1.1.0` 引入的 `AelisBatchExecutionContext` 共享投料事务，新增 `AelisSmartDoublingApi` 原生倍增状态查询，详见[原生智能倍增](SMART_DOUBLING.md)。客户端与服务端使用同一构建，内部载荷协议仍为 `9`。使用新增查询时，编译和运行最低版本设为 `1.1.1`。
+`1.1.1` 保留 `1.1.0` 引入的 `AelisBatchExecutionContext` 共享投料事务，新增 `AelisSmartDoublingApi` 原生倍增状态查询，详见[原生智能倍增](SMART_DOUBLING_API.md)。客户端与服务端使用同一构建，内部载荷协议仍为 `9`。使用新增查询时，编译和运行最低版本设为 `1.1.1`。
 
 BigInteger 计划不做统一 CPU 能力预检。long 投影饱和不会强制 `simulation()`，也不会改写 CPU 的提交结果。服务端接入方应通过 `AelisExactCraftingPlanApi.read(plan)` 读取精确数量；`AelisCycleExecutionApi.copyMetadata` 会保留这些字段。旧名 `isPreviewOnly` 现在只表示投影发生饱和。标准 long 字段仍是投影，未适配 CPU 接受订单不代表已支持完整 BigInteger 执行。
 
@@ -205,7 +205,7 @@ AelisCraftingPlanner planner = AelisCraftingPlanner.create(
 
 ### 执行与回退
 
-工厂方法共有四种：`createConfigured(PauseCheckpoint, ProgressListener)`、末尾增加 `ICraftingService` 的重载、`create(int, int, PauseCheckpoint, ProgressListener)`、末尾增加 `ICraftingService` 的重载。两个预算参数必须为正数；暂停点或监听器为 null 时采用空实现，服务重载要求服务非 null。`ProgressListener` 还包含 `compilationStep()` 回调。
+工厂方法共有四种：`createConfigured(PauseCheckpoint, ProgressListener)`、末尾增加 `ICraftingService` 的重载、`create(int, int, PauseCheckpoint, ProgressListener)`、末尾增加 `ICraftingService` 的重载。建议传入正数预算，非正预算会归一为 `1`；暂停点或监听器为 null 时采用空实现，服务为 null 时只关闭服务原始索引恢复，仍可按现有合成树规划。`ProgressListener` 还包含 `compilationStep()` 回调。
 
 ```java
 AelisCraftingPlanner.Result result = planner.tryExecute(
@@ -233,7 +233,23 @@ if (result.shouldFallback()) {
 
 `Result` 中的 `fallbackReason`、`error`、节点统计和耗时用于诊断，不应把某个具体回退字符串当成稳定协议。`branchFailure` 非空时不属于普通兼容回退。
 
-`tryExecute` 抛出 `InterruptedException`、运行时异常或错误时，包装层会先恢复本次尝试状态再向上传播。
+可恢复的 `RuntimeException`、`LinkageError` 会返回回退结果，保留 `error()`，
+`fallbackCategory()` 为 `INTERNAL_ERROR`；返回前恢复 `missingItems` 与已构建候选状态，
+不直接终止计算。集成接口或上下文缺失也返回回退结果。`InterruptedException` 与
+其他 `Error` 会在恢复尝试状态后向上传播；`branchFailure()` 仍表示 AE2 分支失败。
+
+进度回调在计算上下文运行，不得跨线程修改世界或 UI。可恢复的回调失败采用同一回退契约。
+按稳定分类决定处理方式，原始原因和异常仅作诊断，不解析消息字符串作为协议。
+
+### 副产物与可选改写
+
+物品、流体副产物是有效产物，材料数量分别保留。候选优化或外部包装不可表示时，
+保留原始完整任务并继续原生/兼容路径，不能为了绕过可选接口而缩成单产物计划。
+恢复不产生缺少的种子和材料，也不免除发配阶段的所有权契约。
+
+必须保存 `attachToPlan`、`copyMetadata`、`preparePlan` 的返回值。通过公开元数据接口
+读取完整精确任务表，不能与 long 投影叠加。配方语义或循环工作量改变时重新规划。
+无法读取的倍率改写恢复原始精确工作量；原生智能倍增保留包装身份与精确尾数。
 
 ### API 调用中的来源标识与循环元数据
 
@@ -264,7 +280,7 @@ ICraftingPlan replacement = buildReplacementPlan(plan);
 replacement = AelisCycleExecutionApi.copyMetadata(plan, replacement);
 ```
 
-这两个接口都会返回应提交的计划；自定义实现可能被包装，必须使用返回值。它们保留循环执行顺序、种子策略、循环材料数量和规划路径，不会修改目标计划的材料统计、订单数量或逻辑总工作量。若循环样板已被数量包装，会还原原始样板并把倍率乘回执行次数；普通样板的包装保持不变。改变循环结构或次数后需要重新规划。以上调用不启用自动规划器，也不隐式启用手动库存锁。
+这两个接口都会返回应提交的计划；自定义实现可能被包装，必须使用返回值。它们保留来源计划的循环执行顺序、种子策略、精确材料/任务/产量元数据与规划路径。目标保留原生记账字段；扩展执行以精确元数据和归一后的任务投影为准。若循环样板已被数量包装，会还原原始样板并把倍率乘回执行次数；普通样板的包装保持不变。改变循环结构或次数后需要重新规划。以上调用不启用自动规划器，也不隐式启用手动库存锁。
 
 ## 2. 循环感知 CPU 执行
 

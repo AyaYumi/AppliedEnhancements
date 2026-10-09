@@ -50,6 +50,20 @@ queue capacity, energy, permission or exact BigInteger execution. Contexts are
 attempt-local and thread-bound; never cache or move them to a planning worker.
 The explicit-runtime overload does not require an internal ThreadLocal scope.
 
+## Contract failures and secondary outputs
+
+`beginDispatch` validates positive craft counts, the current phase limit and the
+actual protected input holders. Violations remain execution-contract errors;
+recoverable planning fallback does not authorize a malformed live dispatch.
+Record every actual returned output, including byproducts, exactly once through
+the cycle runtime. Simulation and planned amounts are not returned materials.
+
+An enclosing transaction matches runtime, pattern and input-array identity. A
+nested provider hook shares acceptance; closing it does not undo the owner scope.
+An exception after durable transfer must preserve that acceptance and cannot
+refund materials now owned by the provider. Refunds cover only still-owned finite
+physical inputs; explicitly infinite inputs cannot generate refund stock.
+
 ## 中文
 
 原生调度钩子从当前作用域取得上下文；独立 CPU 用显式 runtime 重载，无需访问内部
@@ -63,3 +77,8 @@ Provider 原生钩子共享已有事务以避免双重推进；回调可同步�
 
 这些接口属于本版公开 API，旧 1.0.x JAR 不含新上下文。循环控制器的保存/回收与
 精确计划元数据仍按各自文档处理；不要依赖 runtime 或 Mixin 内部字段。
+
+`beginDispatch` 仍检查正数次数、当前阶段上限及真实受保护输入容器；违反这些条件
+是执行契约错误。规划回退不允许错误实物发配。所有实际返还产物（包括副产物）
+恰好记账一次，模拟和计划产量不算返还材料。持久移交后的异常不能退款已由供应器
+持有的材料；明确无限输入也不能转化为真实退款库存。

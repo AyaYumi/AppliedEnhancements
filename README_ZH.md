@@ -1,10 +1,14 @@
 # Applied Enhancements
 
-[English](README.md) · [接口文档](docs/README.md) · [配置参考](docs/CONFIGURATION.md)
+[English](README.md) · [接口文档](docs/README.md) · [配置参考](CONFIGURATION.md)
 
 当前 **1.1.1** 为 Minecraft 1.21.1 / NeoForge 提供 AE2 规划、存储访问和样板终端
 增强。本版增加共享批量投料事务，让循环 CPU 的首份抽料、额外份数、回滚和原生
 Provider 钩子保持同一材料账本。
+
+可恢复的规划校验与可选显示接口错误改为原生回退或恢复完整原始任务。批次换算、
+元数据挂接、进度回调、范围清理和 AE2 Crafting Tree 兼容不再因校验异常直接
+打断有效订单；真实缺料仍通过 AE2 的正常缺料结果反馈。
 
 ## 功能
 
@@ -33,7 +37,7 @@ Provider 钩子保持同一材料账本。
 
 配置位于正在使用实例的 `config/appliedenhancements-common.toml`。
 订单接管、进度显示、增强材料预览和自动 AELIS 默认关闭；缓存与存储优化默认开启。
-完整 [17 项配置](docs/CONFIGURATION.md) 描述分组、默认值、范围和迁移。
+完整 [17 项配置](CONFIGURATION.md) 描述分组、默认值、范围和迁移。
 
 样板快速移动默认右键，物品操作默认 Alt＋右键，两项独立绑定且只在 GUI 内生效。
 服务端重新验证权限、源物品和容量。JEI 给予物品沿用 JEI 的同步作弊权限。
@@ -66,4 +70,4 @@ InfiniteStorageCellMarker；普通磁盘容量和 Long.MAX_VALUE 数量不代表
 CPU 接受计划不等于获得精确执行能力。动态或不支持的循环保持各自失败/回退边界。
 AELIS 缓存属于本次规划会话，超大合法数量仍会消耗时间与内存。
 
-[本版变更](docs/CHANGES.md) · 项目采用 [MIT 许可证](LICENSE)。
+[本版变更](CHANGELOG.md) · 项目采用 [MIT 许可证](LICENSE)。

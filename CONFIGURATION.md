@@ -4,7 +4,7 @@ Minecraft 1.21.1 / NeoForge.
 
 Applied Enhancements **1.1.1** generates `config/appliedenhancements-common.toml`
 in the active instance. Edit existing sections and restart both sides.
-[API index](README.md)
+[API index](docs/README.md)
 
 | Path | Default | Behavior / range |
 | --- | --- | --- |
@@ -29,8 +29,9 @@ in the active instance. Edit existing sections and restart both sides.
 ## Planning and reservations
 
 Automatic AELIS defaults off. Explicit planner API calls remain available under
-their own contracts. BIG_INTEGER input also requires exact planning enabled; an
-exact plan alone does not give an arbitrary CPU exact execution capability.
+their own contracts. BIG_INTEGER input selects explicit exact requests; the
+automatic arithmetic preference does not block that service. An exact plan alone
+does not give an arbitrary CPU exact execution capability.
 Long fields are compatibility projections, not proof of exact physical supply.
 
 Manual confirmation reservations follow the automatic planner switch. Finite
@@ -41,7 +42,8 @@ marking is determined by the current cell and access, not by a Long.MAX_VALUE co
 ## Native arithmetic and remaining checks
 
 Applied no longer rejects native AE2 plans for 64-bit arithmetic overflow. Exact
-task accounting and saturated progress projections remain. Other rejection,
+task accounting and saturated progress projections remain. Thread/side checks,
+real material reservations and dispatch ownership/capacity contracts still apply.
 
 ## Migration and logs
 

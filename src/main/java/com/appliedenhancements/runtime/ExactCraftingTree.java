@@ -77,8 +77,8 @@ public final class ExactCraftingTree {
                 result.add(line);
             }
             return result;
-        } catch (ReflectiveOperationException failure) {
-            throw new IllegalStateException("Unsupported AE2CT tooltip API", failure);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
+            return original;
         }
     }
 
@@ -89,6 +89,7 @@ public final class ExactCraftingTree {
             @SuppressWarnings("unchecked")
             List<CraftingPlanSummaryEntry> entries = (List<CraftingPlanSummaryEntry>) field(helper, "entries");
             Builder builder = new Builder(helper, recipes, entries);
+            if (!builder.valid) return null;
             GenericStack output = (GenericStack) field(recipes, "output");
             var totals = TOTALS.get(recipes);
             Object root = builder.node(output, totals != null && totals.output() != null ? totals.output()
@@ -98,8 +99,8 @@ public final class ExactCraftingTree {
             Object manager = managerType.getConstructor(helper.getClass(), builder.nodeType).newInstance(helper, root);
             helper.getClass().getMethod("buildNodePosition", builder.nodeType, managerType).invoke(helper, root, manager);
             return manager;
-        } catch (ReflectiveOperationException failure) {
-            throw new IllegalStateException("Unsupported AE2CT tree API", failure);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
+            return null;
         }
     }
 
@@ -124,6 +125,7 @@ public final class ExactCraftingTree {
         private final Map<AEKey, BigInteger> stored = new HashMap<>();
         private final Map<AEKey, BigInteger> missing = new HashMap<>();
         private int nodes;
+        private boolean valid = true;
 
         private record Recipe(List<GenericStack> inputs, long output) {}
 
@@ -146,6 +148,10 @@ public final class ExactCraftingTree {
             for (Object recipe : (List<?>) field(data, "recipes")) {
                 List<GenericStack> outputs = (List<GenericStack>) recipe.getClass().getMethod("outputs").invoke(recipe);
                 List<GenericStack> inputs = (List<GenericStack>) recipe.getClass().getMethod("inputs").invoke(recipe);
+                if (inputs.stream().anyMatch(input -> input == null || input.what() == null || input.amount() <= 0)) {
+                    valid = false;
+                    return;
+                }
                 if (!outputs.isEmpty() && outputs.getFirst().amount() > 0) {
                     recipes.putIfAbsent(outputs.getFirst().what(), new Recipe(inputs, outputs.getFirst().amount()));
                 }
@@ -176,7 +182,6 @@ public final class ExactCraftingTree {
                 active.add(key);
                 @SuppressWarnings("unchecked") List<Object> children = (List<Object>) field(node, "subNodes");
                 for (GenericStack input : recipe.inputs()) {
-                    if (input.amount() <= 0) throw new IllegalStateException("Invalid AE2CT recipe input quantity");
                     children.add(node(input, times.multiply(BigInteger.valueOf(input.amount())), node, active, false));
                 }
                 active.remove(key);

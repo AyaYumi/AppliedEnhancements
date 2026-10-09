@@ -23,16 +23,19 @@ public final class AelisExactCraftingPlanApi {
         return read(plan).executionRequirement();
     }
 
-    /** Attach execution quantities to a plan produced by any planner. Keep the returned plan. */
+    /**
+     * Attach complete replacement execution quantities to a plan produced by any
+     * planner. Keep the returned plan; exact tasks are not an additive patch.
+     * Null/non-positive output or invalid map entries preserve the original plan.
+     */
     public static ICraftingPlan attachExecutionMetadata(ICraftingPlan plan, BigInteger output,
             Map<IPatternDetails, BigInteger> tasks, Map<AEKey, BigInteger> infiniteInputs) {
-        new AelisExactRequest(output);
-        Objects.requireNonNull(tasks).forEach((key, value) -> {
-            if (key == null || value == null || value.signum() <= 0) throw new IllegalArgumentException("Invalid task");
-        });
-        Objects.requireNonNull(infiniteInputs).forEach((key, value) -> {
-            if (key == null || value == null || value.signum() <= 0) throw new IllegalArgumentException("Invalid infinite input");
-        });
+        // Reject an unreadable metadata replacement before touching the complete original plan.
+        if (output == null || output.signum() <= 0 || tasks == null || infiniteInputs == null
+                || tasks.entrySet().stream().anyMatch(entry -> entry.getKey() == null
+                        || entry.getValue() == null || entry.getValue().signum() <= 0)
+                || infiniteInputs.entrySet().stream().anyMatch(entry -> entry.getKey() == null
+                        || entry.getValue() == null || entry.getValue().signum() <= 0)) return plan;
         var result = AelisCycleExecutionApi.copyMetadata(plan, plan);
         var carrier = (AelisBigIntegerCraftAmountsCarrier) result;
         carrier.appliedenhancements$setBigIntegerFinalAmount(output);

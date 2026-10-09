@@ -2,7 +2,7 @@ package com.appliedenhancements.api;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -14,13 +14,18 @@ class AelisCraftingPlannerTest {
     }
 
     @Test
-    void preferredFactoryRejectsInvalidBudgets() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> AelisCraftingPlanner.create(0, 100, null, null));
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> AelisCraftingPlanner.create(1_000, 0, null, null));
+    void preferredFactoryNormalizesBudgetsAndAllowsAnAbsentOptionalIndex() {
+        assertNotNull(assertDoesNotThrow(() -> AelisCraftingPlanner.create(0, 100, null, null)));
+        assertNotNull(assertDoesNotThrow(() -> AelisCraftingPlanner.create(1_000, 0, null, null)));
+        assertNotNull(assertDoesNotThrow(() -> AelisCraftingPlanner.create(-1, -1, null, null, null)));
+    }
+
+    @Test
+    void missingPlanningContextRequestsFallbackInsteadOfThrowing() throws InterruptedException {
+        var result = AelisCraftingPlanner.create(1_000, 100, null, null)
+                .tryExecute(null, null, 1, false, null);
+        assertTrue(result.shouldFallback());
+        assertFalse(result.applied());
     }
 
     @Test

@@ -25,6 +25,13 @@ public final class ExactScaledTaskReconciliation {
     static Result reconcile(Map<IPatternDetails, Long> projected,
             Map<IPatternDetails, BigInteger> exact,
             Function<IPatternDetails, ScaledTask> resolver) {
+        try { return reconcileKnown(projected, exact, resolver); }
+        catch (RuntimeException | LinkageError unavailable) { return originalTasks(exact); }
+    }
+
+    private static Result reconcileKnown(Map<IPatternDetails, Long> projected,
+            Map<IPatternDetails, BigInteger> exact,
+            Function<IPatternDetails, ScaledTask> resolver) {
         // An already reconciled plan must retain both its batch and remainder tasks.
         if (exact.isEmpty() || exact.keySet().equals(projected.keySet())) {
             return new Result(projected, exact);

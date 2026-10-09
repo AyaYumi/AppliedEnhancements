@@ -1,8 +1,26 @@
-# Native smart doubling / 原生智能倍增
+# Native smart-doubling API / 原生智能倍增 API
 
 Minecraft 1.21.1 / NeoForge.
 
 Current: 1.1.1. [API index](README.md).
+
+| Public query | Result |
+| --- | --- |
+| `isExternallyManaged(IPatternDetails pattern)` | Native doubling is enabled or this is an existing supported external batch wrapper; null returns false |
+| `isExternallyManagedProvider(ICraftingProvider provider)` | Provider advertises the optional Useless smart-provider contract; null returns false |
+
+```java
+if (AelisSmartDoublingApi.isExternallyManaged(pattern)) {
+    // Keep the native wrapper and task count; bypass only your extra local scale.
+    dispatchUnchanged(pattern, inputs);
+} else {
+    dispatchWithLocalBatching(pattern, inputs);
+}
+```
+
+These are read-only classifications, not capacity, ownership or execution-capability
+checks. Query current pattern state on its owning scheduling thread. Compile and
+run with 1.1.1 when linking these new types; they are absent from 1.1.0.
 
 `AelisSmartDoublingApi.isExternallyManaged(pattern)` reads the EAEP
 `eap$allowScaling()` switch and recognizes existing EAEP/Useless scaled wrappers.

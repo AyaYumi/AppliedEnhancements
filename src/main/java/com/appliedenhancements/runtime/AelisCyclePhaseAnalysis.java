@@ -52,7 +52,7 @@ public final class AelisCyclePhaseAnalysis {
                 if (description != null) cyclic.put(definition, description);
             }
             return prepareGraph(cycle, pending, cyclic);
-        } catch (RuntimeException unavailable) {
+        } catch (RuntimeException | LinkageError unavailable) {
             // Do not impose a new execution barrier when an optional pattern cannot be inspected.
             return cycle;
         }

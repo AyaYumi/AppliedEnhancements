@@ -145,12 +145,12 @@ public final class AelisPlanner {
             }
 
             if (graph == null && structuralFailure == null) {
-                progressSink.compilationStarted();
                 long startedAt = System.nanoTime();
                 long compileDeadline = saturatedAdd(startedAt, compileBudgetNanos);
                 long pausedNanos = 0;
                 var contextSplitKeys = new HashSet<AEKey>();
                 try {
+                    progressSink.compilationStarted();
                     while (graph == null && structuralFailure == null) {
                         var compiler = new Compiler(maxNodes, compileDeadline,
                                 pauseCheckpoint, Set.copyOf(contextSplitKeys),
@@ -184,7 +184,7 @@ public final class AelisPlanner {
                             }
                         } catch (Fallback fallback) {
                             structuralFailure = fallback.reason;
-                        } catch (RuntimeException exception) {
+                        } catch (RuntimeException | LinkageError exception) {
                             structuralFailure = "internal_compile_exception";
                             structuralError = exception;
                         } finally {
@@ -192,6 +192,9 @@ public final class AelisPlanner {
                             pausedNanos = saturatedAdd(pausedNanos, compiler.pausedNanos);
                         }
                     }
+                } catch (RuntimeException | LinkageError exception) {
+                    structuralFailure = "internal_compile_exception";
+                    structuralError = exception;
                 } finally {
                     compileNanos = Math.max(0,
                             System.nanoTime() - startedAt - pausedNanos);
@@ -246,7 +249,7 @@ public final class AelisPlanner {
                 return Result.fallback(fallback.reason, graph.nodes.size(), graph.mergedOccurrences,
                         graph.barrierCount,
                         compileNanos, System.nanoTime() - startedAt, null);
-            } catch (RuntimeException exception) {
+            } catch (RuntimeException | LinkageError exception) {
                 if (graph.executionScope()
                         == AelisExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL) {
                     transactionalRuntimeFailure =

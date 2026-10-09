@@ -13,6 +13,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class Ae2CraftingTreeHelperMixin {
     @Inject(method = "build", at = @At("HEAD"), cancellable = true)
     private void appliedenhancements$buildExactTree(boolean missingOnly, CallbackInfoReturnable<Object> callback) {
-        if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) callback.setReturnValue(ExactCraftingTree.build(this, missingOnly));
+        if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()) {
+            var tree = ExactCraftingTree.build(this, missingOnly);
+            if (tree != null) callback.setReturnValue(tree);
+        }
     }
 }

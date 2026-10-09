@@ -21,7 +21,7 @@ This guide is intended for NeoForge mod authors integrating with Applied Enhance
 | Applied Energistics 2 | `19.2.18` | Declared range: `[19.2.17,)`; public signatures directly reference AE2 types |
 | Applied Enhancements | `1.1.1` | Version covered by this guide |
 
-Version `1.1.1` retains the shared extraction/ownership API `AelisBatchExecutionContext` introduced in `1.1.0` and adds `AelisSmartDoublingApi` for native enabled-state queries. See [native smart doubling](SMART_DOUBLING.md). Clients and servers use the same build; the internal payload protocol remains `9`. Consumers of the new query must require `1.1.1` at compile time and runtime.
+Version `1.1.1` retains the shared extraction/ownership API `AelisBatchExecutionContext` introduced in `1.1.0` and adds `AelisSmartDoublingApi` for native enabled-state queries. See [native smart doubling](SMART_DOUBLING_API.md). Clients and servers use the same build; the internal payload protocol remains `9`. Consumers of the new query must require `1.1.1` at compile time and runtime.
 
 BigInteger plans are submitted without a universal CPU capability precheck. A saturated long projection does not force `simulation()` or override the CPU's submission result. Server-side integrations should read exact quantities through `AelisExactCraftingPlanApi.read(plan)`; `AelisCycleExecutionApi.copyMetadata` preserves them. The legacy `isPreviewOnly` marker now only indicates a saturated projection. The standard long fields remain projections, so acceptance by an unadapted CPU does not establish exact BigInteger execution support.
 
@@ -208,9 +208,9 @@ AelisCraftingPlanner planner = AelisCraftingPlanner.create(
         });
 ```
 
-Both `maxNodes` and `compileBudgetMillis` must be positive.
+Use positive `maxNodes` and `compileBudgetMillis` budgets. The factories normalize non-positive values to `1`.
 
-The complete factory set is `createConfigured(PauseCheckpoint, ProgressListener)`, its overload with a final `ICraftingService`, `create(int, int, PauseCheckpoint, ProgressListener)`, and its overload with a final `ICraftingService`. Null pause/listener arguments use no-op implementations; the service overload requires a non-null service. `ProgressListener` also exposes `compilationStep()`.
+The complete factory set is `createConfigured(PauseCheckpoint, ProgressListener)`, its overload with a final `ICraftingService`, `create(int, int, PauseCheckpoint, ProgressListener)`, and its overload with a final `ICraftingService`. Null pause/listener arguments use no-op implementations; a null service disables recovery from the raw service index, while ordinary tree planning remains available. `ProgressListener` also exposes `compilationStep()`.
 
 ### Execution and fallback
 
@@ -242,7 +242,32 @@ if (result.shouldFallback()) {
 
 `fallbackReason`, `error`, node statistics, and timing fields are diagnostic information. Do not treat a specific fallback-reason string as a stable protocol. A non-null `branchFailure` is not a normal compatibility fallback.
 
-If `tryExecute` throws `InterruptedException`, a runtime exception, or an error, the wrapper restores the attempt state before propagating the failure.
+Recoverable `RuntimeException` and `LinkageError` failures return a fallback result
+with `error()` and `fallbackCategory() == INTERNAL_ERROR`; they do not terminate
+the calculation. The wrapper restores `missingItems` and built candidate states
+before returning. Missing integration/context also returns a fallback result.
+`InterruptedException` and other `Error` subclasses restore attempt state and
+propagate so cancellation and fatal failures retain their meaning. A non-null
+`branchFailure()` remains an AE2 branch failure.
+
+Progress callbacks run in the calculation context and must not mutate live world
+or UI state off its owning thread. A recoverable callback failure follows the
+same fallback contract. Use the stable category for handling and the original
+reason/error for diagnostics; do not parse a message as an API protocol.
+
+### Secondary outputs and optional rewrites
+
+Item/fluid byproducts are valid outputs and retain separate material quantities.
+If a candidate optimization or external wrapper cannot be represented, retain
+the complete original tasks and continue with the native/compatible path. Do not
+construct a reduced single-output plan just to avoid an optional integration.
+This recovery does not create missing seeds/materials or waive dispatch ownership.
+
+Always retain the return value of `attachToPlan`, `copyMetadata` and `preparePlan`.
+Read the complete exact task map through the public metadata API rather than
+merging it with the long projection. Replanning is required when recipe semantics
+or cyclic work changes. Unreadable scaled rewrites restore the original exact
+work; native smart-doubling preserves wrapper identity and exact remainders.
 
 ### Planner provenance and cycle metadata for direct API calls
 
@@ -273,7 +298,7 @@ ICraftingPlan replacement = buildReplacementPlan(plan);
 replacement = AelisCycleExecutionApi.copyMetadata(plan, replacement);
 ```
 
-Always use the returned plan: custom implementations may be wrapped. These methods preserve the cycle schedule, seed policy, cyclic material amounts, and planner path while leaving the target plan's material accounting, requested output, and total logical work intact. Quantity wrappers around cyclic patterns are unwrapped and their factors are restored to firing counts; ordinary wrappers are retained. Replan if cyclic structure or counts change. Neither method enables automatic planning or manual inventory reservations.
+Always use the returned plan: custom implementations may be wrapped. These methods preserve the source cycle schedule, seed policy, exact material/task/output metadata and planner path. The target retains its native accounting fields; exact metadata and normalized task projections remain authoritative for extended execution. Quantity wrappers around cyclic patterns are unwrapped and their factors are restored to firing counts; ordinary wrappers are retained. Replan if cyclic structure or counts change. Neither method enables automatic planning or manual inventory reservations.
 
 ## 2. Cycle-aware CPU execution
 

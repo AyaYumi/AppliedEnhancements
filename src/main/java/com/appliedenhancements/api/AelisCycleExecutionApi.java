@@ -125,9 +125,8 @@ public final class AelisCycleExecutionApi {
      */
     public static ICraftingPlan attachToPlan(CraftingSimulationState state, ICraftingPlan plan) {
         Objects.requireNonNull(state, "state");
-        if (!(state instanceof AelisCyclicCraftingTracker tracker)) {
-            throw new IllegalStateException("AELIS simulation-state integration is not loaded");
-        }
+        if (!(state instanceof AelisCyclicCraftingTracker tracker)
+                || !(state instanceof AelisBigIntegerCraftingTracker)) return plan;
         return attach(plan, tracker.appliedenhancements$getCycleExecutionPlan(),
                 tracker.appliedenhancements$getCyclicCraftAmounts(),
                 ((AelisBigIntegerCraftingTracker) state)
