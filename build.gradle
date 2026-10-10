@@ -153,7 +153,7 @@ tasks.withType(ProcessResources).configureEach {
     filteringCharset = 'UTF-8'
     includeEmptyDirs = false
     // Keep editor backups and development artifacts out of runtime resources.
-    exclude '**/*.bak', '**/*.old', '**/*.tmp', '**/*.log', '**/*~',
+    exclude '**/*.bak', '**/*.old', '**/*.orig', '**/*.rej', '**/*.tmp', '**/*.log', '**/*~',
             '**/*.bbmodel', '**/*.psd', '**/*.xcf', '**/*.blend',
             '**/.DS_Store', '**/Thumbs.db', '**/desktop.ini'
 

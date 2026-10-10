@@ -291,6 +291,12 @@ ICraftingPlan plan = buildCustomPlan();
 plan = AelisCycleExecutionApi.attachToPlan(inventory, plan);
 ```
 
+`attachToPlan` requires a non-null simulation state. If either simulation-state
+integration bridge is unavailable, it returns the original plan unchanged;
+that return does not establish that cycle/exact metadata was attached. Only
+attach after a successful attempt, and inspect the returned plan through
+`getPlan` and `AelisExactCraftingPlanApi.read` before selecting an execution path.
+
 Copy metadata when replacing a plan without changing its cyclic patterns or firing counts:
 
 ```java

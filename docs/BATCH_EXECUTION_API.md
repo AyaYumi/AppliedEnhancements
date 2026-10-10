@@ -50,6 +50,14 @@ queue capacity, energy, permission or exact BigInteger execution. Contexts are
 attempt-local and thread-bound; never cache or move them to a planning worker.
 The explicit-runtime overload does not require an internal ThreadLocal scope.
 
+The pattern key and source inventory must be non-null. A null explicit runtime
+selects ordinary inventory access and supplies no cycle/seed protection; use the
+controller belonging to the submitted cycle plan. Actual input arrays and every
+holder must be non-null. Zero-input patterns may use an empty array, but their
+accepted craft count must be determined by the CPU and kept within the phase limit.
+Keep dispatch opening, acceptance, output callbacks and closing on the scheduling
+thread. The API uses thread-local nesting and does not marshal cross-thread calls.
+
 ## Contract failures and secondary outputs
 
 `beginDispatch` validates positive craft counts, the current phase limit and the
@@ -70,6 +78,11 @@ physical inputs; explicitly infinite inputs cannot generate refund stock.
 作用域类。首份和额外份数始终使用同一个库存视图。
 库存为 null 时不能发配；真实次数受当前循环步骤上限约束，且仍需检查材料与机器容量。
 不要在首份抽料之后重新 acquire，否则可能重新获得保护预算。
+
+样板键和源库存必须非 null；显式 runtime 为 null 表示普通库存访问，不提供循环或
+种子保护。循环订单应使用对应控制器。输入数组及各容器必须非 null；零输入样板
+可用空数组，真实接收次数由 CPU 确定并限制在阶段上限内。事务打开、确认、产物
+回调与关闭都在同一调度线程执行，接口不会自动把异线程调用切回所属线程。
 
 材料交付前打开事务，持久接收后立即确认 accepted。拒收关闭事务会恢复循环进度和
 待回收账本；已抽出的实物仍由 CPU 持有，必须通过原视图退款。事务不凭空退款实物。

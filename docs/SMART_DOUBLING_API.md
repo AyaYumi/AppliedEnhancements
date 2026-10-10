@@ -28,6 +28,12 @@ An installed addon alone does not enable the bypass. False allows ordinary local
 batching; true preserves the external wrapper and bypasses a second local scale.
 `isExternallyManagedProvider(provider)` recognizes the Useless smart-provider marker.
 
+If a recognized optional enabled-state query throws a runtime/linkage failure,
+the classification conservatively preserves external management. That result
+prevents another local multiplier; it does not prove that the optional wrapper
+can be read or that dispatch will succeed. Keep original tasks if reconciliation
+cannot inspect the wrapper completely.
+
 Optional wrappers are read through cached class access to `getOriginal()` and their
 native multiplier. They do not need or receive `AelisScaledPattern`. Exact task
 metadata retains native splits when their weighted sum matches the source work.
@@ -44,6 +50,9 @@ an adapter or the established native ABI. Keep client/server builds aligned.
 
 EAEP 每个样板启用倍增时才绕过；仅安装附属不会绕过全部任务。已有 EAEP 和无用之物
 倍率包装也直接保留。接入方使用查询结果避免重复包装和批量扩展，关闭倍增的普通样板继续走本地批量路径。
+
+已识别的可选开关查询出现运行时或链接错误时，会保守地保留外部管理状态，避免
+再叠加本地倍率；这不代表包装可读或执行一定成功。无法完整核对包装时保留原始任务。
 
 绕过倍率不等于丢弃数量记录。Applied 保留大整数任务账本；有限投影不一致时补足尾数，
 无法识别或读取倍率改写时恢复原始任务继续，可选接口发现按类缓存，开关实时读取，不访问 AE 网络、不新增每 tick 全网扫描。

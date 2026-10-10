@@ -24,6 +24,11 @@ does not add another copy of the native task map. Unsupported optional rewrites
 retain original exact work. Structured execution requirements describe quantity
 fields and do not override a CPU's submission result.
 
+Use non-null source/target plans when copying metadata. When attaching directly
+from simulation state, missing cycle or exact integration returns the original
+plan unchanged. Inspect the returned metadata before treating a plan as extended
+work; a normal return alone does not establish exact execution support.
+
 An exact CPU persists BigInteger work/output balances, decrements only accepted
 batches, uses bounded long windows and reports actual deliveries. Unissued
 pending outputs exclude work already dispatched. Explicit infinite inputs never

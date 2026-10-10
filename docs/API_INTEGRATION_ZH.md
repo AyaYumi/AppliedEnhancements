@@ -273,6 +273,10 @@ ICraftingPlan plan = buildCustomPlan();
 plan = AelisCycleExecutionApi.attachToPlan(inventory, plan);
 ```
 
+`attachToPlan` 要求模拟状态非 null。循环或大整数状态集成接口缺失时，会原样返回
+原计划；返回成功不代表已经附加循环或精确元数据。只在规划尝试成功后挂接，
+并通过 `getPlan` 与 `AelisExactCraftingPlanApi.read` 检查返回计划后选择执行路径。
+
 重新包装计划但未改变循环样板和执行次数时，复制元数据：
 
 ```java

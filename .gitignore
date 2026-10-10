@@ -37,6 +37,17 @@ desktop.ini
 *.log.gz
 *.tmp
 *~
+*.old
+*.orig
+*.rej
+__pycache__/
+*.pyc
+
+# Editable artwork drafts
+*.bbmodel
+*.psd
+*.xcf
+*.blend
 
 # local compiled classes, release archives and JVM diagnostics
 *.class

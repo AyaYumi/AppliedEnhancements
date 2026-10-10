@@ -14,6 +14,9 @@ allowed_docs = ({"README.md", "matter-research-api.md", "matter-research-api.zh-
 paths = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
                                 cwd=ROOT).decode("utf-8").split("\0")
 failures = []
+for source in (ROOT / "docs").rglob("*"):
+    if source.is_file() and (source.parent != ROOT / "docs" or source.name not in allowed_docs):
+        failures.append(f"{source.relative_to(ROOT).as_posix()}: not public API documentation (including ignored files)")
 for relative in filter(None, paths):
     source = ROOT / relative
     if not source.is_file():
@@ -21,8 +24,10 @@ for relative in filter(None, paths):
     lower = relative.lower()
     parts = Path(lower).parts
     if (any(p in {"build", ".gradle", "logs", "run", "runs", "screenshots", "output", "test-results",
-                  ".idea", ".vscode", ".claude", ".worktrees", "__pycache__", "codex-backups"} for p in parts)
-            or source.suffix.lower() in {".log", ".tmp", ".bak", ".class", ".zip", ".hprof", ".jfr", ".sparkprofile"}
+                  ".idea", ".vscode", ".claude", ".worktrees", "__pycache__", "codex-backups", "scratch"} for p in parts)
+            or source.suffix.lower() in {".log", ".tmp", ".bak", ".old", ".orig", ".rej", ".pyc", ".class",
+                                         ".zip", ".hprof", ".jfr", ".sparkprofile", ".bbmodel", ".psd", ".xcf", ".blend"}
+            or lower.endswith((".log.gz", "_javap.txt", "~"))
             or (source.suffix.lower() == ".jar" and relative != "gradle/wrapper/gradle-wrapper.jar")
             or lower.startswith(("tools/client/", "tools/pack/", "tools/ui/"))
             or source.name.lower() in {"desktop.ini", "thumbs.db", ".ds_store"}):
