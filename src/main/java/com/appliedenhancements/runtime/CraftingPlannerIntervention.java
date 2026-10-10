@@ -36,11 +36,12 @@ public final class CraftingPlannerIntervention {
 
         @Override public void close() {
             if (closed) return;
-            if (Thread.currentThread() != owner || EXPLICIT.get() != this) {
-                throw new IllegalStateException("Planning scopes must close on their owner thread in nesting order");
-            }
-            if (previous == null) EXPLICIT.remove(); else EXPLICIT.set(previous);
+            if (Thread.currentThread() != owner) return;
             closed = true;
+            if (EXPLICIT.get() != this) return;
+            var next = previous;
+            while (next != null && next.closed) next = next.previous;
+            if (next == null) EXPLICIT.remove(); else EXPLICIT.set(next);
         }
     }
 }

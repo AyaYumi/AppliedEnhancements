@@ -27,7 +27,7 @@ jobs:
         run: bash gradlew ${{ matrix.args }} build apiJavadoc --console=plain
       - uses: actions/upload-artifact@v4
         with:
-          name: appliedenhancements-1.1.0-forge-${{ matrix.name }}
+          name: appliedenhancements-1.1.1-forge-${{ matrix.name }}
           path: |
             build/libs/*.jar
             build/docs/api/

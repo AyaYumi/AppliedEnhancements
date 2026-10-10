@@ -37,6 +37,17 @@ desktop.ini
 *.log.gz
 *.tmp
 *~
+*.old
+*.orig
+*.rej
+__pycache__/
+*.pyc
+
+# Editable artwork drafts
+*.bbmodel
+*.psd
+*.xcf
+*.blend
 
 # local compiled classes, release archives and JVM diagnostics
 *.class
@@ -50,8 +61,7 @@ desktop.ini
 /*_javap.txt
 /ae2javap.txt
 
-# local release notes
-/CHANGELOG.md
+# local release-note drafts
 /CHANGELOG_*.md
 
 # Local Forge dependency artifacts

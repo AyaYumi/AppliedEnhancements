@@ -7,13 +7,16 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[2]
 properties = dict(re.findall(r"^([a-z_]+)=(.*)$", (ROOT / "gradle.properties").read_text(encoding="utf-8"), re.M))
 omni = properties["mod_id"] == "molecularmanipulator"
-allowed_docs = ({"README.md", "configuration.md", "matter-research-api.md", "matter-research-api.zh-CN.md",
+allowed_docs = ({"README.md", "matter-research-api.md", "matter-research-api.zh-CN.md",
                  "omni-batch-provider-api.md", "omni-batch-provider-api.zh-CN.md", "omni-exact-provider-api.md"}
                 if omni else {"README.md", "API_INTEGRATION.md", "API_INTEGRATION_ZH.md", "BATCH_EXECUTION_API.md",
-                              "EXACT_CRAFTING_API.md", "SMART_DOUBLING.md", "CONFIGURATION.md", "CHANGES.md"})
+                              "EXACT_CRAFTING_API.md", "SMART_DOUBLING_API.md"})
 paths = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
                                 cwd=ROOT).decode("utf-8").split("\0")
 failures = []
+for source in (ROOT / "docs").rglob("*"):
+    if source.is_file() and (source.parent != ROOT / "docs" or source.name not in allowed_docs):
+        failures.append(f"{source.relative_to(ROOT).as_posix()}: not public API documentation (including ignored files)")
 for relative in filter(None, paths):
     source = ROOT / relative
     if not source.is_file():
@@ -21,14 +24,16 @@ for relative in filter(None, paths):
     lower = relative.lower()
     parts = Path(lower).parts
     if (any(p in {"build", ".gradle", "logs", "run", "runs", "screenshots", "output", "test-results",
-                  ".idea", ".vscode", ".claude", ".worktrees", "__pycache__", "codex-backups"} for p in parts)
-            or source.suffix.lower() in {".log", ".tmp", ".bak", ".class", ".zip", ".hprof", ".jfr", ".sparkprofile"}
+                  ".idea", ".vscode", ".claude", ".worktrees", "__pycache__", "codex-backups", "scratch"} for p in parts)
+            or source.suffix.lower() in {".log", ".tmp", ".bak", ".old", ".orig", ".rej", ".pyc", ".class",
+                                         ".zip", ".hprof", ".jfr", ".sparkprofile", ".bbmodel", ".psd", ".xcf", ".blend"}
+            or lower.endswith((".log.gz", "_javap.txt", "~"))
             or (source.suffix.lower() == ".jar" and relative != "gradle/wrapper/gradle-wrapper.jar")
             or lower.startswith(("tools/client/", "tools/pack/", "tools/ui/"))
             or source.name.lower() in {"desktop.ini", "thumbs.db", ".ds_store"}):
         failures.append(f"{relative}: temporary/generated resource")
     if relative.startswith("docs/") and (source.parent != ROOT / "docs" or source.name not in allowed_docs):
-        failures.append(f"{relative}: not public API/configuration documentation")
+        failures.append(f"{relative}: not public API documentation")
     if source.suffix.lower() in {".json", ".mcmeta"}:
         try:
             json.loads(source.read_text(encoding="utf-8"))
@@ -50,7 +55,7 @@ for relative in filter(None, paths):
                 failures.append(f"{relative}: current mod version missing from introduction")
             if properties["minecraft_version"] == "1.20.1" and re.search(r"\b(?:1\.21\.1|19\.2\.1[78]|net\.neoforged)\b", content):
                 failures.append(f"{relative}: NeoForge version/API text in Forge documentation")
-            if source.name != "CHANGES.md" and properties["minecraft_version"] not in content[:2200]:
+            if properties["minecraft_version"] not in content[:2200]:
                 failures.append(f"{relative}: current Minecraft version missing from introduction")
 if failures:
     raise SystemExit("\n".join(failures))

@@ -129,9 +129,9 @@ class MaxFastLegacyApiTest {
     }
 
     @Test
-    void interruptionAndBudgetValidationKeepLegacyBehavior() {
-        assertThrows(IllegalArgumentException.class, () -> MaxFastCraftingPlanner.create(0, 1, null, null));
-        assertThrows(IllegalArgumentException.class, () -> MaxFastCraftingPlanner.create(1, 0, null, null));
+    void interruptionIsPreservedAndLegacyFactoryAlsoNormalizesBudgets() {
+        assertNotNull(MaxFastCraftingPlanner.create(0, 1, null, null));
+        assertNotNull(MaxFastCraftingPlanner.create(1, 0, null, null));
         assertNotNull(MaxFastCraftingPlanner.create(1, 1, null, null));
         var interrupted = new InterruptedException("legacy pause interrupted");
         var wrapper = new MaxFastCraftingPlannerAdapter((root, inventory, amount, simulation, missing) -> {

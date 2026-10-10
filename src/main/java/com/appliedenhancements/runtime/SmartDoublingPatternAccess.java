@@ -32,7 +32,7 @@ public final class SmartDoublingPatternAccess {
                 if (multiplier == null || !multiplier.trySetAccessible())
                     return new Access(true, null, null, null, enabled);
                 return new Access(true, original, null, multiplier, enabled);
-            } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
                 return new Access(eap || useless || hasInterface(type, EAP_AWARE), null, null, null, null);
             }
         }

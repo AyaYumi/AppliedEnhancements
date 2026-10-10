@@ -3,6 +3,8 @@ package com.appliedenhancements.api;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.networking.crafting.ICraftingPlan;
@@ -17,6 +19,15 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class AelisExactCraftingPlanApiTest {
+    @Test void unreadableMetadataReplacementKeepsTheCompleteOriginalPlan() {
+        var original = new PlainPlan();
+        assertSame(original, assertDoesNotThrow(() -> AelisExactCraftingPlanApi.attachExecutionMetadata(
+                original, BigInteger.ONE, Map.of(pattern(), BigInteger.ZERO), Map.of())));
+        assertSame(original, assertDoesNotThrow(() -> AelisExactCraftingPlanApi.attachExecutionMetadata(
+                original, BigInteger.ONE, Map.of(), Map.of(new TestAEKey("bad_override"), BigInteger.valueOf(-1)))));
+        assertSame(original, assertDoesNotThrow(() -> AelisExactCraftingPlanApi.attachExecutionMetadata(
+                original, BigInteger.ZERO, Map.of(), Map.of())));
+    }
     @Test
     void plainPlansExposeNoExactMetadata() {
         var plan = new PlainPlan();

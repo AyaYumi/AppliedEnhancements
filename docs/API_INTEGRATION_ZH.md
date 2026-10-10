@@ -2,11 +2,11 @@
 
 [English documentation](API_INTEGRATION.md)
 
-当前 `1.1.0-forge` 源码默认使用 AE2 `15.4.10`，声明 `[15.4.10,16)` 依赖范围，
+当前 `1.1.1-forge` 源码默认使用 AE2 `15.4.10`，声明 `[15.4.10,16)` 依赖范围，
 CI 分别构建原版 AE2 15.4.10 与 UELM 15.5.4。公开 API 使用 AE2 类型；CPU 显示内部钩子属于
 独立兼容实现，依赖更新后仍需实际运行验证。
 
-本文面向希望接入 Applied Enhancements `1.1.0-forge` 的 Forge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+本文面向希望接入 Applied Enhancements `1.1.1-forge` 的 Forge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -16,9 +16,9 @@ CI 分别构建原版 AE2 15.4.10 与 UELM 15.5.4。公开 API 使用 AE2 类型
 | Java | `17` | 编译与运行目标 |
 | Forge | `47.4.20` | 构建与运行验证版本；当前声明范围：`[47.4.10,)` |
 | Applied Energistics 2 | `15.4.10` | 声明范围：`[15.4.10,16)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.1.0-forge` | 本文档对应版本 |
+| Applied Enhancements | `1.1.1-forge` | 本文档对应版本 |
 
-本次更新的 `1.1.0-forge` 包含 `AelisBatchExecutionContext` 共享投料事务和 `AelisSmartDoublingApi` 原生倍增状态查询，详见[原生智能倍增](SMART_DOUBLING.md)。客户端与服务端必须使用本次相同构建，内部载荷协议为 `1.1.0-forge-2`。接入方应检查前置 JAR 确实包含新增查询 API，因为旧 JAR 可能具有相同版本字符串。
+`1.1.1-forge` 保留 `1.1.0-forge` 的 `AelisBatchExecutionContext` 共享投料事务和 `AelisSmartDoublingApi` 原生倍增状态查询，并补齐可恢复的规划与元数据回退，详见[原生智能倍增](SMART_DOUBLING_API.md)。客户端与服务端使用同一构建，内部载荷协议仍为 `1.1.0-forge-2`。使用本文接口契约时，编译和运行最低版本设为 `1.1.1-forge`。
 
 BigInteger 计划不做统一 CPU 能力预检。long 投影饱和不会强制 `simulation()`，也不会改写 CPU 的提交结果。服务端接入方应通过 `AelisExactCraftingPlanApi.read(plan)` 读取精确数量；`AelisCycleExecutionApi.copyMetadata` 会保留这些字段。旧名 `isPreviewOnly` 现在只表示投影发生饱和。标准 long 字段仍是投影，未适配 CPU 接受订单不代表已支持完整 BigInteger 执行。
 
@@ -40,7 +40,7 @@ com.appliedenhancements.api.client
 - `com.github.appliedenhancements`；
 - 其他未位于公共 API 包中的桥接类、载荷和常量。
 
-## 1.1.0-forge 精确规划与元数据
+## 1.1.1-forge 精确规划与元数据
 
 在服务器线程调用 `AelisExactCraftingService.begin`，然后异步等待结果。API 不再限制 256 位数字，非正数量按空订单处理。`REPORT_MISSING_ITEMS` 和 `CRAFT_LESS` 均接受；原生减少数量的每次尝试使用独立精确请求上下文。
 
@@ -58,22 +58,32 @@ AelisExecutionRequirement requirement = metadata.executionRequirement();
 
 当 `Result.shouldFallback()` 为 true 时，通过 `fallbackCategory()` 获取稳定的 `AelisFallbackReason`，无需解析字符串。未知原因返回 `OTHER`，异常返回 `INTERNAL_ERROR`，成功或分支失败返回 `NONE`。AELIS 和旧 MaxFast 结果均提供此查询，原始诊断文本继续保留。
 
-关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，显式精确服务不再受 `enable_big_integer_planning` 阻止。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.1.0-forge` 构建。
+关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，显式精确服务不再受 `enable_big_integer_planning` 阻止。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。使用新增类型时，编译和运行均需使用本次相同的 `1.1.1-forge` 构建。
 
 ## 开发环境依赖
 
 项目暂未发布独立 Maven API 构件。接入方可以把发行 JAR 放入自己项目的 `libs` 目录，并以 `compileOnly` 方式引用：
 
+Forge 发行依赖通过 ForgeGradle 的 `fg.deobf` 解析开发环境中的 Minecraft 引用。
+本地发行 JAR 需通过 `flatDir` 仓库和模块坐标引用；ForgeGradle 不会反混淆
+`files(...)` 依赖。本分支从 Modrinth Maven 获取 AE2；UELM 接入方可以换成
+自己匹配的 AE2 依赖。
+
 ```groovy
+repositories {
+    maven { url = "https://api.modrinth.com/maven" }
+    flatDir { dirs "libs" }
+}
+
 dependencies {
     // 接入方通常已经直接依赖 AE2；其类型出现在本模组的公共签名中。
-    compileOnly "org.appliedenergistics:appliedenergistics2:15.4.10"
+    compileOnly fg.deobf("maven.modrinth:ae2:15.4.10")
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly files("libs/appliedenhancements-1.1.0-forge.jar")
+    compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.1.1-forge")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly files("libs/appliedenhancements-1.1.0-forge.jar")
+    runtimeOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.1.1-forge")
 }
 ```
 
@@ -83,7 +93,7 @@ dependencies {
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 mandatory=true
-versionRange="[1.1.0-forge,)"
+versionRange="[1.1.1-forge,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -94,7 +104,7 @@ side="BOTH"
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 mandatory=false
-versionRange="[1.1.0-forge,)"
+versionRange="[1.1.1-forge,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -143,7 +153,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.1.0-forge` 的内部载荷协议为 `1.1.0-forge-2`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.1.1-forge` 的内部载荷协议为 `1.1.0-forge-2`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
@@ -205,7 +215,7 @@ AelisCraftingPlanner planner = AelisCraftingPlanner.create(
 
 ### 执行与回退
 
-工厂方法共有四种：`createConfigured(PauseCheckpoint, ProgressListener)`、末尾增加 `ICraftingService` 的重载、`create(int, int, PauseCheckpoint, ProgressListener)`、末尾增加 `ICraftingService` 的重载。两个预算参数必须为正数；暂停点或监听器为 null 时采用空实现，服务重载要求服务非 null。`ProgressListener` 还包含 `compilationStep()` 回调。
+工厂方法共有四种：`createConfigured(PauseCheckpoint, ProgressListener)`、末尾增加 `ICraftingService` 的重载、`create(int, int, PauseCheckpoint, ProgressListener)`、末尾增加 `ICraftingService` 的重载。建议传入正数预算，非正预算会归一为 `1`；暂停点或监听器为 null 时采用空实现，服务为 null 时只关闭服务原始索引恢复，仍可按现有合成树规划。`ProgressListener` 还包含 `compilationStep()` 回调。
 
 ```java
 AelisCraftingPlanner.Result result = planner.tryExecute(
@@ -233,7 +243,23 @@ if (result.shouldFallback()) {
 
 `Result` 中的 `fallbackReason`、`error`、节点统计和耗时用于诊断，不应把某个具体回退字符串当成稳定协议。`branchFailure` 非空时不属于普通兼容回退。
 
-`tryExecute` 抛出 `InterruptedException`、运行时异常或错误时，包装层会先恢复本次尝试状态再向上传播。
+可恢复的 `RuntimeException`、`LinkageError` 会返回回退结果，保留 `error()`，
+`fallbackCategory()` 为 `INTERNAL_ERROR`；返回前恢复 `missingItems` 与已构建候选状态，
+不直接终止计算。集成接口或上下文缺失也返回回退结果。`InterruptedException` 与
+其他 `Error` 会在恢复尝试状态后向上传播；`branchFailure()` 仍表示 AE2 分支失败。
+
+进度回调在计算上下文运行，不得跨线程修改世界或 UI。可恢复的回调失败采用同一回退契约。
+按稳定分类决定处理方式，原始原因和异常仅作诊断，不解析消息字符串作为协议。
+
+### 副产物与可选改写
+
+物品、流体副产物是有效产物，材料数量分别保留。候选优化或外部包装不可表示时，
+保留原始完整任务并继续原生/兼容路径，不能为了绕过可选接口而缩成单产物计划。
+恢复不产生缺少的种子和材料，也不免除发配阶段的所有权契约。
+
+必须保存 `attachToPlan`、`copyMetadata`、`preparePlan` 的返回值。通过公开元数据接口
+读取完整精确任务表，不能与 long 投影叠加。配方语义或循环工作量改变时重新规划。
+无法读取的倍率改写恢复原始精确工作量；原生智能倍增保留包装身份与精确尾数。
 
 ### API 调用中的来源标识与循环元数据
 
@@ -257,6 +283,10 @@ ICraftingPlan plan = buildCustomPlan();
 plan = AelisCycleExecutionApi.attachToPlan(inventory, plan);
 ```
 
+`attachToPlan` 要求模拟状态非 null。循环或大整数状态集成接口缺失时，会原样返回
+原计划；返回成功不代表已经附加循环或精确元数据。只在规划尝试成功后挂接，
+并通过 `getPlan` 与 `AelisExactCraftingPlanApi.read` 检查返回计划后选择执行路径。
+
 重新包装计划但未改变循环样板和执行次数时，复制元数据：
 
 ```java
@@ -264,7 +294,7 @@ ICraftingPlan replacement = buildReplacementPlan(plan);
 replacement = AelisCycleExecutionApi.copyMetadata(plan, replacement);
 ```
 
-这两个接口都会返回应提交的计划；自定义实现可能被包装，必须使用返回值。它们保留循环执行顺序、种子策略、循环材料数量和规划路径，不会修改目标计划的材料统计、订单数量或逻辑总工作量。若循环样板已被数量包装，会还原原始样板并把倍率乘回执行次数；普通样板的包装保持不变。改变循环结构或次数后需要重新规划。以上调用不启用自动规划器，也不隐式启用手动库存锁。
+这两个接口都会返回应提交的计划；自定义实现可能被包装，必须使用返回值。它们保留来源计划的循环执行顺序、种子策略、精确材料/任务/产量元数据与规划路径。目标保留原生记账字段；扩展执行以精确元数据和归一后的任务投影为准。若循环样板已被数量包装，会还原原始样板并把倍率乘回执行次数；普通样板的包装保持不变。改变循环结构或次数后需要重新规划。以上调用不启用自动规划器，也不隐式启用手动库存锁。
 
 ## 2. 循环感知 CPU 执行
 

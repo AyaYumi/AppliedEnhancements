@@ -4,11 +4,17 @@
   <img src="artwork/project-logo-ae-text.png" alt="Applied Enhancements" width="720">
 </p>
 
-[中文](README_ZH.md) · [API documentation](docs/README.md) · [Configuration](docs/CONFIGURATION.md)
+[中文](README_ZH.md) · [API documentation](docs/README.md) · [Configuration](CONFIGURATION.md)
 
-**1.1.0-forge** extends AE2 crafting, storage access and pattern terminals on Minecraft
+**1.1.1-forge** extends AE2 crafting, storage access and pattern terminals on Minecraft
 1.20.1 / Forge. It adds shared batch extraction/ownership transactions used by
 cycle-aware CPUs, while retaining existing planner and terminal APIs.
+
+Recoverable planning and optional display failures now use native fallback or
+restore the complete original tasks. Batch reconciliation, metadata attachment,
+progress observers, scope cleanup and optional AE2 Crafting Tree integration no
+longer abort a valid order with a compatibility exception. Genuine shortages
+retain AE2's normal missing-material result.
 
 ## Features
 
@@ -32,7 +38,7 @@ ExtendedAE, AE2WTLib, JEI, AdvancedAE,
 Data Energistics and other integrations remain optional. New addon versions need
 runtime verification when they change internal hooks.
 
-Build `build/libs/appliedenhancements-1.1.0-forge.jar` and install the same build on
+Build `build/libs/appliedenhancements-1.1.1-forge.jar` and install the same build on
 client and server. Internal network protocol is 1.1.0-forge-2. Addons use the separate public API; this
 mod is not embedded in their JARs.
 
@@ -41,7 +47,7 @@ mod is not embedded in their JARs.
 The active instance generates `config/appliedenhancements-common.toml`.
 Order interception, progress display, enhanced material preview and automatic
 AELIS default off; cache/storage optimizations default on. See the complete
-[17-option reference](docs/CONFIGURATION.md) before enabling a planner mode.
+[17-option reference](CONFIGURATION.md) before enabling a planner mode.
 
 Pattern Quick Move defaults to right-click; item actions default to Alt +
 right-click. Both are GUI-only, independently configurable Forge key bindings.
@@ -81,4 +87,4 @@ exact execution. Unsupported dynamic/cyclic branches preserve their documented
 failure/fallback boundary. AELIS caches are per planning session, not persistent
 global recipe graphs. Valid huge quantities still require time and memory.
 
-[Changes](docs/CHANGES.md) · Licensed under [MIT](LICENSE).
+[Changes](CHANGELOG.md) · Licensed under [MIT](LICENSE).

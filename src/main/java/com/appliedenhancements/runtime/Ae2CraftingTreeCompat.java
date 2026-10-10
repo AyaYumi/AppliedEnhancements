@@ -3,7 +3,6 @@ package com.appliedenhancements.runtime;
 import appeng.api.networking.crafting.ICraftingPlan;
 import appeng.crafting.CraftingPlan;
 import appeng.menu.me.crafting.CraftingPlanSummary;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Optional;
 
@@ -15,7 +14,7 @@ public final class Ae2CraftingTreeCompat {
             try {
                 extension = Class.forName("com.neuvillette.ae2ct.api.ICraftingPlanSummary",
                         false, summaryType.getClassLoader());
-            } catch (ClassNotFoundException absent) {
+            } catch (ClassNotFoundException | RuntimeException | LinkageError absent) {
                 return Optional.empty();
             }
             if (!extension.isAssignableFrom(summaryType)) return Optional.empty();
@@ -24,8 +23,8 @@ public final class Ae2CraftingTreeCompat {
                 Class<?> recipeHelper = getter.getReturnType();
                 return Optional.of(new SummaryApi(getter, extension.getMethod("setJob", recipeHelper),
                         recipeHelper.getMethod("fromCraftingPlan", CraftingPlan.class)));
-            } catch (ReflectiveOperationException incompatible) {
-                throw new IllegalStateException("Unsupported AE2: Crafting Tree summary API", incompatible);
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError incompatible) {
+                return Optional.empty();
             }
         }
     };
@@ -44,10 +43,8 @@ public final class Ae2CraftingTreeCompat {
                             plan.usedItems(), plan.emittedItems(), plan.missingItems(), plan.patternTimes());
             Object tree = api.factory.invoke(null, nativeView);
             api.setter.invoke(summary, tree);
-        } catch (InvocationTargetException failure) {
-            throw new IllegalStateException("Could not build AE2: Crafting Tree summary metadata", failure.getCause());
-        } catch (ReflectiveOperationException failure) {
-            throw new IllegalStateException("Could not initialize AE2: Crafting Tree summary metadata", failure);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
+            // Optional tree metadata must not prevent the material plan from opening.
         }
     }
 

@@ -13,7 +13,6 @@ import com.github.appliedenhancements.integration.ae2.AelisCraftingTreeNodeBridg
 import com.github.appliedenhancements.integration.ae2.AelisCraftingTreeProcessBridge;
 import java.util.ArrayDeque;
 import java.util.IdentityHashMap;
-import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -58,7 +57,7 @@ public interface AelisCraftingPlanner {
                 Config.AELIS_COMPILE_BUDGET_MS.get(),
                 pauseCheckpoint,
                 progressListener,
-                Objects.requireNonNull(craftingService, "craftingService"));
+                craftingService);
     }
 
     /** Creates a planner with explicit resource budgets. */
@@ -67,15 +66,9 @@ public interface AelisCraftingPlanner {
             int compileBudgetMillis,
             PauseCheckpoint pauseCheckpoint,
             ProgressListener progressListener) {
-        if (maxNodes <= 0) {
-            throw new IllegalArgumentException("maxNodes must be positive");
-        }
-        if (compileBudgetMillis <= 0) {
-            throw new IllegalArgumentException("compileBudgetMillis must be positive");
-        }
         return new AelisCraftingPlannerImpl(
-                maxNodes,
-                compileBudgetMillis,
+                Math.max(1, maxNodes),
+                Math.max(1, compileBudgetMillis),
                 pauseCheckpoint == null ? NO_PAUSE : pauseCheckpoint,
                 progressListener == null ? ProgressListener.NONE : progressListener,
                 null);
@@ -88,18 +81,12 @@ public interface AelisCraftingPlanner {
             PauseCheckpoint pauseCheckpoint,
             ProgressListener progressListener,
             ICraftingService craftingService) {
-        if (maxNodes <= 0) {
-            throw new IllegalArgumentException("maxNodes must be positive");
-        }
-        if (compileBudgetMillis <= 0) {
-            throw new IllegalArgumentException("compileBudgetMillis must be positive");
-        }
         return new AelisCraftingPlannerImpl(
-                maxNodes,
-                compileBudgetMillis,
+                Math.max(1, maxNodes),
+                Math.max(1, compileBudgetMillis),
                 pauseCheckpoint == null ? NO_PAUSE : pauseCheckpoint,
                 progressListener == null ? ProgressListener.NONE : progressListener,
-                Objects.requireNonNull(craftingService, "craftingService"));
+                craftingService);
     }
 
     /**
@@ -111,6 +98,11 @@ public interface AelisCraftingPlanner {
      * {@link Result#shouldFallback()} is true. A non-null
      * {@link Result#branchFailure()} is a terminal AE2 branch failure and should
      * normally be propagated instead of falling back.</p>
+     *
+     * <p>Recoverable runtime and linkage failures are returned as fallback
+     * results with an error after attempt-state restoration. Interruption and
+     * other errors restore that state and propagate. Optional progress callback
+     * failures use the same contract; callbacks run in the calculation context.</p>
      */
     Result tryExecute(
             CraftingTreeNode root,
@@ -201,19 +193,30 @@ final class AelisCraftingPlannerImpl implements AelisCraftingPlanner {
 
     private Result tryExecuteScoped(CraftingTreeNode root, CraftingSimulationState inventory,
             long requestedAmount, boolean simulation, KeyCounter missingItems) throws InterruptedException {
-        Objects.requireNonNull(root, "root");
-        Objects.requireNonNull(inventory, "inventory");
-        Objects.requireNonNull(missingItems, "missingItems");
+        if (root == null || inventory == null || missingItems == null) {
+            return fallback("invalid_planning_context", null);
+        }
+        if (!(inventory instanceof com.github.appliedenhancements.integration.ae2.AelisCyclicCraftingTracker)
+                || !(inventory instanceof com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftingTracker)) {
+            return fallback("simulation_state_integration_unavailable", null);
+        }
 
         var missingSnapshot = new KeyCounter();
         missingSnapshot.addAll(missingItems);
-        var possibleSnapshot = snapshotPossibleStates(root);
+        IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot;
+        try { possibleSnapshot = snapshotPossibleStates(root); }
+        catch (RuntimeException | LinkageError unavailable) {
+            return fallback("integration_snapshot_unavailable", unavailable);
+        }
 
         AelisPlanner.Result result;
         try {
             result = delegate.tryExecute(
                     root, inventory, requestedAmount, simulation, missingItems);
-        } catch (InterruptedException | RuntimeException | Error failure) {
+        } catch (RuntimeException | LinkageError failure) {
+            restoreAttemptState(root, missingItems, missingSnapshot, possibleSnapshot);
+            return fallback("internal_execution_exception", failure);
+        } catch (InterruptedException | Error failure) {
             restoreAttemptState(root, missingItems, missingSnapshot, possibleSnapshot);
             throw failure;
         }
@@ -235,6 +238,10 @@ final class AelisCraftingPlannerImpl implements AelisCraftingPlanner {
                 result.nativeNodeCount(),
                 result.branchFailure(),
                 result.error());
+    }
+
+    private static Result fallback(String reason, Throwable error) {
+        return new Result(false, reason, 0, 0, 0, 0, 0, 0, false, null, error);
     }
 
     private static AelisPlanner.ProgressSink adapt(ProgressListener listener) {
@@ -301,14 +308,14 @@ final class AelisCraftingPlannerImpl implements AelisCraftingPlanner {
             if (visited.put(node, Boolean.TRUE) != null) {
                 continue;
             }
-            var bridge = (AelisCraftingTreeNodeBridge) node;
+            if (!(node instanceof AelisCraftingTreeNodeBridge bridge)) continue;
             var processes = bridge.molecularmanipulator$getProcesses();
             if (processes == null) {
                 continue;
             }
             for (CraftingTreeProcess process : processes) {
+                if (!(process instanceof AelisCraftingTreeProcessBridge processBridge)) continue;
                 visitor.accept(process);
-                var processBridge = (AelisCraftingTreeProcessBridge) process;
                 var children = processBridge.molecularmanipulator$getChildNodes();
                 if (children != null) {
                     pending.addAll(children.keySet());

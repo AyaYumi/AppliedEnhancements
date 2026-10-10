@@ -174,11 +174,8 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
 
     @Override
     public void appliedenhancements$endProjectedCraftingTransfer() {
-        if (appliedenhancements$projectedCraftingTransferDepth <= 0) {
-            throw new IllegalStateException(
-                    "Projected crafting transfer scope is not active");
-        }
-        appliedenhancements$projectedCraftingTransferDepth--;
+        appliedenhancements$projectedCraftingTransferDepth = Math.max(0,
+                appliedenhancements$projectedCraftingTransferDepth - 1);
     }
 
     @Override

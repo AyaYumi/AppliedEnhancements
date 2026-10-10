@@ -216,6 +216,10 @@ tasks.withType(JavaCompile).configureEach {
 tasks.withType(ProcessResources).configureEach {
     filteringCharset = 'UTF-8'
     includeEmptyDirs = false
+    // Keep editor backups and development artifacts out of runtime resources.
+    exclude '**/*.bak', '**/*.old', '**/*.orig', '**/*.rej', '**/*.tmp', '**/*.log', '**/*~',
+            '**/*.bbmodel', '**/*.psd', '**/*.xcf', '**/*.blend',
+            '**/.DS_Store', '**/Thumbs.db', '**/desktop.ini'
 }
 
 tasks.named('test', Test).configure {
@@ -239,7 +243,7 @@ tasks.withType(Jar).configureEach {
     from('LICENSE')
     from('docs') {
         include 'README.md', 'API_INTEGRATION.md', 'API_INTEGRATION_ZH.md', 'BATCH_EXECUTION_API.md',
-                'EXACT_CRAFTING_API.md', 'SMART_DOUBLING.md', 'CONFIGURATION.md', 'CHANGES.md'
+                'EXACT_CRAFTING_API.md', 'SMART_DOUBLING_API.md'
         into 'docs'
     }
 }

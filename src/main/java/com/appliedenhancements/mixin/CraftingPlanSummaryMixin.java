@@ -55,9 +55,13 @@ public abstract class CraftingPlanSummaryMixin {
                     || !exact.appliedenhancements$getBigIntegerMissingAmounts().isEmpty()
                     || !exact.appliedenhancements$getBigIntegerStoredAmounts().isEmpty()
                     || exact.appliedenhancements$isPreviewOnly())) {
-            var summary = new CraftingPlanSummary(job.bytes(), job.simulation(), appliedenhancements$createEntries(job));
-            Ae2CraftingTreeCompat.initializeSummary(summary, job);
-            callback.setReturnValue(summary);
+            try {
+                var summary = new CraftingPlanSummary(job.bytes(), job.simulation(), appliedenhancements$createEntries(job));
+                Ae2CraftingTreeCompat.initializeSummary(summary, job);
+                callback.setReturnValue(summary);
+            } catch (RuntimeException | LinkageError unavailable) {
+                // Keep AE2's native summary path when optional pattern metadata is unreadable.
+            }
         }
     }
 
@@ -71,8 +75,12 @@ public abstract class CraftingPlanSummaryMixin {
         }
 
         // Preserve metadata initialized by other mods on the original summary.
-        ((CraftingPlanSummaryAccessor) callback.getReturnValue())
-                .appliedenhancements$setEntries(appliedenhancements$createEntries(job));
+        try {
+            var entries = appliedenhancements$createEntries(job);
+            ((CraftingPlanSummaryAccessor) callback.getReturnValue()).appliedenhancements$setEntries(entries);
+        } catch (RuntimeException | LinkageError unavailable) {
+            // Preserve the complete summary already returned by AE2 and its other integrations.
+        }
     }
 
     @Unique

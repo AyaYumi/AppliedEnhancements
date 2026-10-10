@@ -127,6 +127,19 @@ class ExactScaledTaskReconciliationTest {
         assertEquals(Map.of(nativeBatch, 2L, original, 1L), result.projected());
     }
 
+    @Test void unreadableOriginalIdentityRestoresTheWholeExactLedger() {
+        var unreadable = (IPatternDetails) Proxy.newProxyInstance(getClass().getClassLoader(),
+                new Class<?>[]{IPatternDetails.class}, (p, m, a) -> switch (m.getName()) {
+                    case "hashCode" -> System.identityHashCode(p);
+                    case "equals" -> p == a[0];
+                    default -> throw new IllegalStateException("Optional pattern identity unavailable");
+                });
+        var exact = Map.of(original, total);
+        var result = assertDoesNotThrow(() -> ExactScaledTaskReconciliation.reconcile(Map.of(batch, 1L), exact,
+                ignored -> new ExactScaledTaskReconciliation.ScaledTask(unreadable, 4)));
+        assertEquals(exact, result.exact());
+    }
+
     private static IPatternDetails pattern() {
         return (IPatternDetails) Proxy.newProxyInstance(ExactScaledTaskReconciliationTest.class.getClassLoader(),
                 new Class<?>[]{IPatternDetails.class}, (p, m, a) -> switch (m.getName()) {

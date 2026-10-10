@@ -1,7 +1,46 @@
-# 大整数规划与 CPU 执行 API（1.20.1 / 1.1.0-forge）
+# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.20.1 / 1.1.1-forge）
+
+## English API contract
+
+For Applied Enhancements **1.1.1-forge**, Minecraft **1.20.1**, Java 17 and Forge.
+Call `AelisExactCraftingService.begin(level, requester, request)` on the owning
+server thread with a connected requester. Construction snapshots network state;
+await the returned `Future<ICraftingPlan>` asynchronously. Both
+`REPORT_MISSING_ITEMS` and `CRAFT_LESS` are supported. Non-positive amounts
+normalize to empty requests; null arguments, wrong-side/thread calls and a
+missing requester connection remain caller errors.
+
+Read the immutable `AelisPlanMetadata` with `AelisExactCraftingPlanApi.read(plan)`.
+The exact pattern-count map is the complete work ledger, replacing the long
+projection. Material quantities promote native values and apply exact metadata;
+retain all item/fluid byproducts. Native fallback records actual achieved output,
+not the original arbitrary-precision target. Exact requests remain explicit when
+automatic planning or its arithmetic preference is disabled.
+
+Keep the returned plan from metadata attachment/copying and `preparePlan`.
+`attachExecutionMetadata` preserves the original plan for null/non-positive
+output, null maps or invalid entries. Valid metadata replaces quantities; it
+does not add another copy of the native task map. Unsupported optional rewrites
+retain original exact work. Structured execution requirements describe quantity
+fields and do not override a CPU's submission result.
+
+Use non-null source/target plans when copying metadata. When attaching directly
+from simulation state, missing cycle or exact integration returns the original
+plan unchanged. Inspect the returned metadata before treating a plan as extended
+work; a normal return alone does not establish exact execution support.
+
+An exact CPU persists BigInteger work/output balances, decrements only accepted
+batches, uses bounded long windows and reports actual deliveries. Unissued
+pending outputs exclude work already dispatched. Explicit infinite inputs never
+become physical refunds; large finite numbers alone do not mark an infinite source.
+Use [shared batch execution](BATCH_EXECUTION_API.md) for cycle seeds, input
+ownership and rollback, and [native smart doubling](SMART_DOUBLING_API.md) to
+avoid a second multiplier. The Chinese sections below specify the full lifecycle.
+
+## 中文 API 契约
 
 此 API 通过公开执行契约接入独立 CPU。
-客户端与服务端须使用本次同一构建（内部协议 `1.1.0-forge-2`）；接入方须使用包含这些类的 1.1.0-forge JAR 编译和运行。
+客户端与服务端须使用本次同一构建（内部协议 `1.1.0-forge-2`）；接入方须使用包含这些类的 1.1.1-forge JAR 编译和运行。
 
 ## 稳定的计划元数据 API
 
@@ -97,7 +136,7 @@ boolean finished = outputProgress.complete();
 ## 规划阶段的样板倍增
 
 精确样板次数是完整账本，不是仅包含溢出项的补丁；非空时不得再合并旧的 long 任务表，否则会把原始样板和倍增样板重复计算。
-数量型包装样板可实现 `AelisScaledPattern`，返回原样板及相对倍数。无用之物的智能倍增样板已通过可选 Mixin 接入，无须把该模组设为前置。
+已知原生包装契约由可选兼容识别，无用之物的智能倍增无需设为前置。`AelisScaledPattern` 属于内部兼容接口，不是稳定公开接入点；第三方通过公开倍增查询避免重复包装，并保留完整任务元数据。
 附加或复制元数据时，会将完整次数按实际包装倍率重新分成整批和原样板余数，并同步重建 long 窗口。
 提交前再次改写计划也保留元数据。已对齐计划的复制不会再次乘除倍率；存档保留批次样板定义和精确剩余次数。
 该修复不扩展接收机器的单批容量，单次材料和输出仍须符合原接口的 long 范围。
@@ -108,7 +147,7 @@ boolean finished = outputProgress.complete();
 plan = AelisExactCraftingPlanApi.attachExecutionMetadata(plan, output, tasks, infinite);
 ```
 
-必须保留返回值（可能是包装计划）。投影的样板集合和精确集合应一致，精确次数是替换值，不是增量。
+必须保留返回值（可能是包装计划）。输出为 null/非正数、映射为 null，或包含空 key、空/非正数量时，保持原计划不变。有效精确次数是完整替换值，不是增量；可选倍率改写无法识别时保留原始完整任务。
 包装或复制计划时使用 `AelisCycleExecutionApi.copyMetadata(source, target)`，可同时保留循环、材料、字节数和最终订单数量。
 
 ## 共享批量投料
