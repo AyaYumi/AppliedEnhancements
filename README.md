@@ -28,7 +28,7 @@ retain AE2's normal missing-material result.
 | Infinite cells | Explicit tags/runtime markers/current compatible cells, no inference from a huge finite count |
 | Pattern terminals | Duplicate/invalid filters, selection, atomic Cut/Paste and Quick Move integration |
 | Item actions | AE network context menu plus optional JEI recipe/search/extract/give integration |
-| Diagnostics | Default off process logs; repeated faults and traces share bounded global one-minute windows |
+| Logging | Planning traces are removed; repeated runtime/load faults retain a first warning/error and use bounded global one-minute windows |
 
 ## Requirements and installation
 

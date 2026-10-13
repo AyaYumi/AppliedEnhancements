@@ -2,7 +2,7 @@
 
 Minecraft 1.21.1 / NeoForge.
 
-Applied Enhancements **1.1.1** generates `config/appliedenhancements-common.toml`
+Applied Enhancements **1.1.2** generates `config/appliedenhancements-common.toml`
 in the active instance. Edit existing sections and restart both sides.
 [API index](docs/README.md)
 
@@ -15,7 +15,6 @@ in the active instance. Edit existing sections and restart both sides.
 | `crafting.aelis.enable_big_integer_planning` | true | Exact automatic AELIS arithmetic preference; explicit exact service requests remain exact even when false |
 | `crafting.aelis.max_nodes` | 100000 | 1000–1,000,000 nodes per attempt |
 | `crafting.aelis.compile_budget_ms` | 2000 | 100–30000 ms per compile attempt |
-| `crafting.aelis.enable_diagnostics` | false | Optional process summaries, one-minute global template limit |
 | `crafting.aelis.cycle_solver.max_scc_nodes` | 256 | 4–1024 material nodes per cyclic component |
 | `crafting.aelis.cycle_solver.max_search_states` | 1000000 | 1000–10,000,000 branch-search states |
 | `crafting.aelis.cycle_solver.budget_ms` | 1000 | 10–5000 ms per cyclic solve |
@@ -51,8 +50,9 @@ Old split/pre-AELIS options migrate to the current functional sections with back
 Old numeric order settings migrate to the three-state mode. Customized settings
 remain preserved when saving nested configuration through Configured.
 
-Diagnostics default off. Repeated runtime/load faults retain a first warning/error
-then use a global one-minute category window. Known history is retained at the
+The diagnostics compatibility setting defaults off. This release emits no
+planning traces. Repeated runtime/load faults retain a first warning/error, then
+use a global one-minute category window. Known history is retained at the
 128-category limit; excess categories share an overflow window. This bounds logs
 without modifying the operation's rejection, retry, cancellation or owned inputs.
 

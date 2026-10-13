@@ -2,7 +2,7 @@
 
 Minecraft 1.21.1 / NeoForge.
 
-Current: 1.1.1. [API index](README.md).
+Current: 1.1.2. [API index](README.md).
 
 | Public query | Result |
 | --- | --- |
@@ -20,7 +20,7 @@ if (AelisSmartDoublingApi.isExternallyManaged(pattern)) {
 
 These are read-only classifications, not capacity, ownership or execution-capability
 checks. Query current pattern state on its owning scheduling thread. Compile and
-run with 1.1.1 when linking these new types; they are absent from 1.1.0.
+run with 1.1.1 or later when linking these new types; they are absent from 1.1.0.
 
 `AelisSmartDoublingApi.isExternallyManaged(pattern)` reads the EAEP
 `eap$allowScaling()` switch and recognizes existing EAEP/Useless scaled wrappers.
