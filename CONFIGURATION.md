@@ -15,6 +15,7 @@ in the active instance. Edit existing sections and restart both sides.
 | `crafting.aelis.enable_big_integer_planning` | true | Exact automatic AELIS arithmetic preference; explicit exact service requests remain exact even when false |
 | `crafting.aelis.max_nodes` | 100000 | 1000–1,000,000 nodes per attempt |
 | `crafting.aelis.compile_budget_ms` | 2000 | 100–30000 ms per compile attempt |
+| `crafting.aelis.enable_diagnostics` | false | Compatibility setting for older OmniSequence builds; this release emits no planning traces |
 | `crafting.aelis.cycle_solver.max_scc_nodes` | 256 | 4–1024 material nodes per cyclic component |
 | `crafting.aelis.cycle_solver.max_search_states` | 1000000 | 1000–10,000,000 branch-search states |
 | `crafting.aelis.cycle_solver.budget_ms` | 1000 | 10–5000 ms per cyclic solve |
