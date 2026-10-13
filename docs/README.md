@@ -1,6 +1,6 @@
 # Applied Enhancements API / 接口文档
 
-Current: **1.1.1**, Minecraft **1.21.1**, Java **21**, NeoForge **21.1.220+**,
+Current: **1.1.2**, Minecraft **1.21.1**, Java **21**, NeoForge **21.1.220+**,
 AE2 **19.2.17+**. Network protocol **9** requires matching client/server builds.
 
 | Contract | Documentation |

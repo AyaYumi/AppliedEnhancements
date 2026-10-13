@@ -4,6 +4,7 @@ import appeng.api.stacks.AEKey;
 import com.appliedenhancements.api.AelisCycleExecutionPlan;
 import com.appliedenhancements.api.AelisCycleRuntimeController;
 import com.appliedenhancements.api.AelisCycleSeedPolicy;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -14,7 +15,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 public final class AelisCycleExecutionNbt {
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
 
     private AelisCycleExecutionNbt() {
     }
@@ -27,7 +28,9 @@ public final class AelisCycleExecutionNbt {
         var state = runtime.snapshot();
         root.putInt("stepIndex", state.stepIndex());
         root.putLong("remainingCrafts", state.remainingCrafts());
+        root.putString("exactRemainingCrafts", state.exactRemainingCrafts().toString());
         root.put("pendingOutputs", writeAmounts(state.pendingOutputs(), registries));
+        root.put("exactPendingOutputs", writeExactAmounts(state.exactPendingOutputs(), registries));
         root.putString("seedPolicy", runtime.plan().seedPolicy().name());
 
         AelisCycleExecutionPlan plan = runtime.plan();
@@ -36,6 +39,7 @@ public final class AelisCycleExecutionNbt {
             var tag = new CompoundTag();
             tag.put("pattern", step.patternDefinition().toTagGeneric(registries));
             tag.putLong("crafts", step.crafts());
+            tag.putString("exactCrafts", step.exactCrafts().toString());
             tag.put("inputs", writeAmounts(step.inputsPerCraft(), registries));
             tag.put("self", writeKeys(step.selfReplenishingInputs(), registries));
             steps.add(tag);
@@ -77,7 +81,9 @@ public final class AelisCycleExecutionNbt {
                 }
                 steps.add(new AelisCycleExecutionPlan.Step(
                         pattern,
-                        tag.getLong("crafts"),
+                        root.getInt("version") >= 3
+                                ? new BigInteger(tag.getString("exactCrafts"))
+                                : BigInteger.valueOf(tag.getLong("crafts")),
                         readAmounts(tag.getList("inputs", Tag.TAG_COMPOUND), registries),
                         readKeys(tag.getList("self", Tag.TAG_COMPOUND), registries)));
             }
@@ -113,9 +119,13 @@ public final class AelisCycleExecutionNbt {
                     plan,
                     new AelisCycleRuntimeController.State(
                             root.getInt("stepIndex"),
-                            root.getLong("remainingCrafts"),
-                            root.getInt("version") >= 2
-                                    ? readAmounts(root.getList("pendingOutputs", Tag.TAG_COMPOUND), registries)
+                            root.getInt("version") >= 3
+                                    ? new BigInteger(root.getString("exactRemainingCrafts"))
+                                    : BigInteger.valueOf(root.getLong("remainingCrafts")),
+                            root.getInt("version") >= 3
+                                    ? readExactAmounts(root.getList("exactPendingOutputs", Tag.TAG_COMPOUND), registries)
+                                    : root.getInt("version") >= 2
+                                    ? toExactAmounts(readAmounts(root.getList("pendingOutputs", Tag.TAG_COMPOUND), registries))
                                     : Map.of()));
         } catch (RuntimeException exception) {
             return null;
@@ -133,6 +143,36 @@ public final class AelisCycleExecutionNbt {
             result.add(tag);
         }
         return result;
+    }
+
+    private static ListTag writeExactAmounts(Map<AEKey, BigInteger> values, HolderLookup.Provider registries) {
+        var result = new ListTag();
+        for (var entry : values.entrySet()) {
+            var tag = new CompoundTag();
+            tag.put("key", entry.getKey().toTagGeneric(registries));
+            tag.putString("amount", entry.getValue().toString());
+            result.add(tag);
+        }
+        return result;
+    }
+
+    private static Map<AEKey, BigInteger> readExactAmounts(ListTag values, HolderLookup.Provider registries) {
+        var result = new LinkedHashMap<AEKey, BigInteger>();
+        for (int index = 0; index < values.size(); index++) {
+            var tag = values.getCompound(index);
+            AEKey key = AEKey.fromTagGeneric(registries, tag.getCompound("key"));
+            var amount = new BigInteger(tag.getString("amount"));
+            if (key == null || amount.signum() <= 0 || result.putIfAbsent(key, amount) != null) {
+                throw new IllegalArgumentException("Invalid exact cycle amount entry");
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private static Map<AEKey, BigInteger> toExactAmounts(Map<AEKey, Long> values) {
+        var result = new LinkedHashMap<AEKey, BigInteger>();
+        values.forEach((key, amount) -> result.put(key, BigInteger.valueOf(amount)));
+        return Map.copyOf(result);
     }
 
     private static Map<AEKey, Long> readAmounts(

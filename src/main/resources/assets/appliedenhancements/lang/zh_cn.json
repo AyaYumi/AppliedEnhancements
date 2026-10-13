@@ -92,6 +92,7 @@
   "message.appliedenhancements.long_range_disabled": "服务器已禁用超大数量合成。",
   "message.appliedenhancements.crafting_target_unavailable": "无法开始合成计算：目标网络节点当前不可用，请检查该终端是否已连接并通电。",
   "message.appliedenhancements.crafting_plan_stalled": "合成计算未能启动，已退出合成计划界面。",
+  "message.appliedenhancements.crafting_reservation_conflict": "库存持续变化，材料预留失败；请重新发起合成计划。",
   "appliedenhancements.config.max_crafting_order_amount": "合成订单处理模式",
   "appliedenhancements.config.enable_pattern_caching": "启用样板缓存",
   "appliedenhancements.config.pattern_cache_size": "每张样板的缓存条目上限",

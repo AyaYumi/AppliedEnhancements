@@ -1,7 +1,6 @@
 package com.github.appliedenhancements.crafting.aelis;
 
 final class AelisExecutionPolicy {
-    private static final long SLOW_NATIVE_BOUNDARY_NANOS = 1_000_000_000L;
 
     enum Scope {
         PURE_TOPOLOGICAL,
@@ -172,13 +171,6 @@ final class AelisExecutionPolicy {
                 && compiledCandidates > 1
                 && compiledCandidates == totalCandidates
                 && liveCandidateSet;
-    }
-
-    static boolean shouldLogNativeBoundary(boolean diagnostics,
-            boolean completed, long elapsedNanos) {
-        return diagnostics
-                || !completed
-                || elapsedNanos >= SLOW_NATIVE_BOUNDARY_NANOS;
     }
 
     static boolean isBinarySearchCompatibleNativeLeaf(String reason) {

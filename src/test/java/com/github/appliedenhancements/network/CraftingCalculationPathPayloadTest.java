@@ -11,6 +11,26 @@ import java.math.BigInteger;
 import org.junit.jupiter.api.Test;
 
 class CraftingCalculationPathPayloadTest {
+    @Test void exactCyclicAmountsAreImmutableAndShareTheOtherExactFieldsBudget() {
+        var key = new TestAEKey("cyclic_output");
+        var cyclic = new BigInteger("44444444444444444444448");
+        var source = new LinkedHashMap<appeng.api.stacks.AEKey, BigInteger>();
+        source.put(key, cyclic);
+        var payload = new CraftingCalculationPathPayload(7, AelisCalculationPath.AELIS,
+                Map.of(key, Long.MAX_VALUE), Map.of(key, cyclic.multiply(BigInteger.TWO)),
+                Map.of(), Map.of(), null, null, source);
+        source.clear();
+        assertEquals(cyclic, payload.bigIntegerCyclicCraftAmounts().get(key));
+        assertThrows(UnsupportedOperationException.class, () -> payload.bigIntegerCyclicCraftAmounts().clear());
+        assertThrows(IllegalArgumentException.class, () -> new CraftingCalculationPathPayload(7,
+                AelisCalculationPath.AELIS, Map.of(), Map.of(), Map.of(), Map.of(), null, null,
+                Map.of(key, BigInteger.ZERO)));
+        var huge = BigInteger.ONE.shiftLeft(65_535 * 8);
+        var two = Map.<appeng.api.stacks.AEKey, BigInteger>of(key, huge, new TestAEKey("second"), huge);
+        assertThrows(IllegalArgumentException.class, () -> new CraftingCalculationPathPayload(7,
+                AelisCalculationPath.AELIS, Map.of(), two, Map.of(), two, null, null, Map.of(key, huge)));
+    }
+
     @Test void exactBytesRetainPrecisionAndShareThePayloadBudget() {
         var bytes = BigInteger.TEN.pow(24).add(BigInteger.ONE);
         assertEquals(bytes, new CraftingCalculationPathPayload(7, AelisCalculationPath.AELIS,

@@ -4,11 +4,9 @@ import appeng.api.stacks.AmountFormat;
 import appeng.client.gui.me.crafting.CraftConfirmTableRenderer;
 import appeng.menu.me.crafting.CraftingPlanSummaryEntry;
 import appeng.core.localization.GuiText;
-import com.appliedenhancements.util.AmountFormatter;
+import com.appliedenhancements.client.CraftingPlanAmountFormatter;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathMenuBridge;
-import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.chat.Component;
@@ -30,14 +28,15 @@ public abstract class CraftConfirmTableRendererMixin {
             CallbackInfoReturnable<List<Component>> callback) {
         var lines = new ArrayList<>(callback.getReturnValue());
         appliedenhancements$replaceCraftAmount(entry, lines, AmountFormat.SLOT);
-        long amount = appliedenhancements$getCyclicCraftAmount(entry);
-        if (amount <= 0) {
+        BigInteger amount = appliedenhancements$getCyclicCraftAmount(entry);
+        if (amount.signum() <= 0) {
             callback.setReturnValue(List.copyOf(lines));
             return;
         }
         lines.add(Component.translatable(
                 CYCLIC_CRAFT_AMOUNT_KEY,
-                entry.getWhat().formatAmount(amount, AmountFormat.SLOT)));
+                amount.bitLength() <= 63 ? entry.getWhat().formatAmount(amount.longValueExact(), AmountFormat.SLOT)
+                        : appliedenhancements$formatExactAmount(entry, amount, AmountFormat.SLOT)));
         callback.setReturnValue(List.copyOf(lines));
     }
 
@@ -47,27 +46,28 @@ public abstract class CraftConfirmTableRendererMixin {
             CallbackInfoReturnable<List<Component>> callback) {
         var lines = new ArrayList<>(callback.getReturnValue());
         appliedenhancements$replaceCraftAmount(entry, lines, AmountFormat.FULL);
-        long amount = appliedenhancements$getCyclicCraftAmount(entry);
-        if (amount <= 0) {
+        BigInteger amount = appliedenhancements$getCyclicCraftAmount(entry);
+        if (amount.signum() <= 0) {
             callback.setReturnValue(List.copyOf(lines));
             return;
         }
         lines.add(Component.translatable(
                 CYCLIC_CRAFT_AMOUNT_KEY,
-                entry.getWhat().formatAmount(amount, AmountFormat.FULL)));
+                amount.bitLength() <= 63 ? entry.getWhat().formatAmount(amount.longValueExact(), AmountFormat.FULL)
+                        : appliedenhancements$formatExactAmount(entry, amount, AmountFormat.FULL)));
         callback.setReturnValue(List.copyOf(lines));
     }
 
     @Unique
-    private long appliedenhancements$getCyclicCraftAmount(
+    private BigInteger appliedenhancements$getCyclicCraftAmount(
             CraftingPlanSummaryEntry entry) {
         var screen = ((AbstractTableRendererAccessor) (Object) this)
                 .appliedenhancements$getScreen();
         if (!(screen.getMenu() instanceof AelisCalculationPathMenuBridge bridge)) {
-            return 0;
+            return BigInteger.ZERO;
         }
-        return bridge.appliedenhancements$getCyclicCraftAmounts()
-                .getOrDefault(entry.getWhat(), 0L);
+        return bridge.appliedenhancements$getBigIntegerCyclicCraftAmounts()
+                .getOrDefault(entry.getWhat(), BigInteger.ZERO);
     }
 
     @Unique
@@ -112,15 +112,6 @@ public abstract class CraftConfirmTableRendererMixin {
     private static String appliedenhancements$formatExactAmount(
             CraftingPlanSummaryEntry entry, BigInteger amount,
             AmountFormat format) {
-        BigDecimal displayAmount = new BigDecimal(amount).divide(
-                BigDecimal.valueOf(entry.getWhat().getAmountPerUnit()),
-                MathContext.DECIMAL128);
-        String text = format == AmountFormat.FULL
-                ? AmountFormatter.formatFull(amount, entry.getWhat().getAmountPerUnit())
-                : AmountFormatter.format(displayAmount);
-        String unit = entry.getWhat().getUnitSymbol();
-        return format == AmountFormat.FULL && unit != null
-                ? text + " " + unit
-                : text;
+        return CraftingPlanAmountFormatter.format(entry.getWhat(), amount, format);
     }
 }

@@ -102,9 +102,6 @@ public final class AdvancedAeCycleRecovery {
                 tasks.putAll(previous);
                 throw failure;
             }
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "Normalized saved quantum CPU cycle tasks: patterns={}, step={}, remainingCrafts={}",
-                    replacement.size(), state.stepIndex(), state.remainingCrafts());
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
             com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Could not normalize saved quantum CPU cycle tasks; order retained unchanged", unavailable);
@@ -148,8 +145,6 @@ public final class AdvancedAeCycleRecovery {
                 tasks.putAll(previous);
                 throw failure;
             }
-            com.appliedenhancements.runtime.AelisPlanningLog.trace("Restored legacy quantum CPU cycle order: patterns={}, steps={}, seeds={}",
-                    replacement.size(), recovery.cyclePlan().steps().size(), recovery.cyclePlan().minimumSeeds());
             return runtime;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
             com.appliedenhancements.runtime.AelisPlanningLog.warn("Could not inspect legacy quantum CPU cycle order; inventory preserved", unavailable);

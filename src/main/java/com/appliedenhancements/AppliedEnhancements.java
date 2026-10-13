@@ -64,7 +64,7 @@ public class AppliedEnhancements {
     }
 
     private void registerPayloads(final RegisterPayloadHandlersEvent event) {
-        final PayloadRegistrar registrar = event.registrar("9");
+        final PayloadRegistrar registrar = event.registrar("10");
         NetworkHandler.register(registrar);
         ServerConfigSyncPayload.register(registrar);
         CraftingCalculationProgressPayload.register(registrar);

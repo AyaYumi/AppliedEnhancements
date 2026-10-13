@@ -2,7 +2,7 @@
 
 [English](README.md) · [接口文档](docs/README.md) · [配置参考](CONFIGURATION.md)
 
-当前 **1.1.1** 为 Minecraft 1.21.1 / NeoForge 提供 AE2 规划、存储访问和样板终端
+当前 **1.1.2** 为 Minecraft 1.21.1 / NeoForge 提供 AE2 规划、存储访问和样板终端
 增强。本版增加共享批量投料事务，让循环 CPU 的首份抽料、额外份数、回滚和原生
 Provider 钩子保持同一材料账本。
 
@@ -30,7 +30,7 @@ Provider 钩子保持同一材料账本。
 默认构建使用 AE2 19.2.18。ExtendedAE、AE2WTLib、JEI、AdvancedAE 和其他
 附属兼容均为可选；内部接口变化后的新版仍需实际运行验证。
 
-构建 `build/libs/appliedenhancements-1.1.1.jar` 后放入两端 mods，客户端和
+构建 `build/libs/appliedenhancements-1.1.2.jar` 后放入两端 mods，客户端和
 服务端使用相同构建，内部载荷协议为 9。附属使用独立安装的公开 API，不嵌入本模组。
 
 ## 配置与操作

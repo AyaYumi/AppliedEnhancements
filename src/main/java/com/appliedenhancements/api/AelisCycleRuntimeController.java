@@ -2,6 +2,7 @@ package com.appliedenhancements.api;
 
 import appeng.api.stacks.AEKey;
 import com.appliedenhancements.util.SaturatingLongMath;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -12,22 +13,22 @@ import java.util.Set;
 public final class AelisCycleRuntimeController {
     private final AelisCycleExecutionPlan plan;
     private final Set<AEKey> cyclePatterns;
-    private final Map<AEKey, Long> pendingOutputs = new LinkedHashMap<>();
+    private final Map<AEKey, BigInteger> pendingOutputs = new LinkedHashMap<>();
     private int stepIndex;
-    private long remainingCrafts;
+    private BigInteger remainingCrafts;
 
     /**
      * Preserves the original API behavior for CPUs that do not report returned outputs.
      * Use {@link #withCyclePhase(AelisCycleExecutionPlan)} for the complete phase protocol.
      */
     public AelisCycleRuntimeController(AelisCycleExecutionPlan plan) {
-        this(plan, new State(0, plan.steps().getFirst().crafts()), false);
+        this(plan, new State(0, plan.steps().getFirst().exactCrafts(), Map.of()), false);
     }
 
     /** Opts into prerequisite scheduling and waiting for the cyclic outputs to return. */
     public static AelisCycleRuntimeController withCyclePhase(AelisCycleExecutionPlan plan) {
         Objects.requireNonNull(plan, "plan");
-        return withCyclePhase(plan, new State(0, plan.steps().getFirst().crafts()));
+        return withCyclePhase(plan, new State(0, plan.steps().getFirst().exactCrafts(), Map.of()));
     }
 
     /** Restores the complete phase protocol, including outputs that are still in flight. */
@@ -59,21 +60,22 @@ public final class AelisCycleRuntimeController {
         this.cyclePatterns = plan.patternDefinitions();
         this.stepIndex = state.stepIndex();
         if (stepIndex == plan.steps().size()) {
-            if (state.remainingCrafts() != 0) {
+            if (state.exactRemainingCrafts().signum() != 0) {
                 throw new IllegalArgumentException(
                         "Completed cycle runtime cannot have remaining crafts");
             }
-            this.remainingCrafts = 0;
+            this.remainingCrafts = BigInteger.ZERO;
         } else {
-            long maximum = plan.steps().get(stepIndex).crafts();
-            if (state.remainingCrafts() <= 0 || state.remainingCrafts() > maximum) {
+            BigInteger maximum = plan.steps().get(stepIndex).exactCrafts();
+            if (state.exactRemainingCrafts().signum() <= 0
+                    || state.exactRemainingCrafts().compareTo(maximum) > 0) {
                 throw new IllegalArgumentException("Invalid remaining cycle crafts");
             }
-            this.remainingCrafts = state.remainingCrafts();
+            this.remainingCrafts = state.exactRemainingCrafts();
         }
         if (phaseAware) {
             validatePendingOutputs(plan, state);
-            this.pendingOutputs.putAll(state.pendingOutputs());
+            this.pendingOutputs.putAll(state.exactPendingOutputs());
         }
     }
 
@@ -82,19 +84,19 @@ public final class AelisCycleRuntimeController {
         if (plan.phase() == null) {
             throw new IllegalArgumentException("Pending cycle outputs require phase metadata");
         }
-        var maximumOutputs = new LinkedHashMap<AEKey, Long>();
+        var maximumOutputs = new LinkedHashMap<AEKey, BigInteger>();
         for (int index = 0; index < plan.steps().size() && index <= state.stepIndex(); index++) {
             var step = plan.steps().get(index);
-            long dispatched = index < state.stepIndex()
-                    ? step.crafts() : step.crafts() - state.remainingCrafts();
-            if (dispatched <= 0) continue;
+            BigInteger dispatched = index < state.stepIndex()
+                    ? step.exactCrafts() : step.exactCrafts().subtract(state.exactRemainingCrafts());
+            if (dispatched.signum() <= 0) continue;
             for (var output : plan.phase().outputsPerPattern().get(step.patternDefinition()).entrySet()) {
                 maximumOutputs.merge(output.getKey(),
-                        SaturatingLongMath.multiply(output.getValue(), dispatched), SaturatingLongMath::add);
+                        BigInteger.valueOf(output.getValue()).multiply(dispatched), BigInteger::add);
             }
         }
-        for (var output : state.pendingOutputs().entrySet()) {
-            if (output.getValue() > maximumOutputs.getOrDefault(output.getKey(), 0L)) {
+        for (var output : state.exactPendingOutputs().entrySet()) {
+            if (output.getValue().compareTo(maximumOutputs.getOrDefault(output.getKey(), BigInteger.ZERO)) > 0) {
                 throw new IllegalArgumentException("Pending cycle output exceeds dispatched production");
             }
         }
@@ -111,6 +113,10 @@ public final class AelisCycleRuntimeController {
     }
 
     public long remainingCrafts() {
+        return project(remainingCrafts);
+    }
+
+    public BigInteger exactRemainingCrafts() {
         return remainingCrafts;
     }
 
@@ -156,43 +162,53 @@ public final class AelisCycleRuntimeController {
     }
 
     public void patternDispatched(AEKey patternDefinition, long crafts) {
+        patternDispatched(patternDefinition, BigInteger.valueOf(crafts));
+    }
+
+    public void patternDispatched(AEKey patternDefinition, BigInteger crafts) {
         Objects.requireNonNull(patternDefinition, "patternDefinition");
+        Objects.requireNonNull(crafts, "crafts");
         if (isComplete()
                 || !plan.steps().get(stepIndex).patternDefinition()
                         .equals(patternDefinition)) {
             throw new IllegalStateException("Dispatched pattern is not the active cycle step");
         }
-        if (crafts <= 0 || crafts > remainingCrafts) {
+        if (crafts.signum() <= 0 || crafts.compareTo(remainingCrafts) > 0) {
             throw new IllegalArgumentException("Invalid dispatched cycle craft count");
         }
         if (plan.phase() != null) {
             for (var output : plan.phase().outputsPerPattern()
                     .getOrDefault(patternDefinition, Map.of()).entrySet()) {
                 pendingOutputs.merge(output.getKey(),
-                        SaturatingLongMath.multiply(output.getValue(), crafts),
-                        SaturatingLongMath::add);
+                        BigInteger.valueOf(output.getValue()).multiply(crafts),
+                        BigInteger::add);
             }
         }
-        remainingCrafts -= crafts;
-        if (remainingCrafts == 0) {
+        remainingCrafts = remainingCrafts.subtract(crafts);
+        if (remainingCrafts.signum() == 0) {
             stepIndex++;
             remainingCrafts = isComplete()
-                    ? 0
-                    : plan.steps().get(stepIndex).crafts();
+                    ? BigInteger.ZERO
+                    : plan.steps().get(stepIndex).exactCrafts();
         }
     }
 
     /** Records the decrease in outstanding output after a real CPU insertion settles it. */
     public void recordReturned(AEKey key, long accepted) {
+        recordReturned(key, BigInteger.valueOf(accepted));
+    }
+
+    public void recordReturned(AEKey key, BigInteger accepted) {
         Objects.requireNonNull(key, "key");
-        if (accepted < 0) {
+        Objects.requireNonNull(accepted, "accepted");
+        if (accepted.signum() < 0) {
             throw new IllegalArgumentException("Returned cycle amount must be non-negative");
         }
-        if (accepted == 0) {
+        if (accepted.signum() == 0) {
             return;
         }
         pendingOutputs.computeIfPresent(key,
-                (ignored, pending) -> accepted >= pending ? null : pending - accepted);
+                (ignored, pending) -> accepted.compareTo(pending) >= 0 ? null : pending.subtract(accepted));
     }
 
     public long requiredRetainedAmount(AEKey key) {
@@ -209,10 +225,10 @@ public final class AelisCycleRuntimeController {
             if (perCraft == null) {
                 continue;
             }
-            long crafts = index == stepIndex ? remainingCrafts : step.crafts();
+            BigInteger crafts = index == stepIndex ? remainingCrafts : step.exactCrafts();
             long stepRequired = step.selfReplenishingInputs().contains(key)
                     ? perCraft
-                    : SaturatingLongMath.multiply(perCraft, crafts);
+                    : project(BigInteger.valueOf(perCraft).multiply(crafts));
             required = Math.max(required, stepRequired);
         }
         return required;
@@ -235,10 +251,10 @@ public final class AelisCycleRuntimeController {
         long remainingInputs = 0;
         for (int index = stepIndex; index < plan.steps().size(); index++) {
             var step = plan.steps().get(index);
-            long crafts = index == stepIndex ? remainingCrafts : step.crafts();
+            BigInteger crafts = index == stepIndex ? remainingCrafts : step.exactCrafts();
             remainingInputs = SaturatingLongMath.add(remainingInputs,
-                    SaturatingLongMath.multiply(
-                            step.inputsPerCraft().getOrDefault(key, 0L), crafts));
+                    project(BigInteger.valueOf(
+                            step.inputsPerCraft().getOrDefault(key, 0L)).multiply(crafts)));
         }
         long seedFloor = plan.seedPolicy() == AelisCycleSeedPolicy.PRESERVE_MINIMUM
                 ? plan.minimumSeeds().getOrDefault(key, 0L) : 0;
@@ -259,19 +275,54 @@ public final class AelisCycleRuntimeController {
         pendingOutputs.putAll(validated.pendingOutputs);
     }
 
-    public record State(int stepIndex, long remainingCrafts, Map<AEKey, Long> pendingOutputs) {
+    private static long project(BigInteger amount) {
+        return amount.min(BigInteger.valueOf(Long.MAX_VALUE)).longValueExact();
+    }
+
+    private static Map<AEKey, Long> projectAmounts(Map<AEKey, BigInteger> amounts) {
+        var projected = new LinkedHashMap<AEKey, Long>();
+        amounts.forEach((key, amount) -> projected.put(key, project(amount)));
+        return Map.copyOf(projected);
+    }
+
+    private static Map<AEKey, BigInteger> exactAmounts(Map<AEKey, Long> amounts) {
+        var exact = new LinkedHashMap<AEKey, BigInteger>();
+        amounts.forEach((key, amount) -> exact.put(key, BigInteger.valueOf(amount)));
+        return Map.copyOf(exact);
+    }
+
+    public record State(int stepIndex, long remainingCrafts, Map<AEKey, Long> pendingOutputs,
+            BigInteger exactRemainingCrafts, Map<AEKey, BigInteger> exactPendingOutputs) {
         public State(int stepIndex, long remainingCrafts) {
             this(stepIndex, remainingCrafts, Map.of());
         }
 
+        /** Retains the constructor used by existing CPU integrations. */
+        public State(int stepIndex, long remainingCrafts, Map<AEKey, Long> pendingOutputs) {
+            this(stepIndex, remainingCrafts, pendingOutputs,
+                    BigInteger.valueOf(remainingCrafts), exactAmounts(pendingOutputs));
+        }
+
+        public State(int stepIndex, BigInteger remainingCrafts, Map<AEKey, BigInteger> pendingOutputs) {
+            this(stepIndex, project(remainingCrafts), projectAmounts(pendingOutputs),
+                    remainingCrafts, pendingOutputs);
+        }
+
         public State {
             Objects.requireNonNull(pendingOutputs, "pendingOutputs");
-            for (var entry : pendingOutputs.entrySet()) {
-                if (entry.getKey() == null || entry.getValue() == null || entry.getValue() <= 0) {
+            Objects.requireNonNull(exactRemainingCrafts, "exactRemainingCrafts");
+            Objects.requireNonNull(exactPendingOutputs, "exactPendingOutputs");
+            if (remainingCrafts != project(exactRemainingCrafts)
+                    || !pendingOutputs.equals(projectAmounts(exactPendingOutputs))) {
+                throw new IllegalArgumentException("Cycle state projections must match exact amounts");
+            }
+            for (var entry : exactPendingOutputs.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null || entry.getValue().signum() <= 0) {
                     throw new IllegalArgumentException("Pending cycle outputs must be positive");
                 }
             }
             pendingOutputs = Map.copyOf(pendingOutputs);
+            exactPendingOutputs = Map.copyOf(exactPendingOutputs);
         }
     }
 }

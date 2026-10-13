@@ -21,8 +21,14 @@ public record CraftingCalculationPathPayload(
         Map<AEKey, BigInteger> bigIntegerCraftAmounts,
         Map<AEKey, BigInteger> bigIntegerMissingAmounts,
         Map<AEKey, BigInteger> bigIntegerStoredAmounts,
-        BigInteger bigIntegerBytes, BigInteger finalOutputAmount)
+        BigInteger bigIntegerBytes, BigInteger finalOutputAmount,
+        Map<AEKey, BigInteger> bigIntegerCyclicCraftAmounts)
         implements CustomPacketPayload {
+    public CraftingCalculationPathPayload(int containerId, AelisCalculationPath path,
+            Map<AEKey, Long> cyclic, Map<AEKey, BigInteger> crafted, Map<AEKey, BigInteger> missing,
+            Map<AEKey, BigInteger> stored, BigInteger bytes, BigInteger finalOutputAmount) {
+        this(containerId, path, cyclic, crafted, missing, stored, bytes, finalOutputAmount, Map.of());
+    }
     public CraftingCalculationPathPayload(int containerId, AelisCalculationPath path,
             Map<AEKey, Long> cyclic, Map<AEKey, BigInteger> crafted, Map<AEKey, BigInteger> missing,
             Map<AEKey, BigInteger> stored, BigInteger bytes) {
@@ -80,6 +86,7 @@ public record CraftingCalculationPathPayload(
         bigIntegerCraftAmounts = copyExactAmounts(bigIntegerCraftAmounts, budget);
         bigIntegerMissingAmounts = copyExactAmounts(bigIntegerMissingAmounts, budget);
         bigIntegerStoredAmounts = copyExactAmounts(bigIntegerStoredAmounts, budget);
+        bigIntegerCyclicCraftAmounts = copyExactAmounts(bigIntegerCyclicCraftAmounts, budget);
         if (bigIntegerBytes != null) {
             int byteCount = bigIntegerBytes.toByteArray().length;
             if (bigIntegerBytes.signum() < 0 || byteCount > MAX_BIG_INTEGER_BYTES
@@ -143,6 +150,11 @@ public record CraftingCalculationPathPayload(
         if (payload.bigIntegerBytes != null) buffer.writeByteArray(payload.bigIntegerBytes.toByteArray());
         buffer.writeBoolean(payload.finalOutputAmount != null);
         if (payload.finalOutputAmount != null) buffer.writeUtf(payload.finalOutputAmount.toString(), 256);
+        buffer.writeVarInt(payload.bigIntegerCyclicCraftAmounts.size());
+        for (var entry : payload.bigIntegerCyclicCraftAmounts.entrySet()) {
+            AEKey.writeKey(buffer, entry.getKey());
+            buffer.writeByteArray(entry.getValue().toByteArray());
+        }
     }
 
     private static CraftingCalculationPathPayload decode(RegistryFriendlyByteBuf buffer) {
@@ -175,12 +187,15 @@ public record CraftingCalculationPathPayload(
                 if (budget[0] > MAX_BIG_INTEGER_TOTAL_BYTES - encoded.length) {
                     throw new DecoderException("Exact storage bytes exceed payload budget");
                 }
+                budget[0] += encoded.length;
                 bigIntegerBytes = new BigInteger(encoded);
             }
+            var finalOutputAmount = buffer.readBoolean() ? new BigInteger(buffer.readUtf(256)) : null;
+            var bigIntegerCyclicCraftAmounts = decodeExactAmounts(buffer, budget);
             return new CraftingCalculationPathPayload(
                     containerId, AelisCalculationPath.fromNetworkId(pathId),
                     cyclicCraftAmounts, bigIntegerCraftAmounts, bigIntegerMissingAmounts, bigIntegerStoredAmounts, bigIntegerBytes,
-                    buffer.readBoolean() ? new BigInteger(buffer.readUtf(256)) : null);
+                    finalOutputAmount, bigIntegerCyclicCraftAmounts);
         } catch (IllegalArgumentException exception) {
             throw new DecoderException(exception);
         }
@@ -215,6 +230,7 @@ public record CraftingCalculationPathPayload(
             bridge.appliedenhancements$setBigIntegerFinalAmount(payload.finalOutputAmount);
             bridge.appliedenhancements$setCyclicCraftAmounts(
                     payload.cyclicCraftAmounts);
+            bridge.appliedenhancements$setBigIntegerCyclicCraftAmounts(payload.bigIntegerCyclicCraftAmounts);
             bridge.appliedenhancements$setBigIntegerCraftAmounts(
                     payload.bigIntegerCraftAmounts);
             bridge.appliedenhancements$setBigIntegerMissingAmounts(payload.bigIntegerMissingAmounts);

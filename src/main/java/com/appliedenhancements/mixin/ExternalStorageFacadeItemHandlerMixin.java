@@ -24,9 +24,8 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.items.IItemHandler;
 
 /**
- * Reuses AE2's periodic external-inventory listing as a candidate-slot index.
- * Cached slots are hints only: every candidate is revalidated by AE2's own
- * extraction helper, and incomplete lookups fall back to the original scan.
+ * Reuses AE2's periodic external-inventory listing as positive slot hints.
+ * Every candidate is revalidated, and incomplete lookups fall back to AE2's scan.
  */
 @Mixin(targets = "appeng.me.storage.ExternalStorageFacade$ItemHandlerFacade", remap = false)
 public abstract class ExternalStorageFacadeItemHandlerMixin {
@@ -61,6 +60,26 @@ public abstract class ExternalStorageFacadeItemHandlerMixin {
 
     @Unique
     private AEItemKey appliedenhancements$lastObservedKey;
+
+    @Inject(method = "extractExternal", at = @At("RETURN"))
+    private void appliedenhancements$invalidateIndexAfterExtraction(
+            AEKey what, int amount, Actionable mode,
+            CallbackInfoReturnable<Integer> callback) {
+        if (mode == Actionable.MODULATE && callback.getReturnValue() > 0
+                && appliedenhancements$slotIndex != null) {
+            appliedenhancements$slotIndex.invalidate();
+        }
+    }
+
+    @Inject(method = "insertExternal", at = @At("RETURN"))
+    private void appliedenhancements$invalidateIndexAfterInsertion(
+            AEKey what, int amount, Actionable mode,
+            CallbackInfoReturnable<Integer> callback) {
+        if (mode == Actionable.MODULATE && callback.getReturnValue() > 0
+                && appliedenhancements$slotIndex != null) {
+            appliedenhancements$slotIndex.invalidate();
+        }
+    }
 
     @Inject(method = "getStackInSlot", at = @At("RETURN"))
     private void appliedenhancements$rememberObservedSlot(
@@ -120,6 +139,9 @@ public abstract class ExternalStorageFacadeItemHandlerMixin {
 
         int observedSlot = -1;
         int indexedExtracted = 0;
+        var candidates = Config.ENABLE_STORAGE_BUS_SLOT_INDEX.get()
+                && appliedenhancements$slotIndex != null
+                ? appliedenhancements$slotIndex.candidates(itemKey) : null;
         if (Config.ENABLE_IO_BUS_OPTIMIZATION.get()
                 && itemKey.equals(appliedenhancements$lastObservedKey)) {
             observedSlot = appliedenhancements$lastObservedSlot;
@@ -131,10 +153,9 @@ public abstract class ExternalStorageFacadeItemHandlerMixin {
         }
 
         if (indexedExtracted < amount
-                && Config.ENABLE_STORAGE_BUS_SLOT_INDEX.get()
-                && appliedenhancements$slotIndex != null) {
+                && candidates != null) {
             indexedExtracted += appliedenhancements$extractCandidates(
-                    appliedenhancements$slotIndex.candidates(itemKey),
+                    candidates,
                     itemKey,
                     amount - indexedExtracted,
                     mode,
@@ -145,8 +166,9 @@ public abstract class ExternalStorageFacadeItemHandlerMixin {
             return amount;
         }
 
-        // Simulations do not modify candidate slots. Combining a partial indexed
-        // result with the fallback would count those same slots twice.
+        // Simulations do not modify candidate slots, so a partial hint cannot be
+        // added to a full scan without double-counting. The full result also covers
+        // changes made by another mod since the last inventory listing.
         if (mode == Actionable.SIMULATE) {
             return original.call(what, amount, mode);
         }

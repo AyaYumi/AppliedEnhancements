@@ -4,7 +4,6 @@ import appeng.api.crafting.IPatternDetails;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
-import com.appliedenhancements.Config;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Field;
@@ -35,19 +34,6 @@ public final class AelisSmartCycleBatchProvider {
     private static final AdaptiveSegmentController ADAPTIVE_SEGMENTS =
             new AdaptiveSegmentController();
 
-    private static void logDiagnostic(
-            String outcome, ICraftingProvider provider,
-            BigInteger requested, BigInteger admitted,
-            Integer coilTier, Integer threads) {
-        if (!Config.AELIS_DIAGNOSTICS.get()) {
-            return;
-        }
-        com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                "Useless alloy-furnace bigint adapter: outcome={}, provider={}, requested={}, admitted={}, coilTier={}, freeThreads={}",
-                outcome,
-                provider == null ? "null" : provider.getClass().getName(),
-                requested, admitted, coilTier, threads);
-    }
     private static final ClassValue<Optional<ImmediateOutputFlush>> IMMEDIATE_OUTPUT_FLUSH =
             new ClassValue<>() {
                 @Override
@@ -545,8 +531,6 @@ public final class AelisSmartCycleBatchProvider {
                 int coil = controller == null
                         ? 0 : (int) getCoilTier.invoke(controller);
                 if (!formed || coil != USEFUL_COIL_TIER) {
-                    logDiagnostic("ineligible-machine", provider,
-                            requested, BigInteger.ZERO, coil, 0);
                     return BigInteger.ZERO;
                 }
                 // The boolean flag selects whether queued crafting outputs are
@@ -567,16 +551,11 @@ public final class AelisSmartCycleBatchProvider {
                 }
                 BigInteger targetSegments = ADAPTIVE_SEGMENTS.target(
                         provider, pattern, machineThreads);
-                BigInteger admitted = maximumWindowedCrafts(
+                return maximumWindowedCrafts(
                         pattern, unitPrototype, requested,
                         remainingThreads, machineThreads, applyTickBudgetScale,
                         operations, targetSegments);
-                logDiagnostic("capacity", provider, requested,
-                        admitted, coil, remainingThreads);
-                return admitted;
             } catch (ReflectiveOperationException | RuntimeException failure) {
-                logDiagnostic("capacity-error", provider, requested,
-                        BigInteger.ZERO, null, null);
                 return BigInteger.ZERO;
             }
         }
@@ -605,9 +584,6 @@ public final class AelisSmartCycleBatchProvider {
                         provider, pattern, physicalCrafts, unitPrototype);
                 ADAPTIVE_SEGMENTS.record(provider, pattern, machineThreads(provider),
                         accepted, System.nanoTime() - started);
-                logDiagnostic(accepted ? "push-accepted" : "push-rejected",
-                        provider, count, accepted ? count : BigInteger.ZERO,
-                        null, null);
                 return accepted;
             } catch (InvocationTargetException failure) {
                 ADAPTIVE_SEGMENTS.record(provider, pattern, machineThreads(provider),

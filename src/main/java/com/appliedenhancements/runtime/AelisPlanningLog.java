@@ -1,7 +1,6 @@
 package com.appliedenhancements.runtime;
 
 import com.appliedenhancements.AppliedEnhancements;
-import com.appliedenhancements.Config;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.HashMap;
@@ -15,23 +14,11 @@ public final class AelisPlanningLog {
 
     private AelisPlanningLog() {}
 
-    /** Expected planning outcomes are visible only in diagnostics, at most once per category/window. */
-    public static void diagnostic(String category, String message, Object... arguments) {
-        if (Config.AELIS_DIAGNOSTICS.get() && LIMITER.permit("diagnostic:" + category)) {
-            AppliedEnhancements.LOGGER.info(message, arguments);
-        }
-    }
-
     /** Actual compatibility defects remain warnings, but automatic retry loops cannot spam them. */
     public static void warning(String category, String message, Object... arguments) {
         if (LIMITER.permit("warning:" + category)) {
             AppliedEnhancements.LOGGER.warn(message, arguments);
         }
-    }
-
-    /** Detailed process messages remain opt-in and share the global template window. */
-    public static void trace(String message, Object... arguments) {
-        diagnostic(message, message, arguments);
     }
 
     public static void warn(String message, Object... arguments) {
@@ -44,11 +31,6 @@ public final class AelisPlanningLog {
         }
     }
 
-    public static void debug(String message, Object... arguments) {
-        if (AppliedEnhancements.LOGGER.isDebugEnabled() && LIMITER.permit("debug:" + message)) {
-            AppliedEnhancements.LOGGER.debug(message, arguments);
-        }
-    }
 
     static final class RateLimiter {
         private final long intervalNanos;

@@ -6,7 +6,6 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
 import com.appliedenhancements.Config;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -17,8 +16,6 @@ public final class ManualCraftingInventoryLock {
     private static final Map<MEStorage, InventoryReservationLedger<AEKey>> LEDGERS =
             new WeakHashMap<>();
     private static final ThreadLocal<Reservation> ACTIVE_SUBMISSION = new ThreadLocal<>();
-    private static final ThreadLocal<IdentityHashMap<MEStorage, Boolean>>
-            AVAILABILITY_QUERIES = new ThreadLocal<>();
 
     private ManualCraftingInventoryLock() {
     }
@@ -34,13 +31,13 @@ public final class ManualCraftingInventoryLock {
             return null;
         }
 
-        var availableCounter = new KeyCounter();
-        storage.getAvailableStacks(availableCounter);
-        Map<AEKey, Long> available = positiveEntries(availableCounter);
         Map<AEKey, Long> wanted = new LinkedHashMap<>(positiveEntries(requested));
         // An inexhaustible source must not be locked away by another confirmation menu.
-        com.appliedenhancements.storage.InfiniteStorageSupport.snapshot(storage, source)
-                .forEach(wanted::remove);
+        var infiniteKeys = com.appliedenhancements.storage.InfiniteStorageSupport.snapshot(
+                storage, source, wanted.keySet());
+        infiniteKeys.forEach(wanted::remove);
+        Map<AEKey, Long> available = com.appliedenhancements.storage.InfiniteStorageSupport
+                .availableAmounts(storage, wanted.keySet(), source);
 
         InventoryReservationLedger<AEKey> ledger;
         synchronized (LEDGERS) {
@@ -79,8 +76,7 @@ public final class ManualCraftingInventoryLock {
                 || !enabled() || storage == null || what == null || requested <= 0) {
             return requested;
         }
-        var queries = AVAILABILITY_QUERIES.get();
-        if (queries != null && queries.containsKey(storage)) {
+        if (com.appliedenhancements.storage.InfiniteStorageSupport.isAvailabilityQuery(storage)) {
             return requested;
         }
 
@@ -97,26 +93,9 @@ public final class ManualCraftingInventoryLock {
             return requested;
         }
 
-        long physicalAvailable = getPhysicalAvailable(storage, what, source);
+        long physicalAvailable = com.appliedenhancements.storage.InfiniteStorageSupport
+                .physicalAvailable(storage, what, source);
         return Math.min(requested, subtractClamped(physicalAvailable, reservedForOthers));
-    }
-
-    private static long getPhysicalAvailable(
-            MEStorage storage, AEKey what, IActionSource source) {
-        var queries = AVAILABILITY_QUERIES.get();
-        if (queries == null) {
-            queries = new IdentityHashMap<>();
-            AVAILABILITY_QUERIES.set(queries);
-        }
-        queries.put(storage, Boolean.TRUE);
-        try {
-            return storage.extract(what, Long.MAX_VALUE, Actionable.SIMULATE, source);
-        } finally {
-            queries.remove(storage);
-            if (queries.isEmpty()) {
-                AVAILABILITY_QUERIES.remove();
-            }
-        }
     }
 
     private static InventoryReservationLedger<AEKey> ledger(MEStorage storage) {

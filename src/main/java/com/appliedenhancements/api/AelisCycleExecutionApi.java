@@ -52,6 +52,14 @@ public final class AelisCycleExecutionApi {
         return amounts == null ? Map.of() : Map.copyOf(amounts);
     }
 
+    /** Exact amounts produced by cyclic firings, excluding ordinary work for the same keys. */
+    public static Map<AEKey, BigInteger> getExactCyclicCraftAmounts(ICraftingPlan plan) {
+        Objects.requireNonNull(plan, "plan");
+        var amounts = plan instanceof AelisCyclicCraftAmountsCarrier carrier
+                ? carrier.appliedenhancements$getBigIntegerCyclicCraftAmounts() : null;
+        return amounts == null ? Map.of() : Map.copyOf(amounts);
+    }
+
     /**
      * Creates a view for one input-extraction attempt, including every extra batch
      * extraction and rollback belonging to that attempt. Null means dispatch is
@@ -129,6 +137,7 @@ public final class AelisCycleExecutionApi {
                 || !(state instanceof AelisBigIntegerCraftingTracker)) return plan;
         return attach(plan, tracker.appliedenhancements$getCycleExecutionPlan(),
                 tracker.appliedenhancements$getCyclicCraftAmounts(),
+                tracker.appliedenhancements$getBigIntegerCyclicCraftAmounts(),
                 ((AelisBigIntegerCraftingTracker) state)
                         .appliedenhancements$getBigIntegerCraftAmounts(),
                 ((AelisBigIntegerCraftingTracker) state)
@@ -165,6 +174,7 @@ public final class AelisCycleExecutionApi {
         }
         var copied = attach(target, cycle,
                 amounts == null ? Map.of() : amounts,
+                getExactCyclicCraftAmounts(source),
                 exactAmounts == null ? Map.of() : exactAmounts,
                 source instanceof AelisBigIntegerCraftAmountsCarrier exact
                         ? exact.appliedenhancements$getBigIntegerMissingAmounts() : Map.of(),
@@ -184,7 +194,7 @@ public final class AelisCycleExecutionApi {
     }
 
     private static ICraftingPlan attach(ICraftingPlan target, AelisCycleExecutionPlan cycle,
-            Map<AEKey, Long> amounts, Map<AEKey, BigInteger> exactAmounts,
+            Map<AEKey, Long> amounts, Map<AEKey, BigInteger> exactCyclicAmounts, Map<AEKey, BigInteger> exactAmounts,
             Map<AEKey, BigInteger> exactMissing, Map<AEKey, BigInteger> exactStored,
             Map<AEKey, BigInteger> exactInfinite,
             Map<IPatternDetails, BigInteger> exactPatternTimes,
@@ -192,6 +202,7 @@ public final class AelisCycleExecutionApi {
             boolean previewOnly,
             AelisCalculationPath path) {
         Objects.requireNonNull(target, "target");
+        exactCyclicAmounts = overflowingCraftAmounts(exactCyclicAmounts);
         exactAmounts = overflowingCraftAmounts(exactAmounts);
         exactMissing = overflowingCraftAmounts(exactMissing);
         exactStored = overflowingCraftAmounts(exactStored);
@@ -214,6 +225,7 @@ public final class AelisCycleExecutionApi {
                 && target instanceof AelisCalculationPathCarrier paths) {
             cycles.appliedenhancements$setCycleExecutionPlan(cycle);
             totals.appliedenhancements$setCyclicCraftAmounts(amounts);
+            totals.appliedenhancements$setBigIntegerCyclicCraftAmounts(exactCyclicAmounts);
             exactTotals.appliedenhancements$setBigIntegerCraftAmounts(exactAmounts);
             exactTotals.appliedenhancements$setBigIntegerMissingAmounts(exactMissing);
             exactTotals.appliedenhancements$setBigIntegerStoredAmounts(exactStored);
@@ -225,7 +237,7 @@ public final class AelisCycleExecutionApi {
             return target;
         }
         return new AttachedPlan(target instanceof AttachedPlan attached ? attached.delegate : target,
-                cycle, Map.copyOf(amounts), Map.copyOf(exactAmounts), Map.copyOf(exactMissing),
+                cycle, Map.copyOf(amounts), Map.copyOf(exactCyclicAmounts), Map.copyOf(exactAmounts), Map.copyOf(exactMissing),
                 Map.copyOf(exactStored), Map.copyOf(exactInfinite),
                 Map.copyOf(exactPatternTimes), exactBytes, previewOnly, path, patterns);
     }
@@ -262,6 +274,7 @@ public final class AelisCycleExecutionApi {
         private final Map<IPatternDetails, Long> patterns;
         private AelisCycleExecutionPlan cycle;
         private Map<AEKey, Long> amounts;
+        private Map<AEKey, BigInteger> exactCyclicAmounts;
         private Map<AEKey, BigInteger> exactAmounts;
         private Map<AEKey, BigInteger> exactMissing;
         private Map<AEKey, BigInteger> exactStored;
@@ -275,7 +288,7 @@ public final class AelisCycleExecutionApi {
         private AelisCalculationPath path;
 
         private AttachedPlan(ICraftingPlan delegate, AelisCycleExecutionPlan cycle,
-                Map<AEKey, Long> amounts, Map<AEKey, BigInteger> exactAmounts,
+                Map<AEKey, Long> amounts, Map<AEKey, BigInteger> exactCyclicAmounts, Map<AEKey, BigInteger> exactAmounts,
                 Map<AEKey, BigInteger> exactMissing, Map<AEKey, BigInteger> exactStored,
                 Map<AEKey, BigInteger> exactInfinite,
                 Map<IPatternDetails, BigInteger> exactPatternTimes,
@@ -286,6 +299,8 @@ public final class AelisCycleExecutionApi {
             this.patterns = patterns;
             this.cycle = cycle;
             this.amounts = amounts;
+            this.exactCyclicAmounts = com.github.appliedenhancements.crafting.aelis.AelisCyclicCraftingAmounts.exactAmounts(
+                    amounts, exactCyclicAmounts);
             this.exactAmounts = exactAmounts;
             this.exactMissing = exactMissing;
             this.exactStored = exactStored;
@@ -311,7 +326,18 @@ public final class AelisCycleExecutionApi {
         @Override public AelisCycleExecutionPlan appliedenhancements$getCycleExecutionPlan() { return cycle; }
         @Override public void appliedenhancements$setCycleExecutionPlan(AelisCycleExecutionPlan plan) { cycle = plan; }
         @Override public Map<AEKey, Long> appliedenhancements$getCyclicCraftAmounts() { return amounts; }
-        @Override public void appliedenhancements$setCyclicCraftAmounts(Map<AEKey, Long> value) { amounts = Map.copyOf(value); }
+        @Override public void appliedenhancements$setCyclicCraftAmounts(Map<AEKey, Long> value) {
+            amounts = Map.copyOf(value);
+            exactCyclicAmounts = com.github.appliedenhancements.crafting.aelis.AelisCyclicCraftingAmounts.exactAmounts(
+                    amounts, Map.of());
+        }
+        @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerCyclicCraftAmounts() {
+            return exactCyclicAmounts;
+        }
+        @Override public void appliedenhancements$setBigIntegerCyclicCraftAmounts(Map<AEKey, BigInteger> value) {
+            exactCyclicAmounts = com.github.appliedenhancements.crafting.aelis.AelisCyclicCraftingAmounts.exactAmounts(
+                    amounts, value);
+        }
         @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerCraftAmounts() { return exactAmounts; }
         @Override public void appliedenhancements$setBigIntegerCraftAmounts(Map<AEKey, BigInteger> value) { exactAmounts = Map.copyOf(value); }
         @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerMissingAmounts() { return exactMissing; }

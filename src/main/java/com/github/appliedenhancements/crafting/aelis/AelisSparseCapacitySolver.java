@@ -1,6 +1,8 @@
 package com.github.appliedenhancements.crafting.aelis;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 
 /**
  * Pure in-memory capacity solver for deterministic crafting DAGs.
@@ -137,6 +139,15 @@ final class AelisSparseCapacitySolver {
                     && outputPerPattern == other.outputPerPattern
                     && Arrays.equals(inputs, other.inputs);
         }
+
+        @Override public boolean equals(Object other) {
+            return other instanceof Candidate candidate && hasSameSparseDemand(candidate);
+        }
+
+        @Override public int hashCode() {
+            int hash = 31 * System.identityHashCode(equivalenceToken) + Long.hashCode(outputPerPattern);
+            return 31 * hash + Arrays.hashCode(inputs);
+        }
     }
 
     static final class Node {
@@ -144,6 +155,8 @@ final class AelisSparseCapacitySolver {
         private final long requestUnit;
         private final NodeKind kind;
         private final Candidate[] candidates;
+        private final boolean[] equivalentEarlier;
+        private final boolean[] laterDistinct;
 
         Node(int keyIndex, long requestUnit, NodeKind kind, Candidate... candidates) {
             if (keyIndex < 0 || requestUnit <= 0 || kind == null) {
@@ -160,6 +173,16 @@ final class AelisSparseCapacitySolver {
             }
             if (kind == NodeKind.CRAFTABLE && this.candidates.length == 0) {
                 throw new IllegalArgumentException("Craftable node needs a candidate");
+            }
+            equivalentEarlier = new boolean[this.candidates.length];
+            laterDistinct = new boolean[this.candidates.length];
+            var first = new HashMap<Candidate, Integer>();
+            for (int index = 0; index < this.candidates.length; index++) {
+                equivalentEarlier[index] = first.putIfAbsent(this.candidates[index], index) != null;
+            }
+            for (int index = this.candidates.length - 2; index >= 0; index--) {
+                laterDistinct[index] = laterDistinct[index + 1]
+                        || !this.candidates[index].hasSameSparseDemand(this.candidates[index + 1]);
             }
         }
 
@@ -275,11 +298,7 @@ final class AelisSparseCapacitySolver {
         UNSUPPORTED
     }
 
-    private record Attempt(Status status, long[] inventory) {
-    }
-
-    private record AllocationAttempt(Status status, long allocated,
-            long[] inventory) {
+    private record AllocationAttempt(Status status, long allocated) {
     }
 
     private record ChoiceAttempt(Status status, long remaining,
@@ -287,6 +306,7 @@ final class AelisSparseCapacitySolver {
     }
 
     private final Model model;
+    private final Trail trail = new Trail();
     private long probes;
     private int equivalentCandidatesSkipped;
     private int noProgressCandidatesSkipped;
@@ -432,8 +452,7 @@ final class AelisSparseCapacitySolver {
                 noProgressCandidatesSkipped++;
                 continue;
             }
-            if (hasEquivalentEarlierCandidate(
-                    node, candidateIndex, candidate)) {
+            if (node.equivalentEarlier[candidateIndex]) {
                 equivalentCandidatesSkipped++;
                 continue;
             }
@@ -441,26 +460,24 @@ final class AelisSparseCapacitySolver {
             if (probes >= MAX_PROBES) {
                 return new ChoiceAttempt(Status.UNSUPPORTED, requested, allocations);
             }
-            Attempt full = attemptCandidate(
+            Status full = attemptCandidate(
                     nodeIndex, candidateIndex, remaining,
-                    inventory, activeComponentDeficits, depth);
+                    inventory, activeComponentDeficits, depth, true);
             probes++;
-            if (full.status == Status.NO_PROGRESS) {
+            if (full == Status.NO_PROGRESS) {
                 noProgressCandidatesSkipped++;
                 continue;
             }
-            if (full.status == Status.UNSUPPORTED) {
+            if (full == Status.UNSUPPORTED) {
                 return new ChoiceAttempt(Status.UNSUPPORTED, requested, allocations);
             }
-            if (full.status == Status.SUCCESS) {
-                replaceInventory(inventory, full.inventory);
+            if (full == Status.SUCCESS) {
                 allocations[candidateIndex] = remaining;
                 remaining = 0;
                 break;
             }
 
-            boolean laterDistinct = hasLaterDistinctCandidate(
-                    node, candidateIndex, candidate);
+            boolean laterDistinct = node.laterDistinct[candidateIndex];
             if (!requireExactPartialAllocation && !laterDistinct) {
                 return new ChoiceAttempt(Status.SHORTAGE, remaining, allocations);
             }
@@ -472,7 +489,6 @@ final class AelisSparseCapacitySolver {
                 return new ChoiceAttempt(Status.UNSUPPORTED, requested, allocations);
             }
             if (partial.allocated > 0) {
-                replaceInventory(inventory, partial.inventory);
                 allocations[candidateIndex] = partial.allocated;
                 remaining -= partial.allocated;
             }
@@ -483,64 +499,84 @@ final class AelisSparseCapacitySolver {
                 remaining, allocations);
     }
 
-    private boolean hasEquivalentEarlierCandidate(Node node, int currentIndex,
-            Candidate current) {
-        for (int index = 0; index < currentIndex; index++) {
-            if (current.hasSameSparseDemand(node.candidates[index])) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean hasLaterDistinctCandidate(Node node, int currentIndex,
-            Candidate current) {
-        for (int index = currentIndex + 1;
-                index < node.candidates.length; index++) {
-            if (!node.candidates[index].hasSameSparseDemand(current)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private AllocationAttempt findMaximumAllocation(int nodeIndex,
             int candidateIndex, long requested,
             long[] inventory, long[] activeComponentDeficits, int depth) {
         long low = 0;
         long high = requested;
-        long[] bestInventory = inventory.clone();
+        long direct = directTerminalCapacity(nodeIndex, candidateIndex, requested, inventory);
+        if (direct >= 0) {
+            low = direct;
+            high = direct;
+        }
         while (high - low > 1) {
             if (probes >= MAX_PROBES) {
                 return new AllocationAttempt(
-                        Status.UNSUPPORTED, 0, inventory);
+                        Status.UNSUPPORTED, 0);
             }
             long trialAmount = upperMidpoint(low, high);
-            Attempt trial = attemptCandidate(
+            Status trial = attemptCandidate(
                     nodeIndex, candidateIndex, trialAmount,
-                    inventory, activeComponentDeficits, depth);
+                    inventory, activeComponentDeficits, depth, false);
             probes++;
-            if (trial.status == Status.UNSUPPORTED) {
-                return new AllocationAttempt(Status.UNSUPPORTED, 0, inventory);
+            if (trial == Status.UNSUPPORTED) {
+                return new AllocationAttempt(Status.UNSUPPORTED, 0);
             }
-            if (trial.status == Status.SUCCESS) {
+            if (trial == Status.SUCCESS) {
                 low = trialAmount;
-                bestInventory = trial.inventory;
             } else {
                 high = trialAmount;
             }
         }
-        return new AllocationAttempt(Status.SUCCESS, low, bestInventory);
+        if (low > 0) {
+            if (probes >= MAX_PROBES) return new AllocationAttempt(Status.UNSUPPORTED, 0);
+            probes++;
+            Status status = attemptCandidate(nodeIndex, candidateIndex, low,
+                    inventory, activeComponentDeficits, depth, true);
+            if (status != Status.SUCCESS) return new AllocationAttempt(Status.UNSUPPORTED, 0);
+        }
+        return new AllocationAttempt(Status.SUCCESS, low);
     }
 
-    private Attempt attemptCandidate(int nodeIndex, int candidateIndex,
+    private Status attemptCandidate(int nodeIndex, int candidateIndex,
             long requested, long[] inventory, long[] activeComponentDeficits,
-            int depth) {
-        long[] trialInventory = inventory.clone();
-        Status status = requestForcedCandidate(
-                nodeIndex, candidateIndex, requested,
-                trialInventory, activeComponentDeficits, depth);
-        return new Attempt(status, trialInventory);
+            int depth, boolean commit) {
+        int mark = trail.mark();
+        boolean applied = false;
+        try {
+            Status status = requestForcedCandidate(nodeIndex, candidateIndex, requested,
+                    inventory, activeComponentDeficits, depth);
+            applied = commit && status == Status.SUCCESS;
+            return status;
+        } finally {
+            if (!applied) trail.rollback(mark);
+        }
+    }
+
+    /** Exact only for raw consumable inputs; all repeated slots share one capacity bucket. */
+    private long directTerminalCapacity(int nodeIndex, int candidateIndex, long requested,
+            long[] inventory) {
+        Node node = model.nodes[nodeIndex];
+        Candidate candidate = node.candidates[candidateIndex];
+        var perPattern = new LinkedHashMap<Integer, Long>();
+        for (Input input : candidate.inputs) {
+            if (input.kind != InputKind.CONSUMABLE || input.hasExplicitTemplates()) return -1;
+            Node child = model.nodes[input.targetIndex];
+            if (child.kind != NodeKind.TERMINAL || child.keyIndex == node.keyIndex) return -1;
+            long amount = multiply(child.requestUnit, input.multiplier);
+            if (amount < 0) return -1;
+            long previous = perPattern.getOrDefault(child.keyIndex, 0L);
+            if (previous > Long.MAX_VALUE - amount) return -1;
+            perPattern.put(child.keyIndex, previous + amount);
+        }
+        long patterns = Long.MAX_VALUE;
+        for (var entry : perPattern.entrySet()) {
+            patterns = Math.min(patterns, inventory[entry.getKey()] / entry.getValue());
+        }
+        long produced = multiply(patterns, candidate.outputPerPattern);
+        if (produced < 0) produced = Long.MAX_VALUE;
+        return Math.min(requested, saturatingAdd(
+                inventory[node.keyIndex] / node.requestUnit, produced / node.requestUnit));
     }
 
     private Status requestNode(int nodeIndex, long requested,
@@ -627,8 +663,8 @@ final class AelisSparseCapacitySolver {
             long extractedMultipliers = Math.min(
                     requested, availableMultipliers);
             if (extractedMultipliers > 0) {
-                inventory[node.keyIndex] -=
-                        node.requestUnit * extractedMultipliers;
+                trail.set(inventory, node.keyIndex, inventory[node.keyIndex]
+                        - node.requestUnit * extractedMultipliers);
             }
             long remaining = requested - extractedMultipliers;
             if (remaining == 0 || node.kind == NodeKind.EMITTER) {
@@ -639,8 +675,8 @@ final class AelisSparseCapacitySolver {
                 if (missingAmount < 0) {
                     return Status.UNSUPPORTED;
                 }
-                missing[node.keyIndex] = saturatingAdd(
-                        missing[node.keyIndex], missingAmount);
+                trail.set(missing, node.keyIndex, saturatingAdd(
+                        missing[node.keyIndex], missingAmount));
                 return Status.SUCCESS;
             }
             if (node.kind != NodeKind.CRAFTABLE
@@ -659,12 +695,12 @@ final class AelisSparseCapacitySolver {
                     noProgressCandidatesSkipped++;
                     continue;
                 }
-                long[] trialInventory = inventory.clone();
-                long[] trialMissing = missing.clone();
+                int mark = trail.mark();
                 Status candidateStatus = requestSimulationCandidate(
                         node, candidate, remainingItems,
-                        trialInventory, trialMissing,
+                        inventory, missing,
                         activeComponentDeficits, depth);
+                if (candidateStatus != Status.SUCCESS) trail.rollback(mark);
                 if (candidateStatus == Status.NO_PROGRESS) {
                     noProgressCandidatesSkipped++;
                     continue;
@@ -672,8 +708,6 @@ final class AelisSparseCapacitySolver {
                 if (candidateStatus != Status.SUCCESS) {
                     return candidateStatus;
                 }
-                replaceInventory(inventory, trialInventory);
-                replaceInventory(missing, trialMissing);
                 if (depth == 0) {
                     simulationRootCandidateIndex = candidateIndex;
                 }
@@ -705,7 +739,7 @@ final class AelisSparseCapacitySolver {
                         || inventory[input.targetIndex] < input.multiplier) {
                     return Status.UNSUPPORTED;
                 }
-                inventory[input.targetIndex] -= input.multiplier;
+                trail.set(inventory, input.targetIndex, inventory[input.targetIndex] - input.multiplier);
                 leasedKeys[leaseCount] = input.targetIndex;
                 leasedAmounts[leaseCount] = input.multiplier;
                 leaseCount++;
@@ -730,8 +764,8 @@ final class AelisSparseCapacitySolver {
 
         for (int index = 0; index < leaseCount; index++) {
             int keyIndex = leasedKeys[index];
-            inventory[keyIndex] = saturatingAdd(
-                    inventory[keyIndex], leasedAmounts[index]);
+            trail.set(inventory, keyIndex, saturatingAdd(
+                    inventory[keyIndex], leasedAmounts[index]));
         }
 
         long remainder = remainingItems % candidate.outputPerPattern;
@@ -739,8 +773,8 @@ final class AelisSparseCapacitySolver {
                 ? 0
                 : candidate.outputPerPattern - remainder;
         if (surplus > 0) {
-            inventory[node.keyIndex] = saturatingAdd(
-                    inventory[node.keyIndex], surplus);
+            trail.set(inventory, node.keyIndex, saturatingAdd(
+                    inventory[node.keyIndex], surplus));
         }
         return Status.SUCCESS;
     }
@@ -765,7 +799,7 @@ final class AelisSparseCapacitySolver {
         long extractedMultipliers = Math.min(requested, availableMultipliers);
         if (extractedMultipliers > 0) {
             long extractedItems = node.requestUnit * extractedMultipliers;
-            inventory[node.keyIndex] -= extractedItems;
+            trail.set(inventory, node.keyIndex, inventory[node.keyIndex] - extractedItems);
         }
         long remaining = requested - extractedMultipliers;
         if (remaining == 0 || node.kind == NodeKind.EMITTER) {
@@ -799,7 +833,7 @@ final class AelisSparseCapacitySolver {
                         || inventory[input.targetIndex] < input.multiplier) {
                     return Status.SHORTAGE;
                 }
-                inventory[input.targetIndex] -= input.multiplier;
+                trail.set(inventory, input.targetIndex, inventory[input.targetIndex] - input.multiplier);
                 leasedKeys[leaseCount] = input.targetIndex;
                 leasedAmounts[leaseCount] = input.multiplier;
                 leaseCount++;
@@ -827,8 +861,8 @@ final class AelisSparseCapacitySolver {
 
         for (int index = 0; index < leaseCount; index++) {
             int keyIndex = leasedKeys[index];
-            inventory[keyIndex] = saturatingAdd(
-                    inventory[keyIndex], leasedAmounts[index]);
+            trail.set(inventory, keyIndex, saturatingAdd(
+                    inventory[keyIndex], leasedAmounts[index]));
         }
 
         long remainder = requestedItems % candidate.outputPerPattern;
@@ -836,8 +870,8 @@ final class AelisSparseCapacitySolver {
                 ? 0
                 : candidate.outputPerPattern - remainder;
         if (surplus > 0) {
-            inventory[node.keyIndex] = saturatingAdd(
-                    inventory[node.keyIndex], surplus);
+            trail.set(inventory, node.keyIndex, saturatingAdd(
+                    inventory[node.keyIndex], surplus));
         }
         return Status.SUCCESS;
     }
@@ -902,8 +936,8 @@ final class AelisSparseCapacitySolver {
             if (extractedMultipliers == 0) {
                 continue;
             }
-            inventory[template.keyIndex] -=
-                    template.amount * extractedMultipliers;
+            trail.set(inventory, template.keyIndex, inventory[template.keyIndex]
+                    - template.amount * extractedMultipliers);
             remaining -= extractedMultipliers;
         }
         return remaining;
@@ -933,7 +967,35 @@ final class AelisSparseCapacitySolver {
         return lowerInclusive + distance / 2 + distance % 2;
     }
 
-    private static void replaceInventory(long[] destination, long[] source) {
-        System.arraycopy(source, 0, destination, 0, destination.length);
+    /** Nested transactions retain only changed slots; no inventory-sized probe snapshots. */
+    private static final class Trail {
+        private long[][] arrays = new long[64][];
+        private int[] indexes = new int[64];
+        private long[] oldValues = new long[64];
+        private int size;
+
+        int mark() { return size; }
+
+        void set(long[] array, int index, long value) {
+            if (array[index] == value) return;
+            if (size == indexes.length) {
+                int capacity = Math.multiplyExact(size, 2);
+                arrays = Arrays.copyOf(arrays, capacity);
+                indexes = Arrays.copyOf(indexes, capacity);
+                oldValues = Arrays.copyOf(oldValues, capacity);
+            }
+            arrays[size] = array;
+            indexes[size] = index;
+            oldValues[size++] = array[index];
+            array[index] = value;
+        }
+
+        void rollback(int mark) {
+            while (size > mark) {
+                --size;
+                arrays[size][indexes[size]] = oldValues[size];
+                arrays[size] = null;
+            }
+        }
     }
 }

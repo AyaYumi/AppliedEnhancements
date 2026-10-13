@@ -66,9 +66,6 @@ public final class DataEnergisticsMenuCompat {
             long amount = field.getLong(confirmMenu);
             return amount > 0 ? OptionalLong.of(amount) : OptionalLong.empty();
         } catch (IllegalAccessException | RuntimeException unavailable) {
-            com.appliedenhancements.runtime.AelisPlanningLog.debug(
-                    "Could not read optional Data Energistics crafting amount",
-                    unavailable);
             return OptionalLong.empty();
         }
     }

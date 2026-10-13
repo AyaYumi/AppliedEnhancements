@@ -20,12 +20,14 @@ public final class StorageBusSlotIndex<K> {
     private Map<K, CandidateSlots> active = new HashMap<>();
     private Map<K, CandidateSlots> rebuilding = new HashMap<>();
     private boolean rebuildOpen;
+    private boolean current;
 
     /** Starts a new rebuild without changing the currently published index. */
     public void beginRebuild() {
         for (var slots : rebuilding.values()) {
             slots.reset();
         }
+        current = false;
         rebuildOpen = true;
     }
 
@@ -49,11 +51,22 @@ public final class StorageBusSlotIndex<K> {
         active = rebuilding;
         rebuilding = previous;
         rebuildOpen = false;
+        current = true;
     }
 
     /** Discards a partial rebuild and keeps the previous published index. */
     public void abortRebuild() {
         rebuildOpen = false;
+    }
+
+    /** Marks cached candidates stale after an external inventory mutation. */
+    public void invalidate() {
+        current = false;
+    }
+
+    /** Whether this index reflects the last complete inventory listing. */
+    public boolean isCurrent() {
+        return current;
     }
 
     /**

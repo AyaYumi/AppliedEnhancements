@@ -12,6 +12,49 @@ import org.junit.jupiter.api.Test;
 
 class AelisSimulationFirstCandidateCertificateTest {
     @Test
+    void acceptsIsolatedSecondaryOutputsAndIncludesThemInTheProducedSet() {
+        var nodes = List.of(
+                new AelisSimulationFirstCandidateCertificate.Node<>(
+                        "sand", 1, false, false, true, true, 3, 0,
+                        List.of(input(1, "ore", only("ore"))), Set.of("gravel")),
+                terminal("ore"));
+        var result = AelisSimulationFirstCandidateCertificate.evaluate(nodes, 0);
+        assertTrue(result.safe(), result.reason());
+        assertEquals(Set.of("sand", "gravel"), result.produced());
+    }
+
+    @Test
+    void rejectsSecondaryOutputCrossfeedInAnAggregatedOrderedChoice() {
+        var nodes = List.of(
+                craft("root", input(1, "sand", only("sand")), input(3, "gravel", only("gravel"))),
+                new AelisSimulationFirstCandidateCertificate.Node<>(
+                        "sand", 1, false, false, true, true, 3, 0,
+                        List.of(input(2, "ore", only("ore"))), Set.of("gravel")),
+                terminal("ore"), terminal("gravel"));
+        var result = AelisSimulationFirstCandidateCertificate.evaluate(nodes, 0);
+        assertFalse(result.safe());
+        assertEquals("sibling_crossfeed", result.reason());
+    }
+
+    @Test
+    void rejectsFeedbackAndLatentFuzzyMatchesFromSecondaryOutputs() {
+        var feedback = List.of(
+                new AelisSimulationFirstCandidateCertificate.Node<>(
+                        "sand", 1, false, false, true, true, 3, 0,
+                        List.of(input(1, "gravel", only("gravel"))), Set.of("gravel")),
+                terminal("gravel"));
+        assertEquals("secondary_output_feedback",
+                AelisSimulationFirstCandidateCertificate.evaluate(feedback, 0).reason());
+        var fuzzy = List.of(
+                new AelisSimulationFirstCandidateCertificate.Node<>(
+                        "sand", 1, false, false, true, true, 3, 0,
+                        List.of(input(1, "ore", key -> key.equals("ore") || key.equals("gravel"))),
+                        Set.of("gravel")), terminal("ore"));
+        assertEquals("latent_fuzzy_crossfeed",
+                AelisSimulationFirstCandidateCertificate.evaluate(fuzzy, 0).reason());
+    }
+
+    @Test
     void acceptsSafeExactDeepFirstCandidateGraph() {
         var nodes = List.of(
                 craft("root", input(1, "a", only("a"))),

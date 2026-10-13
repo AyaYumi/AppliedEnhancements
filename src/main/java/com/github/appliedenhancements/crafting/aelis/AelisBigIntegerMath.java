@@ -13,12 +13,19 @@ public final class AelisBigIntegerMath {
     static BigInteger multiply(long left, long right) {
         requireNonNegative(left);
         requireNonNegative(right);
+        if (left == 0 || right == 0) return BigInteger.ZERO;
+        if (left <= Long.MAX_VALUE / right) return BigInteger.valueOf(left * right);
         return BigInteger.valueOf(left).multiply(BigInteger.valueOf(right));
     }
 
     static BigInteger multiply(long left, BigInteger right) {
         requireNonNegative(left);
         requireNonNegative(right);
+        if (left == 0 || right.signum() == 0) return BigInteger.ZERO;
+        if (left == 1) return right;
+        if (right.bitLength() <= 63 && right.longValue() <= Long.MAX_VALUE / left) {
+            return BigInteger.valueOf(left * right.longValue());
+        }
         return BigInteger.valueOf(left).multiply(right);
     }
 
@@ -26,6 +33,11 @@ public final class AelisBigIntegerMath {
         requireNonNegative(value);
         if (divisor <= 0) {
             throw new ArithmeticException("divisor must be positive");
+        }
+        if (divisor == 1) return value;
+        if (value.bitLength() <= 63) {
+            long small = value.longValue();
+            return BigInteger.valueOf(small / divisor + (small % divisor == 0 ? 0 : 1));
         }
         BigInteger[] division = value.divideAndRemainder(BigInteger.valueOf(divisor));
         return division[1].signum() == 0 ? division[0] : division[0].add(BigInteger.ONE);

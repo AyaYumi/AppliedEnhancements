@@ -2,9 +2,11 @@ package com.appliedenhancements.mixin;
 
 import appeng.api.networking.security.IActionSource;
 import appeng.api.networking.storage.IStorageService;
+import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.inv.NetworkCraftingSimulationState;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
+import java.util.ArrayList;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -25,8 +27,15 @@ public abstract class NetworkCraftingSimulationStateInventoryLockMixin {
             IActionSource source,
             CallbackInfo callback) {
         var infinite = (com.appliedenhancements.storage.InfinitePlanningInventory) this;
+        var sentinelKeys = new ArrayList<AEKey>();
+        for (var entry : this.list) {
+            if (entry.getLongValue() == Long.MAX_VALUE) {
+                sentinelKeys.add(entry.getKey());
+            }
+        }
         infinite.appliedenhancements$infiniteKeys().addAll(
-                com.appliedenhancements.storage.InfiniteStorageSupport.snapshot(storage.getInventory(), source));
+                com.appliedenhancements.storage.InfiniteStorageSupport.snapshot(
+                        storage.getInventory(), source, sentinelKeys));
         com.appliedenhancements.storage.InfiniteStorageSupport.reconcilePlanningSnapshot(
                 this.list, storage.getInventory(), source, infinite.appliedenhancements$infiniteKeys());
         ManualCraftingInventoryLock.subtractReservations(
