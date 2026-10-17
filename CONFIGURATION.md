@@ -51,11 +51,13 @@ Old split/pre-AELIS options migrate to the current functional sections with back
 Old numeric order settings migrate to the three-state mode. Customized settings
 remain preserved when saving nested configuration through Configured.
 
-The diagnostics compatibility setting defaults off. This release emits no
-planning traces. Repeated runtime/load faults retain a first warning/error, then
-use a global one-minute category window. Known history is retained at the
-128-category limit; excess categories share an overflow window. This bounds logs
-without modifying the operation's rejection, retry, cancellation or owned inputs.
+The diagnostics compatibility setting defaults off. Applied Enhancements emits
+no planning traces or startup configuration dumps. Repeated faults are limited
+to one message per category per minute, with separate rolling budgets of eight
+warnings and four errors per minute across all machines. Category history is
+bounded at 128 entries per severity; excess categories share an overflow window.
+Warnings do not consume the error budget. Logging does not alter rejection,
+retry, cancellation or material ownership.
 
 ## 中文
 
@@ -64,5 +66,6 @@ without modifying the operation's rejection, retry, cancellation or owned inputs
 算术偏好；显式精确请求不受偏好开关阻止，不能把 long 投影当作完整订单或无限来源。
 
 无限元件通过标签、运行标记或明确兼容来源识别；普通大容量元件不会因数字很大
-被视为无限。修改已有节后重启，旧配置迁移会保存备份。诊断仅在排查时开启，
-重复日志全局限流，首次故障仍可查看。
+被视为无限。修改已有节后重启，旧配置迁移会保存备份。诊断选项仅供兼容联动读取，
+本模组不输出规划追踪或启动配置详情。同类故障每分钟最多记录一次；所有机器共用
+每分钟最多 8 条警告、4 条错误的独立滚动限额，警告不占用错误额度。

@@ -28,7 +28,7 @@ retain AE2's normal missing-material result.
 | Infinite cells | Explicit tags/runtime markers/current compatible cells, no inference from a huge finite count |
 | Pattern terminals | Duplicate/invalid filters, selection, atomic Cut/Paste and Quick Move integration |
 | Item actions | AE network context menu plus optional JEI recipe/search/extract/give integration |
-| Logging | Planning traces are removed; repeated runtime/load faults retain a first warning/error and use bounded global one-minute windows |
+| Logging | No planning traces or startup configuration dumps; repeated faults are limited per category and globally by severity |
 
 ## Requirements and installation
 
@@ -38,7 +38,7 @@ Data Energistics and other integrations remain optional. New addon versions need
 runtime verification when they change internal hooks.
 
 Build `build/libs/appliedenhancements-1.1.2.jar` and install the same build on
-client and server. Internal network protocol is 9. Addons use the separate public API; this mod is
+client and server. Internal network protocol is 10. Addons use the separate public API; this mod is
 not embedded in their JARs.
 
 ## Configuration and use
@@ -86,4 +86,4 @@ exact execution. Unsupported dynamic/cyclic branches preserve their documented
 failure/fallback boundary. AELIS caches are per planning session, not persistent
 global recipe graphs. Valid huge quantities still require time and memory.
 
-[Changes](CHANGELOG.md) · Licensed under [MIT](LICENSE).
+Licensed under [MIT](LICENSE).

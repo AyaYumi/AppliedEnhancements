@@ -21,7 +21,7 @@ This guide is intended for NeoForge mod authors integrating with Applied Enhance
 | Applied Energistics 2 | `19.2.18` | Declared range: `[19.2.17,)`; public signatures directly reference AE2 types |
 | Applied Enhancements | `1.1.2` | Version covered by this guide |
 
-Version `1.1.2` continues to provide the public APIs introduced in `1.1.1`, including the shared extraction/ownership API `AelisBatchExecutionContext` and `AelisSmartDoublingApi` for native enabled-state queries. See [native smart doubling](SMART_DOUBLING_API.md). Clients and servers use the same build; the internal payload protocol remains `9`. Consumers of the new query need `1.1.1` or later at compile time and runtime.
+Version `1.1.2` continues to provide the public APIs introduced in `1.1.1`, including the shared extraction/ownership API `AelisBatchExecutionContext` and `AelisSmartDoublingApi` for native enabled-state queries. See [native smart doubling](SMART_DOUBLING_API.md). Clients and servers use the same build; the internal payload protocol is `10`. Consumers of the new query need `1.1.1` or later at compile time and runtime.
 
 BigInteger plans are submitted without a universal CPU capability precheck. A saturated long projection does not force `simulation()` or override the CPU's submission result. Server-side integrations should read exact quantities through `AelisExactCraftingPlanApi.read(plan)`; `AelisCycleExecutionApi.copyMetadata` preserves them. The legacy `isPreviewOnly` marker now only indicates a saturated projection. The standard long fields remain projections, so acceptance by an unadapted CPU does not establish exact BigInteger execution support.
 
@@ -147,7 +147,7 @@ The main integration types are listed below; exact request and metadata types ar
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.2` uses internal payload protocol `9`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.2` uses internal payload protocol `10`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 
@@ -665,7 +665,7 @@ Disabling the session clears selection and the cut buffer. `clear()` clears buff
 
 ## 8. Network-item context-menu extensions
 
-Starting with `1.0.5`, built-in item-action menus use their own configurable binding, **Open Item Actions Menu**, defaulting to **Alt + right-click**. Pattern Quick Move Cut/Paste uses **Open Pattern Quick Move Menu**, defaulting to **right-click**. Both bindings honor NeoForge modifiers and GUI context. The old shared binding is retained for pattern Quick Move, so a saved right-click mapping does not overwrite the new item-action default. Compatible registered screens receive this separation automatically; registering menu entries does not change either binding. Custom screens own their input routing and must keep the two actions separate. The split retains public API signatures; the current overall build uses payload protocol `9`.
+Starting with `1.0.5`, built-in item-action menus use their own configurable binding, **Open Item Actions Menu**, defaulting to **Alt + right-click**. Pattern Quick Move Cut/Paste uses **Open Pattern Quick Move Menu**, defaulting to **right-click**. Both bindings honor NeoForge modifiers and GUI context. The old shared binding is retained for pattern Quick Move, so a saved right-click mapping does not overwrite the new item-action default. Compatible registered screens receive this separation automatically; registering menu entries does not change either binding. Custom screens own their input routing and must keep the two actions separate. The split retains public API signatures; the current overall build uses payload protocol `10`.
 
 Register entry providers during Client Setup:
 
