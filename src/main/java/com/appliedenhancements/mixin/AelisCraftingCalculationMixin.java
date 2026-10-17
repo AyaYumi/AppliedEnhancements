@@ -5,7 +5,6 @@ import appeng.api.networking.crafting.CalculationStrategy;
 import appeng.api.networking.crafting.ICraftingPlan;
 import appeng.api.networking.crafting.ICraftingService;
 import appeng.api.networking.crafting.ICraftingSimulationRequester;
-import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.CraftBranchFailure;
@@ -20,7 +19,6 @@ import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgres
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressRequester;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
-import com.github.appliedenhancements.integration.ae2.AelisCraftingTreeNodeBridge;
 import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -276,8 +274,6 @@ public abstract class AelisCraftingCalculationMixin
         }
 
         KeyCounter missingItems = getMissingItems();
-        AEKey requestedKey = ((AelisCraftingTreeNodeBridge) tree)
-                .molecularmanipulator$getWhat();
         var result = session.tryExecute(
                 tree, inventory, requestedAmount, isSimulation(), missingItems);
         if (result.branchFailure() != null) {
@@ -289,15 +285,6 @@ public abstract class AelisCraftingCalculationMixin
                 molecularmanipulator$aelisNodeCount = Math.min(
                         result.logicalNodeCount(), Long.MAX_VALUE / 8);
             }
-            if (Config.AELIS_DIAGNOSTICS.get()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS applied: key={}, amount={}, simulation={}, uniqueNodes={}, mergedOccurrences={}, barriers={}, logicalNodes={}, compileMs={}, executeMs={}",
-                        requestedKey, requestedAmount, isSimulation(),
-                        result.uniqueNodes(), result.mergedOccurrences(),
-                        result.barrierCount(), result.logicalNodeCount(),
-                        result.compileNanos() / 1_000_000.0,
-                        result.executionNanos() / 1_000_000.0);
-            }
             return;
         }
 
@@ -306,14 +293,6 @@ public abstract class AelisCraftingCalculationMixin
                     "internal_compatibility_error",
                     "AELIS encountered an internal compatibility error and fell back to AE2",
                     result.error());
-        } else if (Config.AELIS_DIAGNOSTICS.get()) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS fallback: key={}, amount={}, simulation={}, reason={}, uniqueNodes={}, mergedOccurrences={}, barriers={}, compileMs={}, executeMs={}",
-                    requestedKey, requestedAmount, isSimulation(),
-                    result.fallbackReason(), result.uniqueNodes(),
-                    result.mergedOccurrences(), result.barrierCount(),
-                    result.compileNanos() / 1_000_000.0,
-                    result.executionNanos() / 1_000_000.0);
         }
         molecularmanipulator$calculationPath = AelisCalculationPath.AE2_FALLBACK;
         if (progress != null) {

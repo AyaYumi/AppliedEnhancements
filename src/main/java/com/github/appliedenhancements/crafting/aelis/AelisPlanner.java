@@ -49,8 +49,6 @@ import java.util.concurrent.TimeUnit;
 public final class AelisPlanner {
     private static final long MAX_LINEAR_NATIVE_BOUNDARY_ITEMS = 8_192L;
     private static final long MAX_SIMULATION_ORDERED_REPLAY_STEPS = 64L;
-    private static final IdentityHashMap<Graph, List<LocalCyclicRegion>> CYCLIC_REGIONS =
-            new IdentityHashMap<>();
     private static final String ADVANCED_AE_PROCESSING_PATTERN =
             "net.pedroksl.advanced_ae.common.patterns.AdvProcessingPattern";
     private static final String AE2LT_OVERLOAD_PATTERN =
@@ -176,11 +174,6 @@ public final class AelisPlanner {
                                 structuralFailure = contextSplitKeys.size() >= splitLimit
                                         ? "context_split_limit"
                                         : "context_split_unstable:" + split.reason;
-                            } else if (Config.AELIS_DIAGNOSTICS.get()) {
-                                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                                        "AELIS context split retry: key={}, reason={}, splitKeys={}",
-                                        split.triggerKey, split.reason,
-                                        contextSplitKeys.size());
                             }
                         } catch (Fallback fallback) {
                             structuralFailure = fallback.reason;
@@ -228,10 +221,6 @@ public final class AelisPlanner {
                         compileNanos, System.nanoTime() - startedAt);
             } catch (CraftBranchFailure failure) {
                 if (graph.hasOrderedChoices()) {
-                    com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                            "branch_failure",
-                            "AELIS CraftBranchFailure treated as hard failure: {}",
-                            failure.getMessage());
                     return Result.branchFailure(graph.nodes.size(), graph.mergedOccurrences,
                             graph.barrierCount, compileNanos,
                             System.nanoTime() - startedAt, failure);
@@ -292,27 +281,27 @@ public final class AelisPlanner {
             PauseCheckpoint pauseCheckpoint, ProgressSink progressSink)
             throws Fallback, CraftBranchFailure, InterruptedException {
         var inventory = new ChildCraftingSimulationState(parent);
-        var exactRequest = com.appliedenhancements.runtime.ExactRequestScope.current();
-        if (exactRequest != null && exactRequest.amount().bitLength() > 63) {
-            var stagedMissing = new KeyCounter();
-            if (graph.executionScope() == AelisExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL) {
-                executeTransactionalNode(graph, graph.rootIndex, inventory, exactRequest.amount(),
-                        requestedAmount, simulation, stagedMissing, pauseCheckpoint, progressSink,
-                        -1, null, null, null);
-            } else {
-                executeBigIntegerTopological(graph, inventory, requestedAmount, simulation, stagedMissing,
-                        pauseCheckpoint, progressSink);
-            }
-            inventory.applyDiff(parent);
-            mergeMissingAmounts(missingItems, stagedMissing);
-            return;
-        }
         var cyclicMissing = new KeyCounter();
         if (tryExecuteGlobalCyclicPlan(
                 graph, inventory, requestedAmount, simulation,
                 cyclicMissing, pauseCheckpoint)) {
             inventory.applyDiff(parent);
             mergeMissingAmounts(missingItems, cyclicMissing);
+            return;
+        }
+        var exactRequest = com.appliedenhancements.runtime.ExactRequestScope.current();
+        if (exactRequest != null && exactRequest.amount().bitLength() > 63) {
+            var stagedMissing = new KeyCounter();
+            if (graph.executionScope() == AelisExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL) {
+                executeTransactionalNode(graph, graph.rootIndex, inventory, exactRequest.amount(),
+                        requestedAmount, simulation, stagedMissing, pauseCheckpoint, progressSink,
+                        -1, null, null, false);
+            } else {
+                executeBigIntegerTopological(graph, inventory, requestedAmount, simulation, stagedMissing,
+                        pauseCheckpoint, progressSink);
+            }
+            inventory.applyDiff(parent);
+            mergeMissingAmounts(missingItems, stagedMissing);
             return;
         }
         if (graph.executionScope()
@@ -354,8 +343,7 @@ public final class AelisPlanner {
                 if (usesCompiledCandidateTrial(node)) {
                     if (tryExecuteCompiledCandidates(
                             graph, nodeIndex, inventory, requestMultipliers,
-                            requestedAmount, simulation, stagedMissing, pauseCheckpoint,
-                            "topological", null)) {
+                            requestedAmount, simulation, stagedMissing, pauseCheckpoint, null)) {
                         progressSink.executionStep();
                         continue;
                     }
@@ -367,7 +355,7 @@ public final class AelisPlanner {
                     continue;
                 }
                 // Call AE2 bridge with aggregated amount from upstream
-                executeNativeBoundary(node, inventory, requestMultipliers, "topological");
+                executeNativeBoundary(node, inventory, requestMultipliers);
 
                 progressSink.executionStep();
                 continue;
@@ -381,7 +369,7 @@ public final class AelisPlanner {
                     progressSink.executionStep();
                     continue;
                 }
-                executeNativeBoundary(node, inventory, requestMultipliers, "legacy");
+                executeNativeBoundary(node, inventory, requestMultipliers);
                 progressSink.executionStep();
                 continue;
             }
@@ -416,10 +404,6 @@ public final class AelisPlanner {
             }
             if (node.terminal) {
                 if (!simulation) {
-                    com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                            "terminal_shortage",
-                            "AELIS terminal node shortage: key={}, requested={}",
-                            node.key, totalRequestedItems);
                     throw new CraftBranchFailure(node.key, totalRequestedItems);
                 }
                 // AE2 records an exact terminal shortfall during the simulated
@@ -470,14 +454,15 @@ public final class AelisPlanner {
             long requestedAmount, boolean simulation, KeyCounter stagedMissing,
             PauseCheckpoint pauseCheckpoint, ProgressSink progressSink)
             throws Fallback, CraftBranchFailure, InterruptedException {
-        var requests = new BigInteger[graph.nodes.size()];
-        java.util.Arrays.fill(requests, BigInteger.ZERO);
+        var requests = new AelisQuantity[graph.nodes.size()];
+        java.util.Arrays.fill(requests, AelisQuantity.ZERO);
         var exactRequest = com.appliedenhancements.runtime.ExactRequestScope.current();
-        requests[graph.rootIndex] = exactRequest == null ? BigInteger.valueOf(requestedAmount) : exactRequest.amount();
+        requests[graph.rootIndex] = exactRequest == null
+                ? AelisQuantity.of(requestedAmount) : AelisQuantity.of(exactRequest.amount());
 
         for (int nodeIndex : graph.topologicalOrder) {
             checkpoint(pauseCheckpoint);
-            BigInteger requestMultipliers = requests[nodeIndex];
+            AelisQuantity requestMultipliers = requests[nodeIndex];
             if (requestMultipliers.signum() <= 0) {
                 progressSink.executionStep();
                 continue;
@@ -486,15 +471,13 @@ public final class AelisPlanner {
             Node node = graph.nodes.get(nodeIndex);
             if (node.executionMode == ExecutionMode.HYBRID_BARRIER || node.barrier) {
                 long nativeRequest = exactNonNegativeLong(
-                        requestMultipliers, "big_integer_native_boundary_overflow");
-                String path = node.executionMode == ExecutionMode.HYBRID_BARRIER
-                        ? "topological_big_integer" : "legacy_big_integer";
+                        requestMultipliers.toBigInteger(), "big_integer_native_boundary_overflow");
                 if (node.executionMode == ExecutionMode.HYBRID_BARRIER
                         && usesCompiledCandidateTrial(node)
                         && tryExecuteCompiledCandidates(
                                 graph, nodeIndex, inventory, nativeRequest,
                                 requestedAmount, simulation, stagedMissing,
-                                pauseCheckpoint, path, null)) {
+                                pauseCheckpoint, null)) {
                     progressSink.executionStep();
                     continue;
                 }
@@ -504,24 +487,25 @@ public final class AelisPlanner {
                     progressSink.executionStep();
                     continue;
                 }
-                executeNativeBoundary(node, inventory, nativeRequest, path);
+                executeNativeBoundary(node, inventory, nativeRequest);
                 progressSink.executionStep();
                 continue;
             }
 
             validateObservedPatternSemantics(node, null);
             validateTemplates(node, inventory, pauseCheckpoint);
-            BigInteger requestedItems = AelisBigIntegerMath.multiply(
-                    node.amount, requestMultipliers);
-            ExactCraftingBytes.addStackBytes(inventory, node.key, requestedItems);
+            AelisQuantity requestedItems = requestMultipliers.multiply(node.amount);
+            BigInteger exactRequestedItems = requestedItems.toBigInteger();
+            ExactCraftingBytes.addStackBytes(inventory, node.key, exactRequestedItems);
 
-            if (com.appliedenhancements.storage.InfiniteStorageSupport.consume(inventory, node.key, requestedItems)) {
+            if (com.appliedenhancements.storage.InfiniteStorageSupport.consume(
+                    inventory, node.key, exactRequestedItems)) {
                 progressSink.executionStep();
                 continue;
             }
 
             long available = inventory.extract(
-                    node.key, AelisBigIntegerMath.saturatingLong(requestedItems),
+                    node.key, requestedItems.saturatingLong(),
                     Actionable.SIMULATE);
             long extractedMultipliers = available / node.amount;
             if (extractedMultipliers > 0) {
@@ -534,35 +518,29 @@ public final class AelisPlanner {
                 }
             }
 
-            BigInteger remainingMultipliers = requestMultipliers.subtract(
-                    BigInteger.valueOf(extractedMultipliers));
+            AelisQuantity remainingMultipliers = requestMultipliers.subtract(extractedMultipliers);
             if (remainingMultipliers.signum() == 0) {
                 progressSink.executionStep();
                 continue;
             }
 
-            BigInteger totalRequestedItems = AelisBigIntegerMath.multiply(
-                    node.amount, remainingMultipliers);
+            AelisQuantity totalRequestedItems = remainingMultipliers.multiply(node.amount);
             if (node.emitter) {
                 inventory.emitItems(
                         node.key,
                         exactNonNegativeLong(
-                                totalRequestedItems,
+                                totalRequestedItems.toBigInteger(),
                                 "big_integer_emitted_amount_overflow"));
                 progressSink.executionStep();
                 continue;
             }
             if (node.terminal) {
-                long projectedMissing = AelisBigIntegerMath.saturatingLong(totalRequestedItems);
+                long projectedMissing = totalRequestedItems.saturatingLong();
                 if (!simulation) {
-                    com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                            "terminal_shortage_exact",
-                            "AELIS terminal node shortage: key={}, exactRequested={}",
-                            node.key, totalRequestedItems);
                     throw new CraftBranchFailure(node.key, projectedMissing);
                 }
                 addSaturated(stagedMissing, node.key, projectedMissing);
-                recordBigIntegerMissing(inventory, node.key, totalRequestedItems);
+                recordBigIntegerMissing(inventory, node.key, totalRequestedItems.toBigInteger());
                 progressSink.executionStep();
                 continue;
             }
@@ -571,39 +549,36 @@ public final class AelisPlanner {
             if (effectiveOutputPerPattern <= 0) {
                 throw new Fallback("invalid_output_per_pattern");
             }
-            BigInteger exactPatternTimes;
+            AelisQuantity exactPatternTimes;
             try {
-                exactPatternTimes = AelisBigIntegerMath.ceilDiv(
-                        totalRequestedItems, effectiveOutputPerPattern);
+                exactPatternTimes = totalRequestedItems.ceilDiv(effectiveOutputPerPattern);
             } catch (ArithmeticException exception) {
                 throw new Fallback("division_by_zero_output_per_pattern");
             }
-            long patternTimes = projectedPatternTimes(
-                    inventory, node.details, exactPatternTimes);
+            BigInteger exactTimes = exactPatternTimes.toBigInteger();
+            long patternTimes = projectedPatternTimes(inventory, node.details, exactTimes);
             if (!node.reusableInputs.isEmpty()) {
                 allocateDeterministicDamageInputs(
-                        node, inventory, exactNonNegativeLong(exactPatternTimes,
+                        node, inventory, exactNonNegativeLong(exactTimes,
                                 "big_integer_damage_input_overflow"), pauseCheckpoint);
             }
             for (Edge edge : node.edges) {
-                BigInteger childRequests = AelisBigIntegerMath.multiply(
-                        edge.requestMultiplier, exactPatternTimes);
+                AelisQuantity childRequests = exactPatternTimes.multiply(edge.requestMultiplier);
                 requests[edge.childIndex] = requests[edge.childIndex].add(childRequests);
             }
 
-            BigInteger producedItems = AelisBigIntegerMath.multiply(
-                    effectiveOutputPerPattern, exactPatternTimes);
-            BigInteger surplus = producedItems.subtract(totalRequestedItems);
+            AelisQuantity surplus = exactPatternTimes.multiply(effectiveOutputPerPattern)
+                    .subtract(totalRequestedItems);
             if (surplus.signum() > 0) {
                 inventory.insert(
                         node.key,
                         exactNonNegativeLong(
-                                surplus, "big_integer_surplus_overflow"),
+                                surplus.toBigInteger(), "big_integer_surplus_overflow"),
                         Actionable.MODULATE);
             }
             recordProjectedBigIntegerCrafting(
-                    inventory, node.details, exactPatternTimes, patternTimes);
-            ExactCraftingBytes.addBytes(inventory, exactPatternTimes);
+                    inventory, node.details, exactTimes, patternTimes);
+            ExactCraftingBytes.addBytes(inventory, exactTimes);
             progressSink.executionStep();
         }
     }
@@ -620,9 +595,7 @@ public final class AelisPlanner {
     private static void recordBigIntegerMissing(CraftingSimulationState inventory,
             AEKey key, BigInteger amount) {
         var tracker = (AelisBigIntegerCraftingTracker) inventory;
-        var missing = new LinkedHashMap<>(tracker.appliedenhancements$getBigIntegerMissingAmounts());
-        missing.merge(key, amount, BigInteger::add);
-        tracker.appliedenhancements$setBigIntegerMissingAmounts(missing);
+        tracker.appliedenhancements$recordBigIntegerMissing(key, amount);
     }
 
     private static void recordProjectedBigIntegerCrafting(
@@ -656,6 +629,61 @@ public final class AelisPlanner {
     private static Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>
             buildGlobalCyclicVariants(Graph graph, CraftingSimulationState parent,
                     PauseCheckpoint pauseCheckpoint) throws InterruptedException, Fallback {
+        prepareGlobalCyclicModel(graph);
+        if (graph.cyclicVariants == null) {
+            return null;
+        }
+        for (Node node : graph.nodes) {
+            if (!node.reachable) continue;
+            for (CompiledCandidate candidate : node.compiledCandidates) {
+                if (candidate.observedPatternSemantics != null
+                        && !candidate.observedPatternSemantics.matches(candidate.details)) {
+                    return null;
+                }
+                for (OrderedGraphInput input : candidate.orderedInputs) {
+                    GraphConsumableInput consumable = input.consumableInput;
+                    if (!validateSparseConsumableTemplates(
+                            graph.nodes.get(consumable.childIndex), consumable.child,
+                            parent, pauseCheckpoint)) return null;
+                }
+            }
+        }
+        for (LocalCyclicRegion local : graph.cyclicRegions) {
+            for (var variants : local.model.variants().values()) {
+                for (var variant : variants) {
+                    CompiledCandidate candidate = variant.id();
+                    if (candidate.sourceProcess != null) continue;
+                    if (!rawCyclePatternStillAvailable(graph.craftingService, candidate.details)
+                            || candidate.observedPatternSemantics != null
+                                    && !candidate.observedPatternSemantics.matches(candidate.details)) {
+                        return null;
+                    }
+                    for (RawCycleInput rawInput : candidate.rawCycleInputs) {
+                        if (!validateRawCycleInput(rawInput)) return null;
+                    }
+                    for (OrderedGraphInput input : candidate.orderedInputs) {
+                        GraphConsumableInput consumable = input.consumableInput;
+                        if (!validateSparseConsumableTemplates(
+                                graph.nodes.get(consumable.childIndex), consumable.child,
+                                parent, pauseCheckpoint)) return null;
+                    }
+                }
+            }
+        }
+        return graph.cyclicVariants;
+    }
+
+    private static void prepareGlobalCyclicModel(Graph graph) throws Fallback {
+        if (graph.cyclicModelPrepared) return;
+        var variants = compileGlobalCyclicVariants(graph);
+        graph.cyclicVariants = variants != null && containsKeyLevelCycle(variants)
+                ? java.util.Collections.unmodifiableMap(variants) : null;
+        graph.cyclicModelPrepared = true;
+    }
+
+    /** Compile immutable quantities once; runtime validation stays in the method above. */
+    private static Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>
+            compileGlobalCyclicVariants(Graph graph) throws Fallback {
         var variants = new LinkedHashMap<AEKey,
                 List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>();
         var canonicalCandidates = new LinkedHashMap<AEKey, List<CompiledCandidate>>();
@@ -687,11 +715,9 @@ public final class AelisPlanner {
                     AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>(
                             node.compiledCandidates.size());
             for (CompiledCandidate candidate : node.compiledCandidates) {
-                if (candidate == null || candidate.outputPerPattern <= 0
-                        || candidate.hasContainerItems
-                        || candidate.observedPatternSemantics != null
-                                && !candidate.observedPatternSemantics.matches(
-                                        candidate.details)) {
+                if (candidate == null || !candidate.secondaryOutputs.isEmpty()
+                        || candidate.outputPerPattern <= 0
+                        || candidate.hasContainerItems) {
                     return null;
                 }
                 var inputs = new LinkedHashMap<AEKey, BigInteger>();
@@ -706,10 +732,6 @@ public final class AelisPlanner {
                         return null;
                     }
                     Node child = graph.nodes.get(consumable.childIndex);
-                    if (!validateSparseConsumableTemplates(
-                            child, consumable.child, parent, pauseCheckpoint)) {
-                        return null;
-                    }
                     long amount = checkedMultiply(
                             child.amount, consumable.multiplier,
                             "cyclic_input_amount_overflow");
@@ -734,7 +756,7 @@ public final class AelisPlanner {
         }
 
         var rawRegions = new IdentityHashMap<LocalCyclicRegion, Boolean>();
-        for (LocalCyclicRegion local : CYCLIC_REGIONS.getOrDefault(graph, List.of())) {
+        for (LocalCyclicRegion local : graph.cyclicRegions) {
             if (local != null) {
                 rawRegions.put(local, Boolean.TRUE);
             }
@@ -750,18 +772,6 @@ public final class AelisPlanner {
                         if (candidate.sourceProcess != null) {
                             continue;
                         }
-                        if (!rawCyclePatternStillAvailable(
-                                graph.craftingService, candidate.details)
-                                || candidate.observedPatternSemantics != null
-                                        && !candidate.observedPatternSemantics.matches(
-                                                candidate.details)) {
-                            return null;
-                        }
-                        for (RawCycleInput rawInput : candidate.rawCycleInputs) {
-                            if (!validateRawCycleInput(rawInput)) {
-                                return null;
-                            }
-                        }
                         for (OrderedGraphInput orderedInput : candidate.orderedInputs) {
                             GraphConsumableInput consumable =
                                     orderedInput.consumableInput;
@@ -769,12 +779,6 @@ public final class AelisPlanner {
                                     || consumable.substituteInput
                                     || consumable.childIndex < 0
                                     || consumable.childIndex >= graph.nodes.size()) {
-                                return null;
-                            }
-                            Node child = graph.nodes.get(consumable.childIndex);
-                            if (!validateSparseConsumableTemplates(
-                                    child, consumable.child,
-                                    parent, pauseCheckpoint)) {
                                 return null;
                             }
                         }
@@ -787,7 +791,6 @@ public final class AelisPlanner {
             variants.clear();
             variants.putAll(merged);
         }
-
 
         return variants;
     }
@@ -813,18 +816,12 @@ public final class AelisPlanner {
             }
         }
 
-        if (!containsKeyLevelCycle(variants)) {
-            return false;
-        }
         Set<CompiledCandidate> cyclicCraftingCandidates =
                 AelisCyclicCraftingMembership.find(variants);
 
         Node root = graph.nodes.get(graph.rootIndex);
-        BigInteger rootItems = (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)
-                ? AelisBigIntegerMath.multiply(root.amount, requestedAmount)
-                : BigInteger.valueOf(checkedMultiply(
-                        root.amount, requestedAmount,
-                        "cyclic_root_amount_overflow"));
+        var exactRequest = com.appliedenhancements.runtime.ExactRequestScope.current();
+        BigInteger rootItems = cyclicRequestedItems(root.amount, requestedAmount);
         var available = new LinkedHashMap<AEKey, BigInteger>();
         for (AEKey key : modelKeys.keySet()) {
             long amount = parent.extract(key, Long.MAX_VALUE, Actionable.SIMULATE);
@@ -840,7 +837,7 @@ public final class AelisPlanner {
         var limits = new AelisCyclicDemandSolver.Limits(
                 Config.CYCLE_SOLVER_MAX_SCC_NODES.get(),
                 Config.CYCLE_SOLVER_MAX_SEARCH_STATES.get(),
-                deadline);
+                deadline, Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || exactRequest != null);
         PreservedGlobalCyclePlan preserved = solveGlobalCyclePlan(
                 variants, root.key, rootItems,
                 available, limits);
@@ -859,14 +856,6 @@ public final class AelisPlanner {
             }
         }
         if (!preserved.converged() || result == null || !result.solved()) {
-            if (Config.AELIS_DIAGNOSTICS.get()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS global cyclic solver delegated: reason={}, preserveConverged={}, states={}, solveMs={}",
-                        result == null ? "no_result" : result.failure(),
-                        preserved.converged(),
-                        result == null ? 0 : result.exploredStates(),
-                        (System.nanoTime() - startedAt) / 1_000_000.0);
-            }
             return false;
         }
 
@@ -901,11 +890,14 @@ public final class AelisPlanner {
             long amount = (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)
                     ? AelisBigIntegerMath.saturatingLong(entry.getValue())
                     : exactPositiveLong(entry.getValue(), "cyclic_demand_overflow");
-            attempt.addStackBytes(entry.getKey(), 1, amount);
+            if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || exactRequest != null) {
+                ExactCraftingBytes.addStackBytes(attempt, entry.getKey(), entry.getValue());
+            } else {
+                attempt.addStackBytes(entry.getKey(), 1, amount);
+            }
         }
         for (var entry : plan.firings().entrySet()) {
-            long times = exactPositiveLong(
-                    entry.getValue(), "cyclic_firing_overflow");
+            long times = cycleProjection(entry.getValue(), "cyclic_firing_overflow");
             CompiledCandidate candidate = entry.getKey();
             if (candidate.observedPatternSemantics != null
                     && !candidate.observedPatternSemantics.matches(candidate.details)) {
@@ -922,13 +914,18 @@ public final class AelisPlanner {
                     }
                 }
             }
-            attempt.addCrafting(candidate.details, times);
+            if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || exactRequest != null) {
+                recordProjectedBigIntegerCrafting(attempt, candidate.details, entry.getValue(),
+                        projectedPatternTimes(attempt, candidate.details, entry.getValue()));
+            } else {
+                attempt.addCrafting(candidate.details, times);
+            }
             if (cyclicCraftingCandidates.contains(candidate)) {
                 ((AelisCyclicCraftingTracker) attempt)
                         .appliedenhancements$recordCyclicCrafting(
-                                candidate.details, times);
+                                candidate.details, entry.getValue());
             }
-            ExactCraftingBytes.addBytes(attempt, times);
+            ExactCraftingBytes.addBytes(attempt, entry.getValue());
         }
         for (var entry : plan.surplus().entrySet()) {
             BigInteger unusedInitial = value(available, entry.getKey())
@@ -937,14 +934,14 @@ public final class AelisPlanner {
             if (insert.signum() > 0) {
                 attempt.insert(
                         entry.getKey(),
-                        exactPositiveLong(insert, "cyclic_surplus_overflow"),
+                        cycleProjection(insert, "cyclic_surplus_overflow"),
                         Actionable.MODULATE);
             }
         }
         for (var entry : preserved.retainedSeeds().entrySet()) {
             attempt.insert(
                     entry.getKey(),
-                    exactPositiveLong(
+                    cycleProjection(
                             entry.getValue(), "cyclic_retained_seed_overflow"),
                     Actionable.MODULATE);
         }
@@ -954,14 +951,6 @@ public final class AelisPlanner {
 
         attempt.applyDiff(parent);
         mergeMissingAmounts(stagedMissing, attemptMissing);
-        if (Config.AELIS_DIAGNOSTICS.get()) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS global cyclic solver applied: componentsKeys={}, patterns={}, missingKeys={}, missing={}, states={}, solveMs={}",
-                    modelKeys.size(), plan.firings().size(), plan.missing().size(),
-                    plan.missing(),
-                    result.exploredStates(),
-                    (System.nanoTime() - startedAt) / 1_000_000.0);
-        }
         seedLease.commit();
         return true;
         }
@@ -969,21 +958,19 @@ public final class AelisPlanner {
 
     private static boolean tryExecuteLocalCyclicRegion(
             Graph graph, Node requestedNode,
-            CraftingSimulationState parent, long requestMultipliers,
+            CraftingSimulationState parent, BigInteger requestMultipliers,
             long rootRequestedAmount, boolean simulation,
             KeyCounter stagedMissing, PauseCheckpoint pauseCheckpoint,
             ProgressSink progressSink, GraphConsumableInput requestInput)
             throws CraftBranchFailure, InterruptedException {
-        long startedAt = System.nanoTime();
         try {
             var attempt = new ChildCraftingSimulationState(parent);
             try (var seedLease = AelisIgnoredSeedScope.lease(attempt)) {
             var attemptMissing = new KeyCounter();
-            long requestedItems = checkedMultiply(
+            BigInteger requestedItems = cycleProduct(
                     requestedNode.amount, requestMultipliers,
                     "local_cyclic_request_amount_overflow");
-            attempt.addStackBytes(
-                    requestedNode.key, requestedNode.amount, requestMultipliers);
+            ExactCraftingBytes.addStackBytes(attempt, requestedNode.key, requestedItems);
             if (!validateSparseRootTemplates(
                     requestedNode, attempt, requestInput, pauseCheckpoint)) {
                 throw new Fallback("local_cyclic_root_template_changed");
@@ -1002,10 +989,12 @@ public final class AelisPlanner {
             var limits = new AelisCyclicDemandSolver.Limits(
                     Config.CYCLE_SOLVER_MAX_SCC_NODES.get(),
                     Config.CYCLE_SOLVER_MAX_SEARCH_STATES.get(),
-                    saturatedAdd(System.nanoTime(), budgetNanos));
+                    saturatedAdd(System.nanoTime(), budgetNanos),
+                    Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                            || com.appliedenhancements.runtime.ExactRequestScope.current() != null);
             PreservedLocalCyclePlan preserved = solveLocalCyclePlan(
                     local.model, requestedNode.key,
-                    BigInteger.valueOf(requestedItems),
+                    requestedItems,
                     available, limits);
             var result = preserved.result();
             if (result != null && result.solved() && value(available, requestedNode.key).signum() == 0) {
@@ -1014,7 +1003,7 @@ public final class AelisPlanner {
                     long borrowed = seedLease.expose(requestedNode.key, missingSeed.longValue());
                     if (borrowed > 0) {
                         available.put(requestedNode.key, BigInteger.valueOf(attempt.extract(requestedNode.key, Long.MAX_VALUE, Actionable.SIMULATE)));
-                        preserved = solveLocalCyclePlan(local.model, requestedNode.key, BigInteger.valueOf(requestedItems), available, limits,
+                        preserved = solveLocalCyclePlan(local.model, requestedNode.key, requestedItems, available, limits,
                                 Map.of(requestedNode.key, BigInteger.valueOf(borrowed)));
                         result = preserved.result();
                     }
@@ -1033,7 +1022,7 @@ public final class AelisPlanner {
             if (!simulation && !plan.missingSeeds().isEmpty()) {
                 var missing = plan.missingSeeds().entrySet().iterator().next();
                 throw new CraftBranchFailure(
-                        missing.getKey(), exactPositiveLong(
+                        missing.getKey(), cycleProjection(
                                 missing.getValue(),
                                 "local_cyclic_missing_seed_overflow"));
             }
@@ -1052,12 +1041,9 @@ public final class AelisPlanner {
                 }
             }
             for (var entry : plan.missingSeeds().entrySet()) {
-                long amount = exactPositiveLong(
+                long amount = cycleProjection(
                         entry.getValue(), "local_cyclic_missing_overflow");
-                checkedAdd(
-                        attemptMissing.get(entry.getKey()), amount,
-                        "local_cyclic_missing_merge_overflow");
-                attemptMissing.add(entry.getKey(), amount);
+                addSaturated(attemptMissing, entry.getKey(), amount);
                 recordBigIntegerMissing(attempt, entry.getKey(), entry.getValue());
             }
 
@@ -1065,8 +1051,7 @@ public final class AelisPlanner {
             var rawExternalRequests = new ArrayList<RawExternalCyclicRequest>();
             var externalDemands = new LinkedHashMap<AEKey, BigInteger>();
             for (var entry : plan.firings().entrySet()) {
-                long times = exactPositiveLong(
-                        entry.getValue(), "local_cyclic_firing_overflow");
+                BigInteger times = entry.getValue();
                 CompiledCandidate candidate = entry.getKey();
                 if (candidate.observedPatternSemantics != null
                         && !candidate.observedPatternSemantics.matches(
@@ -1089,7 +1074,7 @@ public final class AelisPlanner {
                         throw new Fallback("local_cyclic_input_changed");
                     }
                     Node child = graph.nodes.get(consumable.childIndex);
-                    long childRequests = checkedMultiply(
+                    BigInteger childRequests = cycleProduct(
                             consumable.multiplier, times,
                             "local_cyclic_child_request_overflow");
                     if (!validateSparseConsumableTemplates(
@@ -1097,15 +1082,15 @@ public final class AelisPlanner {
                         throw new Fallback("local_cyclic_input_template_changed");
                     }
                     if (local.model.keys().contains(child.key)) {
-                        attempt.addStackBytes(
-                                child.key, child.amount, childRequests);
+                        ExactCraftingBytes.addStackBytes(attempt, child.key,
+                                cycleProduct(child.amount, childRequests, "local_cyclic_input_bytes_overflow"));
                         continue;
                     }
-                    long externalItems = checkedMultiply(
+                    BigInteger externalItems = cycleProduct(
                             child.amount, childRequests,
                             "local_cyclic_external_amount_overflow");
                     externalDemands.merge(
-                            child.key, BigInteger.valueOf(externalItems),
+                            child.key, externalItems,
                             BigInteger::add);
                     externalRequests.add(new ExternalCyclicRequest(
                             consumable, childRequests));
@@ -1117,19 +1102,19 @@ public final class AelisPlanner {
                     if (rawInput.childIndex >= 0) {
                         continue;
                     }
-                    long inputRequests = checkedMultiply(
+                    BigInteger inputRequests = cycleProduct(
                             rawInput.multiplier, times,
                             "local_cyclic_raw_request_overflow");
                     if (local.model.keys().contains(rawInput.key)) {
-                        attempt.addStackBytes(
-                                rawInput.key, rawInput.amount, inputRequests);
+                        ExactCraftingBytes.addStackBytes(attempt, rawInput.key,
+                                cycleProduct(rawInput.amount, inputRequests, "local_cyclic_raw_bytes_overflow"));
                         continue;
                     }
-                    long externalItems = checkedMultiply(
+                    BigInteger externalItems = cycleProduct(
                             rawInput.amount, inputRequests,
                             "local_cyclic_raw_external_amount_overflow");
                     externalDemands.merge(
-                            rawInput.key, BigInteger.valueOf(externalItems),
+                            rawInput.key, externalItems,
                             BigInteger::add);
                     rawExternalRequests.add(new RawExternalCyclicRequest(
                             rawInput, inputRequests));
@@ -1144,36 +1129,43 @@ public final class AelisPlanner {
                         graph, external.input.childIndex, attempt,
                         external.requests, rootRequestedAmount, simulation,
                         attemptMissing, pauseCheckpoint, progressSink,
-                        -1, null, external.input, null);
+                        -1, null, external.input, false);
             }
             for (RawExternalCyclicRequest external : rawExternalRequests) {
                 RawCycleInput input = external.input;
-                attempt.addStackBytes(input.key, input.amount, external.requests);
-                long requested = checkedMultiply(
+                BigInteger requested = cycleProduct(
                         input.amount, external.requests,
                         "local_cyclic_raw_external_extract_overflow");
+                ExactCraftingBytes.addStackBytes(attempt, input.key, requested);
+                if (com.appliedenhancements.storage.InfiniteStorageSupport.consume(attempt, input.key, requested)) {
+                    continue;
+                }
                 long extracted = attempt.extract(
-                        input.key, requested, Actionable.MODULATE);
-                if (extracted < requested) {
-                    long shortage = requested - extracted;
+                        input.key, cycleProjection(requested, "local_cyclic_raw_external_extract_overflow"), Actionable.MODULATE);
+                BigInteger shortage = requested.subtract(BigInteger.valueOf(extracted));
+                if (shortage.signum() > 0) {
                     if (!simulation) {
-                        throw new CraftBranchFailure(input.key, shortage);
+                        throw new CraftBranchFailure(input.key,
+                                AelisBigIntegerMath.saturatingLong(shortage));
                     }
-                    checkedAdd(
-                            attemptMissing.get(input.key), shortage,
-                            "local_cyclic_raw_missing_overflow");
-                    attemptMissing.add(input.key, shortage);
-                    recordBigIntegerMissing(attempt, input.key, BigInteger.valueOf(shortage));
+                    addSaturated(attemptMissing, input.key, cycleProjection(shortage, "local_cyclic_raw_missing_overflow"));
+                    recordBigIntegerMissing(attempt, input.key, shortage);
                 }
             }
             for (var entry : plan.firings().entrySet()) {
-                long times = exactPositiveLong(
+                long times = cycleProjection(
                         entry.getValue(), "local_cyclic_firing_overflow");
-                attempt.addCrafting(entry.getKey().details, times);
+                if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                        || com.appliedenhancements.runtime.ExactRequestScope.current() != null) {
+                    recordProjectedBigIntegerCrafting(attempt, entry.getKey().details, entry.getValue(),
+                            projectedPatternTimes(attempt, entry.getKey().details, entry.getValue()));
+                } else {
+                    attempt.addCrafting(entry.getKey().details, times);
+                }
                 ((AelisCyclicCraftingTracker) attempt)
                         .appliedenhancements$recordCyclicCrafting(
-                                entry.getKey().details, times);
-                ExactCraftingBytes.addBytes(attempt, times);
+                                entry.getKey().details, entry.getValue());
+                ExactCraftingBytes.addBytes(attempt, entry.getValue());
             }
             for (var entry : plan.surplus().entrySet()) {
                 BigInteger unusedInitial = value(available, entry.getKey())
@@ -1183,7 +1175,7 @@ public final class AelisPlanner {
                 if (insert.signum() > 0) {
                     attempt.insert(
                             entry.getKey(),
-                            exactPositiveLong(
+                            cycleProjection(
                                     insert, "local_cyclic_surplus_overflow"),
                             Actionable.MODULATE);
                 }
@@ -1191,7 +1183,7 @@ public final class AelisPlanner {
             for (var entry : preserved.retainedSeeds().entrySet()) {
                 attempt.insert(
                         entry.getKey(),
-                        exactPositiveLong(
+                        cycleProjection(
                                 entry.getValue(),
                                 "local_cyclic_retained_seed_overflow"),
                         Actionable.MODULATE);
@@ -1204,24 +1196,10 @@ public final class AelisPlanner {
             if (stagedMissing != null) {
                 mergeMissingAmounts(stagedMissing, attemptMissing);
             }
-            if (Config.AELIS_DIAGNOSTICS.get()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS local cyclic region applied: requestedKey={}, regionKeys={}, patterns={}, externalKeys={}, missingSeeds={}, states={}, solveMs={}",
-                        requestedNode.key, local.model.keys().size(),
-                        plan.firings().size(), plan.externalDemands().size(),
-                        plan.missingSeeds().size(), result.exploredStates(),
-                        (System.nanoTime() - startedAt) / 1_000_000.0);
-            }
             seedLease.commit();
             return true;
             }
         } catch (Fallback fallback) {
-            if (Config.AELIS_DIAGNOSTICS.get()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS local cyclic region delegated: key={}, reason={}, solveMs={}",
-                        requestedNode.key, fallback.reason,
-                        (System.nanoTime() - startedAt) / 1_000_000.0);
-            }
             return false;
         }
     }
@@ -1350,6 +1328,26 @@ public final class AelisPlanner {
         return value.longValue();
     }
 
+    private static long cycleProjection(BigInteger value, String reason) throws Fallback {
+        return Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                || com.appliedenhancements.runtime.ExactRequestScope.current() != null
+                ? AelisBigIntegerMath.saturatingLong(value) : exactPositiveLong(value, reason);
+    }
+
+    private static BigInteger cycleProduct(long amount, BigInteger multiplier, String reason) throws Fallback {
+        if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
+                || com.appliedenhancements.runtime.ExactRequestScope.current() != null) {
+            return AelisBigIntegerMath.multiply(amount, multiplier);
+        }
+        return BigInteger.valueOf(checkedMultiply(amount, exactNonNegativeLong(multiplier, reason), reason));
+    }
+
+    private static BigInteger cyclicRequestedItems(long amountPerUnit, long requestedAmount) throws Fallback {
+        var exactRequest = com.appliedenhancements.runtime.ExactRequestScope.current();
+        return cycleProduct(amountPerUnit, exactRequest != null
+                ? exactRequest.amount() : BigInteger.valueOf(requestedAmount), "cyclic_root_amount_overflow");
+    }
+
     private static long exactNonNegativeLong(BigInteger value, String reason)
             throws Fallback {
         if (value == null || value.signum() < 0
@@ -1391,9 +1389,7 @@ public final class AelisPlanner {
             protectedKeys.addAll(inputs.keySet());
             steps.add(new AelisCycleExecutionPlan.Step(
                     scheduled.id().details.getDefinition(),
-                    exactPositiveLong(
-                            scheduled.firings(),
-                            "cyclic_runtime_step_overflow"),
+                    scheduled.firings(),
                     inputs,
                     scheduled.selfReplenishingInputs()));
         }
@@ -1544,7 +1540,7 @@ public final class AelisPlanner {
                 graph, nodeIndex, inventory, requestMultipliers,
                 rootRequestedAmount, simulation, stagedMissing,
                 pauseCheckpoint, progressSink,
-                -1, null, null, null);
+                -1, null, null, false);
     }
 
     private static void executeTransactionalNode(Graph graph, int nodeIndex,
@@ -1553,12 +1549,12 @@ public final class AelisPlanner {
             PauseCheckpoint pauseCheckpoint, ProgressSink progressSink,
             int compiledBoundaryIndex, CompiledCandidate compiledCandidate,
             GraphConsumableInput requestInput,
-            RuntimeQuantityStockGuard runtimeQuantityGuard)
+            boolean validateQuantityStock)
             throws Fallback, CraftBranchFailure, InterruptedException {
         executeTransactionalNode(graph, nodeIndex, inventory,
                 BigInteger.valueOf(requestMultipliers), rootRequestedAmount,
                 simulation, stagedMissing, pauseCheckpoint, progressSink,
-                compiledBoundaryIndex, compiledCandidate, requestInput, runtimeQuantityGuard);
+                compiledBoundaryIndex, compiledCandidate, requestInput, validateQuantityStock);
     }
 
     private static void executeTransactionalNode(Graph graph, int nodeIndex,
@@ -1567,7 +1563,7 @@ public final class AelisPlanner {
             PauseCheckpoint pauseCheckpoint, ProgressSink progressSink,
             int compiledBoundaryIndex, CompiledCandidate compiledCandidate,
             GraphConsumableInput requestInput,
-            RuntimeQuantityStockGuard runtimeQuantityGuard)
+            boolean validateQuantityStock)
             throws Fallback, CraftBranchFailure, InterruptedException {
         if (!AelisRecursionGuard.tryEnterTransactional()) {
             throw new Fallback("transactional_depth_limit");
@@ -1580,12 +1576,11 @@ public final class AelisPlanner {
         progressSink.executionStep();
 
         Node node = graph.nodes.get(nodeIndex);
-        if (runtimeQuantityGuard == null
+        if (!validateQuantityStock
                 && node.localCyclicRegion != null
                 && (requestInput == null || !requestInput.substituteInput)
                 && tryExecuteLocalCyclicRegion(
-                        graph, node, inventory, exactNonNegativeLong(
-                                requestMultipliers, "big_integer_cyclic_boundary_overflow"),
+                        graph, node, inventory, requestMultipliers,
                         rootRequestedAmount, simulation, stagedMissing,
                         pauseCheckpoint, progressSink, requestInput)) {
             return;
@@ -1598,8 +1593,7 @@ public final class AelisPlanner {
             if (usesCompiledCandidateTrial(node)) {
                 if (tryExecuteCompiledCandidates(
                         graph, nodeIndex, inventory, nativeRequest,
-                        rootRequestedAmount, simulation, stagedMissing, pauseCheckpoint,
-                        "contextual", requestInput)) {
+                        rootRequestedAmount, simulation, stagedMissing, pauseCheckpoint, requestInput)) {
                     return;
                 }
             }
@@ -1616,7 +1610,7 @@ public final class AelisPlanner {
                 return;
             }
             executeNativeBoundary(
-                    node, inventory, nativeRequest, "contextual", requestInput);
+                    node, inventory, nativeRequest, requestInput);
             return;
         }
 
@@ -1680,7 +1674,7 @@ public final class AelisPlanner {
                 : node.compiledCandidates.size() == 1
                         ? node.compiledCandidates.get(0)
                         : null;
-        if (runtimeQuantityGuard == null
+        if (!validateQuantityStock
                 && (requestInput == null || !requestInput.substituteInput)
                 && activeCandidate != null
                 && activeCandidate.quantityFeedbackProfile != null) {
@@ -1705,12 +1699,11 @@ public final class AelisPlanner {
             throw new Fallback("invalid_output_per_pattern");
         }
         BigInteger patternTimes = AelisBigIntegerMath.ceilDiv(totalRequestedItems, effectiveOutputPerPattern);
-        if (runtimeQuantityGuard != null) {
+        if (validateQuantityStock) {
             validateRuntimeQuantityFeedbackStock(
                     graph, node, compiledCandidate, inventory,
                     exactNonNegativeLong(remainingMultipliers, "big_integer_feedback_boundary_overflow"),
-                    exactNonNegativeLong(patternTimes, "big_integer_feedback_boundary_overflow"), pauseCheckpoint,
-                    runtimeQuantityGuard);
+                    exactNonNegativeLong(patternTimes, "big_integer_feedback_boundary_overflow"), pauseCheckpoint);
         }
         var returnedReusableInputs = new KeyCounter();
         List<OrderedGraphInput> selectedInputs = executeCompiledBoundary
@@ -1741,7 +1734,7 @@ public final class AelisPlanner {
                         graph, consumableInput.childIndex, inventory,
                         childRequests, rootRequestedAmount, simulation,
                         stagedMissing, pauseCheckpoint,
-                        progressSink, -1, null, consumableInput, null);
+                        progressSink, -1, null, consumableInput, false);
             }
         }
 
@@ -1755,6 +1748,18 @@ public final class AelisPlanner {
         long surplus = remainder == 0 ? 0 : effectiveOutputPerPattern - remainder;
         if (surplus > 0) {
             inventory.insert(node.key, surplus, Actionable.MODULATE);
+        }
+        // AE2 requests every input before inserting any output. Keep that order:
+        // a sibling can use these byproducts only after this batch has completed.
+        List<GenericStack> secondaryOutputs = executeCompiledBoundary
+                ? compiledCandidate.secondaryOutputs : node.secondaryOutputs;
+        for (GenericStack output : secondaryOutputs) {
+            long amount = exactNonNegativeLong(
+                    AelisBigIntegerMath.multiply(output.amount(), patternTimes),
+                    "big_integer_secondary_output_overflow");
+            long available = inventory.extract(output.what(), Long.MAX_VALUE, Actionable.SIMULATE);
+            checkedAdd(available, amount, "secondary_output_inventory_overflow");
+            inventory.insert(output.what(), amount, Actionable.MODULATE);
         }
         IPatternDetails pattern = executeCompiledBoundary ? compiledCandidate.details : node.details;
         if ((Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)) {
@@ -1836,7 +1841,7 @@ public final class AelisPlanner {
                         graph, consumable.childIndex, inventory,
                         childRequests, rootRequestedAmount, simulation,
                         stagedMissing, pauseCheckpoint, progressSink,
-                        -1, null, consumable, null);
+                        -1, null, consumable, false);
             }
         }
         if (!feedbackSeen) {
@@ -1903,33 +1908,21 @@ public final class AelisPlanner {
 
         var attemptInventory = new ChildCraftingSimulationState(parent);
         var attemptMissing = new KeyCounter();
-        var runtimeGuard = new RuntimeQuantityStockGuard();
         try {
             executeTransactionalNode(
                     graph, nodeIndex, attemptInventory, requestMultipliers,
                     rootRequestedAmount, simulation, attemptMissing, pauseCheckpoint,
                     ProgressSink.NONE, nodeIndex, candidate, requestInput,
-                    runtimeGuard);
+                    true);
             validateKeyCounterMerge(
                     stagedMissing, attemptMissing,
                     "quantity_feedback_missing_overflow");
         } catch (Fallback fallback) {
-            if (Config.AELIS_DIAGNOSTICS.get()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS runtime quantity batch delegated to native: key={}, amount={}, aggregatedRequest={}, reason={}",
-                        node.key, node.amount, requestMultipliers, fallback.reason);
-            }
             return false;
         }
 
         attemptInventory.applyDiff(parent);
         mergeMissingAmounts(stagedMissing, attemptMissing);
-        if (Config.AELIS_DIAGNOSTICS.get()) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS runtime inventory-isolated quantity batch: key={}, amount={}, aggregatedRequest={}, patterns={}, stockedInputKeys={}",
-                    node.key, node.amount, requestMultipliers,
-                    runtimeGuard.patternTimes, runtimeGuard.stockedInputKeys);
-        }
         return true;
     }
 
@@ -1944,8 +1937,7 @@ public final class AelisPlanner {
     private static void validateRuntimeQuantityFeedbackStock(
             Graph graph, Node owner, CompiledCandidate candidate,
             CraftingSimulationState inventory, long remainingMultipliers,
-            long expectedPatternTimes, PauseCheckpoint pauseCheckpoint,
-            RuntimeQuantityStockGuard guard)
+            long expectedPatternTimes, PauseCheckpoint pauseCheckpoint)
             throws Fallback, InterruptedException {
         if (candidate == null || !candidate.quantityFeedbackBatch
                 || !candidate.limitsQuantity || owner.amount != 1
@@ -1999,8 +1991,6 @@ public final class AelisPlanner {
                 throw new Fallback("quantity_feedback_direct_stock_shortage");
             }
         }
-        guard.patternTimes = plan.patternTimes();
-        guard.stockedInputKeys = plan.nonFeedbackRequirements().size();
     }
 
     private static boolean usesCompiledCandidateTrial(Node node) {
@@ -2022,13 +2012,10 @@ public final class AelisPlanner {
     private static boolean tryExecuteCompiledCandidates(Graph graph, int nodeIndex,
             CraftingSimulationState parent, long requestMultipliers,
             long rootRequestedAmount, boolean simulation, KeyCounter stagedMissing,
-            PauseCheckpoint pauseCheckpoint, String path,
+            PauseCheckpoint pauseCheckpoint,
             GraphConsumableInput requestInput)
             throws CraftBranchFailure, InterruptedException, Fallback {
         Node node = graph.nodes.get(nodeIndex);
-        node.orderedFallbackReason = null;
-        node.orderedFallbackDetail = null;
-        boolean diagnostics = Config.AELIS_DIAGNOSTICS.get();
         boolean certifiedPrefixProbe =
                 AelisFirstCandidatePrefixProbeScope.active();
         boolean deterministicCandidates = !certifiedPrefixProbe
@@ -2044,15 +2031,6 @@ public final class AelisPlanner {
                 throw new CertifiedPrefixProbeFallback(
                         "stale_or_impossible_first_candidate");
             }
-            if (diagnostics) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS ordered choice delegated directly to native: path={}, key={}, amount={}, aggregatedRequest={}, reason=stale_or_impossible_first_candidate, detail={}",
-                        path, node.key, node.amount, requestMultipliers,
-                        entryCandidateCheck.detail);
-            }
-            node.orderedFallbackReason =
-                    "stale_or_impossible_first_candidate";
-            node.orderedFallbackDetail = entryCandidateCheck.detail;
             return false;
         }
         boolean exactRequest = requestInput == null || !requestInput.substituteInput;
@@ -2063,14 +2041,14 @@ public final class AelisPlanner {
                 ? certifySimulationFirstCandidate(
                         graph, nodeIndex, parent, requestInput,
                         pauseCheckpoint)
-                : SimulationFirstCandidateProof.accept(0);
+                : SimulationFirstCandidateProof.accept(List.of());
         CompiledCandidate firstCandidate = node.compiledCandidates.get(0);
         boolean singlePatternSimulationShape = simulation
                 && exactRequest
                 && !simulationProof.safe
                 && isLiveSimulationRequestedOccurrence(
                         node, requestInput, candidateRoot)
-                && isKnownDeterministicPattern(firstCandidate.details)
+                && hasVerifiedPatternSemantics(firstCandidate)
                 && hasOnlyExactPrimaryOutputs(node, firstCandidate)
                 && hasExactStatelessCandidateInputs(firstCandidate)
                 && validateSparseRootTemplates(
@@ -2094,53 +2072,19 @@ public final class AelisPlanner {
                     && tryExecuteSparseSimulationFirstCandidate(
                             graph, nodeIndex, firstCandidate, parent,
                             requestMultipliers, rootRequestedAmount,
-                            stagedMissing, pauseCheckpoint, path, requestInput,
-                            candidateRoot, diagnostics)) {
+                            stagedMissing, pauseCheckpoint, requestInput,
+                            candidateRoot)) {
                 return true;
             }
             if (boundedPatternReplay
                     && tryExecuteSimulationFirstCandidateLinearly(
                             graph, nodeIndex, firstCandidate, parent,
                             requestMultipliers, rootRequestedAmount,
-                            stagedMissing, pauseCheckpoint, path, requestInput,
-                            candidateRoot, diagnostics)) {
+                            stagedMissing, pauseCheckpoint, requestInput,
+                            candidateRoot)) {
                 return true;
             }
-            String simulationReason = exactRequest
-                    ? simulationProof.reason : "substitute_request";
-            String simulationDetail = exactRequest
-                    ? simulationProof.detail : null;
-            if (diagnostics) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS ordered choice delegated directly to native: path={}, key={}, amount={}, aggregatedRequest={}, reason=simulation_candidate_not_batch_certified:{}, detail={}",
-                        path, node.key, node.amount, requestMultipliers,
-                        simulationReason, simulationDetail);
-            } else if (simulation && requestMultipliers >= 1_000) {
-                com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                        "simulation_certificate_rejected",
-                        "AELIS simulation first-candidate certificate rejected: path={}, key={}, amount={}, aggregatedRequest={}, reason={}, detail={}",
-                        path, node.key, node.amount, requestMultipliers,
-                        simulationReason, simulationDetail);
-            }
-            if (node.orderedFallbackReason == null) {
-                node.orderedFallbackReason =
-                        "simulation_candidate_not_batch_certified:"
-                                + simulationReason;
-                node.orderedFallbackDetail = simulationDetail;
-            }
             return false;
-        }
-        if (diagnostics && singlePatternSimulation) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS simulation single-pattern first candidate certified: path={}, key={}, amount={}, aggregatedRequest={}, outputPerPattern={}",
-                    path, node.key, node.amount, requestMultipliers,
-                    firstCandidate.outputPerPattern);
-        } else if (diagnostics && simulationProof.safe
-                && requestMultipliers >= 1_000) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS simulation recursive first-candidate certified: path={}, key={}, aggregatedRequest={}, producedKeys={}",
-                    path, node.key, requestMultipliers,
-                    simulationProof.producedKeys);
         }
         boolean directStockCandidateSet = !certifiedPrefixProbe
                 && exactRequest
@@ -2162,12 +2106,6 @@ public final class AelisPlanner {
                                 : firstCandidateBatchValid,
                         node.compiledCandidates.size());
         if (!batchCandidateMix && candidateLimit == 0) {
-            if (diagnostics) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS ordered choice delegated directly to native: path={}, key={}, amount={}, aggregatedRequest={}, reason=unsafe_first_candidate_subgraph",
-                        path, node.key, node.amount, requestMultipliers);
-            }
-            node.orderedFallbackReason = "unsafe_first_candidate_subgraph";
             return false;
         }
 
@@ -2175,26 +2113,15 @@ public final class AelisPlanner {
         // compiled attempt will actually run so direct-native routing remains
         // O(1) in the size of that tree.
         var possibleSnapshot = snapshotPossibleStates(candidateRoot);
-        int recoveredCandidateStates = enableSimulationCandidateRecovery(
+        enableSimulationCandidateRecovery(
                 simulationProof, possibleSnapshot);
-        if (recoveredCandidateStates > 0 && diagnostics) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS simulation transient candidate state recovered: path={}, key={}, aggregatedRequest={}, processes={}",
-                    path, node.key, requestMultipliers,
-                    recoveredCandidateStates);
-        }
         if (batchCandidateMix) {
-            boolean applied = tryExecuteCompiledCandidateMix(
+            return tryExecuteCompiledCandidateMix(
                     graph, nodeIndex, parent, requestMultipliers,
                     rootRequestedAmount,
-                    stagedMissing, pauseCheckpoint, path, requestInput,
-                    candidateRoot, possibleSnapshot, diagnostics,
+                    stagedMissing, pauseCheckpoint, requestInput,
+                    candidateRoot, possibleSnapshot,
                     !deterministicCandidates && directStockCandidateSet);
-            if (!applied) {
-                node.orderedFallbackReason =
-                        "compiled_candidate_mix_rejected";
-            }
-            return applied;
         }
 
         if (candidateLimit == 1) {
@@ -2202,7 +2129,7 @@ public final class AelisPlanner {
             CandidateAttempt attempt = executeCompiledCandidate(
                     graph, nodeIndex, candidate, parent, requestMultipliers,
                     rootRequestedAmount, simulation, pauseCheckpoint, requestInput,
-                    candidateRoot, possibleSnapshot, diagnostics, path);
+                    candidateRoot, possibleSnapshot);
             preserveRecoveredCandidateStates(
                     attempt, simulationProof, possibleSnapshot);
             if (attempt.status == CandidateAttemptStatus.APPLIED) {
@@ -2230,9 +2157,8 @@ public final class AelisPlanner {
                                     hasLiveCandidateSet(node, candidateRoot))) {
                 boolean applied = tryExecuteCompiledCandidateMix(
                         graph, nodeIndex, parent, requestMultipliers,
-                        rootRequestedAmount, stagedMissing, pauseCheckpoint,
-                        path + "_sparse_after_shortage", requestInput,
-                        candidateRoot, possibleSnapshot, diagnostics, true);
+                        rootRequestedAmount, stagedMissing, pauseCheckpoint, requestInput,
+                        candidateRoot, possibleSnapshot, true);
                 if (applied) {
                     return true;
                 }
@@ -2243,8 +2169,8 @@ public final class AelisPlanner {
                     && requestMultipliers > 1
                     && tryExecuteNativeAggregateCandidateMix(
                             graph, nodeIndex, parent, requestMultipliers,
-                            rootRequestedAmount, pauseCheckpoint, path,
-                            requestInput, candidateRoot, diagnostics)) {
+                            rootRequestedAmount, pauseCheckpoint,
+                            requestInput, candidateRoot)) {
                 return true;
             }
             if (!simulation
@@ -2258,36 +2184,28 @@ public final class AelisPlanner {
                 if (prefixProof.safe && tryExecuteCertifiedFirstCandidatePrefix(
                         graph, nodeIndex, candidate, parent,
                         requestMultipliers, rootRequestedAmount,
-                        stagedMissing, pauseCheckpoint, path, requestInput,
-                        candidateRoot, possibleSnapshot, diagnostics)) {
+                        stagedMissing, pauseCheckpoint, requestInput,
+                        candidateRoot, possibleSnapshot)) {
                     return true;
                 }
             }
-            node.orderedFallbackReason = attempt.reason;
             return false;
         }
-
-        var lastFailure = new String[] { "compiled_candidate_rejected" };
-        boolean applied = AelisOrderedCandidateTrial.tryInOrder(
+        return AelisOrderedCandidateTrial.tryInOrder(
                 candidateLimit, compiledIndex -> {
             CompiledCandidate candidate = node.compiledCandidates.get(compiledIndex);
             CandidateAttempt attempt = executeCompiledCandidate(
                     graph, nodeIndex, candidate, parent, requestMultipliers,
                     rootRequestedAmount, simulation, pauseCheckpoint, requestInput,
-                    candidateRoot, possibleSnapshot, diagnostics, path);
+                    candidateRoot, possibleSnapshot);
             if (attempt.status == CandidateAttemptStatus.APPLIED) {
                 attempt.inventory.applyDiff(parent);
                 mergeMissingAmounts(stagedMissing, attempt.missing);
                 restorePossibleStates(candidateRoot, attempt.possibleStates);
                 return true;
             }
-            lastFailure[0] = attempt.reason;
             return false;
         });
-        if (!applied) {
-            node.orderedFallbackReason = lastFailure[0];
-        }
-        return applied;
     }
 
     /**
@@ -2300,23 +2218,13 @@ public final class AelisPlanner {
     private static boolean tryExecuteNativeAggregateCandidateMix(
             Graph graph, int nodeIndex, CraftingSimulationState parent,
             long requestMultipliers, long rootRequestedAmount,
-            PauseCheckpoint pauseCheckpoint, String path,
-            GraphConsumableInput requestInput, CraftingTreeNode candidateRoot,
-            boolean diagnostics)
+            PauseCheckpoint pauseCheckpoint,
+            GraphConsumableInput requestInput, CraftingTreeNode candidateRoot)
             throws CraftBranchFailure, InterruptedException {
         Node node = graph.nodes.get(nodeIndex);
-        var rejection = new String[1];
         List<CraftingTreeProcess> processes =
-                getNativeAggregateCandidateSet(node, candidateRoot, rejection);
+                getNativeAggregateCandidateSet(node, candidateRoot);
         if (processes == null) {
-            if (diagnostics) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS native aggregate candidate set rejected: path={}, key={}, requested={}, compiledCandidates={}, totalCandidates={}, allCompiled={}, compileFailures={}, reason={}",
-                        path, node.key, requestMultipliers,
-                        node.compiledCandidates.size(), node.candidatePatterns.size(),
-                        node.allCandidatesCompiled, node.candidateCompileFailures,
-                        rejection[0]);
-            }
             return false;
         }
 
@@ -2324,8 +2232,6 @@ public final class AelisPlanner {
         var workingPossible = originalPossible;
         var mixedInventory = new ChildCraftingSimulationState(parent);
         long remaining = requestMultipliers;
-        int totalProbes = 0;
-        var allocations = new long[processes.size()];
         for (int candidateIndex = 0;
                 candidateIndex < processes.size() && remaining > 0;
                 candidateIndex++) {
@@ -2342,8 +2248,7 @@ public final class AelisPlanner {
             CandidateAttempt fullAttempt = executeNativeAggregateCandidate(
                     node, process, mixedInventory, candidateRequest,
                     pauseCheckpoint, requestInput, candidateRoot,
-                    probeSnapshot, diagnostics, path);
-            totalProbes++;
+                    probeSnapshot);
             if (fullAttempt.status == CandidateAttemptStatus.FALLBACK) {
                 restorePossibleStates(candidateRoot, originalPossible);
                 return false;
@@ -2351,11 +2256,9 @@ public final class AelisPlanner {
 
             long allocation;
             CandidateAttempt best;
-            int candidateProbes;
             if (fullAttempt.status == CandidateAttemptStatus.APPLIED) {
                 allocation = candidateRequest;
                 best = fullAttempt;
-                candidateProbes = 0;
             } else {
                 AelisMaximumSuccessfulPrefix.Result<CandidateAttempt> prefix =
                         AelisMaximumSuccessfulPrefix.find(
@@ -2363,7 +2266,7 @@ public final class AelisPlanner {
                                 CandidateAttempt trial = executeNativeAggregateCandidate(
                                         node, process, mixedInventory, trialAmount,
                                         pauseCheckpoint, requestInput, candidateRoot,
-                                        probeSnapshot, diagnostics, path);
+                                        probeSnapshot);
                                 return switch (trial.status) {
                                     case APPLIED ->
                                             AelisMaximumSuccessfulPrefix.ProbeResult
@@ -2376,7 +2279,6 @@ public final class AelisPlanner {
                                                     .fallback();
                                 };
                             });
-                candidateProbes = prefix.probes();
                 if (prefix.fallback()) {
                     restorePossibleStates(candidateRoot, originalPossible);
                     return false;
@@ -2384,7 +2286,6 @@ public final class AelisPlanner {
                 allocation = prefix.allocation();
                 best = prefix.value();
             }
-            totalProbes += candidateProbes;
             if (allocation <= 0 || best == null) {
                 continue;
             }
@@ -2392,7 +2293,6 @@ public final class AelisPlanner {
             best.inventory.applyDiff(mixedInventory);
             restorePossibleStates(candidateRoot, best.possibleStates);
             workingPossible = best.possibleStates;
-            allocations[candidateIndex] = allocation;
             remaining -= allocation;
         }
 
@@ -2404,20 +2304,12 @@ public final class AelisPlanner {
 
         mixedInventory.applyDiff(parent);
         restorePossibleStates(candidateRoot, workingPossible);
-        if (diagnostics) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS native aggregate candidate mix committed: path={}, key={}, requested={}, allocations={}, probes={}",
-                    path, node.key, requestMultipliers,
-                    java.util.Arrays.toString(allocations), totalProbes);
-        }
         return true;
     }
 
     private static List<CraftingTreeProcess> getNativeAggregateCandidateSet(
-            Node node, CraftingTreeNode candidateRoot,
-            String[] rejection) {
+            Node node, CraftingTreeNode candidateRoot) {
         if (candidateRoot == null) {
-            rejection[0] = "missing_root";
             return null;
         }
         try {
@@ -2427,7 +2319,6 @@ public final class AelisPlanner {
             processes = withoutNoProgressCandidates(node, processes);
             if (processes == null || processes.size() <= 1
                     || processes.size() != node.candidatePatterns.size()) {
-                rejection[0] = "candidate_count";
                 return null;
             }
             for (int index = 0; index < processes.size(); index++) {
@@ -2435,32 +2326,25 @@ public final class AelisPlanner {
                 var bridge = (AelisCraftingTreeProcessBridge) process;
                 if (bridge.molecularmanipulator$getDetails()
                         != node.candidatePatterns.get(index)) {
-                    rejection[0] = "details_identity:" + index;
                     return null;
                 }
                 if (bridge.molecularmanipulator$hasContainerItems()) {
-                    rejection[0] = "container_items:" + index;
                     return null;
                 }
                 if (bridge.molecularmanipulator$limitsQuantity()) {
-                    rejection[0] = "quantity_limit:" + index;
                     return null;
                 }
                 if (bridge.molecularmanipulator$hasMultiplePaths()) {
-                    rejection[0] = "nested_multiple_paths:" + index;
                     return null;
                 }
                 if (getExactCandidateOutputCount(
                         node.key,
                         bridge.molecularmanipulator$getDetails()) <= 0) {
-                    rejection[0] = "non_exact_output:" + index;
                     return null;
                 }
             }
             return List.copyOf(processes);
         } catch (RuntimeException exception) {
-            rejection[0] = "validation_error:"
-                    + exception.getClass().getSimpleName();
             return null;
         }
     }
@@ -2470,13 +2354,9 @@ public final class AelisPlanner {
             CraftingSimulationState parent, long requestMultipliers,
             PauseCheckpoint pauseCheckpoint,
             GraphConsumableInput requestInput, CraftingTreeNode candidateRoot,
-            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot,
-            boolean diagnostics, String path)
+            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot)
             throws InterruptedException {
-        long startedAt = diagnostics ? System.nanoTime() : 0;
         var candidateInventory = new ChildCraftingSimulationState(parent);
-        CandidateAttemptStatus status = CandidateAttemptStatus.FALLBACK;
-        String result = "native_aggregate_unknown";
         try {
             checkpoint(pauseCheckpoint);
             long requestedItems = checkedMultiply(
@@ -2513,9 +2393,8 @@ public final class AelisPlanner {
                 long outputPerPattern = getExactCandidateOutputCount(
                         node.key, bridge.molecularmanipulator$getDetails());
                 if (outputPerPattern <= 0) {
-                    result = "native_aggregate_output";
                     return new CandidateAttempt(
-                            status, null, null, null, result);
+                            CandidateAttemptStatus.FALLBACK, null, null, null);
                 }
                 long remainingItems = checkedMultiply(
                         node.amount, remainingMultipliers,
@@ -2527,32 +2406,20 @@ public final class AelisPlanner {
                 long extracted = candidateInventory.extract(
                         node.key, remainingItems, Actionable.MODULATE);
                 if (extracted != remainingItems) {
-                    result = "native_aggregate_output_mismatch";
                     return new CandidateAttempt(
-                            status, null, null, null, result);
+                            CandidateAttemptStatus.FALLBACK, null, null, null);
                 }
             }
 
-            status = CandidateAttemptStatus.APPLIED;
-            result = "native_aggregate_applied";
             return new CandidateAttempt(
-                    status, candidateInventory, new KeyCounter(),
-                    snapshotPossibleStates(candidateRoot), result);
+                    CandidateAttemptStatus.APPLIED, candidateInventory, new KeyCounter(),
+                    snapshotPossibleStates(candidateRoot));
         } catch (CraftBranchFailure failure) {
-            status = CandidateAttemptStatus.SHORTAGE;
-            result = "native_aggregate_shortage";
-            return new CandidateAttempt(status, null, null, null, result);
+            return new CandidateAttempt(CandidateAttemptStatus.SHORTAGE, null, null, null);
         } catch (Fallback fallback) {
-            result = fallback.reason;
-            return new CandidateAttempt(status, null, null, null, result);
+            return new CandidateAttempt(CandidateAttemptStatus.FALLBACK, null, null, null);
         } finally {
             restorePossibleStates(candidateRoot, possibleSnapshot);
-            if (diagnostics) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS native aggregate candidate: path={}, key={}, requested={}, result={}, executeMs={}",
-                        path, node.key, requestMultipliers, result,
-                        (System.nanoTime() - startedAt) / 1_000_000.0);
-            }
         }
     }
 
@@ -2586,16 +2453,13 @@ public final class AelisPlanner {
             Graph graph, int nodeIndex, CompiledCandidate ignoredFirstCandidate,
             CraftingSimulationState parent, long requestMultipliers,
             long rootRequestedAmount, KeyCounter stagedMissing,
-            PauseCheckpoint pauseCheckpoint, String path,
-            GraphConsumableInput requestInput, CraftingTreeNode candidateRoot,
-            boolean diagnostics)
+            PauseCheckpoint pauseCheckpoint,
+            GraphConsumableInput requestInput, CraftingTreeNode candidateRoot)
             throws InterruptedException {
         Node node = graph.nodes.get(nodeIndex);
-        boolean logHighCost = diagnostics || requestMultipliers >= 1_000;
         AelisSparseCapacitySolver.Plan plan = tryPlanSparseCandidateMix(
                 graph, nodeIndex, parent, requestMultipliers,
-                requestInput, pauseCheckpoint,
-                path + "_simulation_sparse", logHighCost, true);
+                requestInput, pauseCheckpoint, true);
         if (plan == null || !plan.supported() || !plan.complete()) {
             return false;
         }
@@ -2624,30 +2488,15 @@ public final class AelisPlanner {
         CandidateAttempt attempt = executeCompiledCandidate(
                 graph, nodeIndex, candidate, parent, requestMultipliers,
                 rootRequestedAmount, true, pauseCheckpoint, requestInput,
-                candidateRoot, possibleSnapshot, diagnostics,
-                path + "_simulation_sparse");
+                candidateRoot, possibleSnapshot);
         if (attempt.status != CandidateAttemptStatus.APPLIED) {
             restorePossibleStates(candidateRoot, possibleSnapshot);
-            if (logHighCost) {
-                com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                        "sparse_simulation_rejected",
-                        "AELIS sparse simulation replay rejected: path={}, key={}, requested={}, reason={}",
-                        path, node.key, requestMultipliers, attempt.reason);
-            }
             return false;
         }
 
         attempt.inventory.applyDiff(parent);
         mergeMissingAmounts(stagedMissing, attempt.missing);
         restorePossibleStates(candidateRoot, attempt.possibleStates);
-        if (logHighCost) {
-            com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                    "sparse_simulation_commit",
-                    "AELIS sparse simulation progressing candidate committed: path={}, key={}, requested={}, candidate={}, nodeVisits={}, noProgressSkipped={}",
-                    path, node.key, requestMultipliers,
-                    candidate.sourceIndex, plan.probes(),
-                    plan.noProgressCandidatesSkipped());
-        }
         return true;
     }
 
@@ -2663,30 +2512,24 @@ public final class AelisPlanner {
             Graph graph, int nodeIndex, CompiledCandidate candidate,
             CraftingSimulationState parent, long requestMultipliers,
             long rootRequestedAmount, KeyCounter stagedMissing,
-            PauseCheckpoint pauseCheckpoint, String path,
-            GraphConsumableInput requestInput, CraftingTreeNode candidateRoot,
-            boolean diagnostics)
+            PauseCheckpoint pauseCheckpoint,
+            GraphConsumableInput requestInput, CraftingTreeNode candidateRoot)
             throws CraftBranchFailure, InterruptedException, Fallback {
         Node node = graph.nodes.get(nodeIndex);
         if (!AelisSimulationSinglePattern.canReplayWithin(
                 node.amount, requestMultipliers, candidate.outputPerPattern,
                 MAX_SIMULATION_ORDERED_REPLAY_STEPS)) {
-            node.orderedFallbackReason =
-                    "simulation_linear_replay_limit";
             return false;
         }
         long chunk = AelisSimulationSinglePattern
                 .maxRequestMultipliersPerPattern(
                         node.amount, candidate.outputPerPattern);
         if (chunk <= 0) {
-            node.orderedFallbackReason =
-                    "simulation_linear_replay_invalid_chunk";
             return false;
         }
 
         long remaining = requestMultipliers;
         long committed = 0;
-        long steps = 0;
         var possibleSnapshot = snapshotPossibleStates(candidateRoot);
         while (remaining > 0) {
             checkpoint(pauseCheckpoint);
@@ -2694,19 +2537,13 @@ public final class AelisPlanner {
             CandidateAttempt attempt = executeCompiledCandidate(
                     graph, nodeIndex, candidate, parent, trialAmount,
                     rootRequestedAmount, true, pauseCheckpoint, requestInput,
-                    candidateRoot, possibleSnapshot, diagnostics,
-                    path + "_linear");
+                    candidateRoot, possibleSnapshot);
             if (attempt.status != CandidateAttemptStatus.APPLIED) {
-                node.orderedFallbackReason =
-                        "simulation_linear_replay:" + attempt.reason;
-                node.orderedFallbackDetail =
-                        "committed=" + committed + ",remaining=" + remaining;
                 if (committed == 0) {
                     return false;
                 }
                 executeNativeBoundary(
-                        node, parent, remaining,
-                        path + "_linear_remainder", requestInput);
+                        node, parent, remaining, requestInput);
                 return true;
             }
 
@@ -2716,14 +2553,8 @@ public final class AelisPlanner {
             possibleSnapshot = attempt.possibleStates;
             remaining -= trialAmount;
             committed += trialAmount;
-            steps++;
         }
 
-        if (diagnostics) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS simulation ordered first-candidate replay: path={}, key={}, requested={}, committed={}, steps={}, chunk={}",
-                    path, node.key, requestMultipliers, committed, steps, chunk);
-        }
         return true;
     }
 
@@ -2738,10 +2569,9 @@ public final class AelisPlanner {
             Graph graph, int nodeIndex, CompiledCandidate candidate,
             CraftingSimulationState parent, long requestMultipliers,
             long rootRequestedAmount, KeyCounter stagedMissing,
-            PauseCheckpoint pauseCheckpoint, String path,
+            PauseCheckpoint pauseCheckpoint,
             GraphConsumableInput requestInput, CraftingTreeNode candidateRoot,
-            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot,
-            boolean diagnostics)
+            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot)
             throws CraftBranchFailure, InterruptedException, Fallback {
         Node node = graph.nodes.get(nodeIndex);
         AelisMaximumSuccessfulPrefix.Result<CandidateAttempt> prefix =
@@ -2754,7 +2584,7 @@ public final class AelisPlanner {
                                         graph, nodeIndex, candidate, parent,
                                         trialAmount, rootRequestedAmount, false,
                                         pauseCheckpoint, requestInput, candidateRoot,
-                                        possibleSnapshot, false, path);
+                                        possibleSnapshot);
                             }
                             return switch (trial.status) {
                                 case APPLIED ->
@@ -2782,15 +2612,9 @@ public final class AelisPlanner {
         best.inventory.applyDiff(parent);
         mergeMissingAmounts(stagedMissing, best.missing);
         restorePossibleStates(candidateRoot, best.possibleStates);
-        if (diagnostics) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS ordered first-candidate prefix: path={}, key={}, requested={}, allocated={}, nativeRemainder={}, probes={}",
-                    path, node.key, requestMultipliers, prefix.allocation(),
-                    remaining, prefix.probes());
-        }
 
         executeNativeBoundary(
-                node, parent, remaining, path + "_prefix_remainder",
+                node, parent, remaining,
                 requestInput);
         return true;
     }
@@ -2798,20 +2622,16 @@ public final class AelisPlanner {
     private static boolean tryExecuteCompiledCandidateMix(Graph graph, int nodeIndex,
             CraftingSimulationState parent, long requestMultipliers,
             long rootRequestedAmount, KeyCounter stagedMissing,
-            PauseCheckpoint pauseCheckpoint,
-            String path, GraphConsumableInput requestInput,
+            PauseCheckpoint pauseCheckpoint, GraphConsumableInput requestInput,
             CraftingTreeNode candidateRoot,
-            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot,
-            boolean diagnostics, boolean requireSparseCapacityPlan)
+            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot, boolean requireSparseCapacityPlan)
             throws CraftBranchFailure, InterruptedException {
         Node node = graph.nodes.get(nodeIndex);
         var mixedInventory = new ChildCraftingSimulationState(parent);
         var mixedMissing = new KeyCounter();
-
-        boolean logSparsePlan = diagnostics || requestMultipliers >= 1_000;
         AelisSparseCapacitySolver.Plan sparsePlan = tryPlanSparseCandidateMix(
                 graph, nodeIndex, mixedInventory, requestMultipliers,
-                requestInput, pauseCheckpoint, path, logSparsePlan, false);
+                requestInput, pauseCheckpoint, false);
         if (sparsePlan != null && sparsePlan.supported()) {
             if (!sparsePlan.complete()) {
                 restorePossibleStates(candidateRoot, possibleSnapshot);
@@ -2830,27 +2650,17 @@ public final class AelisPlanner {
                 checkpoint(pauseCheckpoint);
                 CompiledCandidate candidate = node.compiledCandidates.get(candidateIndex);
                 var candidateSnapshot = snapshotPossibleStates(candidateRoot);
-                long replayStartedAt = diagnostics ? System.nanoTime() : 0;
                 CandidateAttempt attempt = executeCompiledCandidate(
                         graph, nodeIndex, candidate, mixedInventory, allocation,
                         rootRequestedAmount, false, pauseCheckpoint, requestInput,
-                        candidateRoot, candidateSnapshot, diagnostics, path);
+                        candidateRoot, candidateSnapshot);
                 if (attempt.status != CandidateAttemptStatus.APPLIED) {
                     restorePossibleStates(candidateRoot, possibleSnapshot);
-                    if (diagnostics) {
-                        com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                                "AELIS sparse capacity replay rejected: path={}, key={}, candidate={}, allocation={}, status={}",
-                                path, node.key, candidate.sourceIndex,
-                                allocation, attempt.status);
-                    }
                     return false;
                 }
                 attempt.inventory.applyDiff(mixedInventory);
                 mergeMissingAmounts(mixedMissing, attempt.missing);
                 restorePossibleStates(candidateRoot, attempt.possibleStates);
-                logCandidateAllocation(
-                        diagnostics, path, node, candidate,
-                        requestMultipliers, allocation, 1, replayStartedAt);
             }
 
             mixedInventory.applyDiff(parent);
@@ -2872,13 +2682,10 @@ public final class AelisPlanner {
         for (CompiledCandidate candidate : node.compiledCandidates) {
             checkpoint(pauseCheckpoint);
             var candidateSnapshot = snapshotPossibleStates(candidateRoot);
-            long candidateRequested = remaining;
-            long allocationStartedAt = diagnostics ? System.nanoTime() : 0;
-            int probes = 1;
             CandidateAttempt fullAttempt = executeCompiledCandidate(
                     graph, nodeIndex, candidate, mixedInventory, remaining,
                     rootRequestedAmount, false, pauseCheckpoint, requestInput,
-                    candidateRoot, candidateSnapshot, diagnostics, path);
+                    candidateRoot, candidateSnapshot);
             if (fullAttempt.status == CandidateAttemptStatus.FALLBACK) {
                 restorePossibleStates(candidateRoot, possibleSnapshot);
                 return false;
@@ -2888,10 +2695,6 @@ public final class AelisPlanner {
                 mergeMissingAmounts(mixedMissing, fullAttempt.missing);
                 restorePossibleStates(candidateRoot, fullAttempt.possibleStates);
                 remaining = 0;
-                logCandidateAllocation(
-                        diagnostics, path, node, candidate,
-                        candidateRequested, candidateRequested,
-                        probes, allocationStartedAt);
                 break;
             }
 
@@ -2902,11 +2705,10 @@ public final class AelisPlanner {
                 checkpoint(pauseCheckpoint);
                 long trialAmount = AelisExecutionPolicy.upperMidpoint(
                         low, high);
-                probes++;
                 CandidateAttempt trial = executeCompiledCandidate(
                         graph, nodeIndex, candidate, mixedInventory, trialAmount,
                         rootRequestedAmount, false, pauseCheckpoint, requestInput,
-                        candidateRoot, candidateSnapshot, false, path);
+                        candidateRoot, candidateSnapshot);
                 if (trial.status == CandidateAttemptStatus.FALLBACK) {
                     restorePossibleStates(candidateRoot, possibleSnapshot);
                     return false;
@@ -2925,9 +2727,6 @@ public final class AelisPlanner {
                 restorePossibleStates(candidateRoot, bestAttempt.possibleStates);
                 remaining -= low;
             }
-            logCandidateAllocation(
-                    diagnostics, path, node, candidate,
-                    candidateRequested, low, probes, allocationStartedAt);
             if (remaining == 0) {
                 break;
             }
@@ -2952,10 +2751,9 @@ public final class AelisPlanner {
     private static AelisSparseCapacitySolver.Plan tryPlanSparseCandidateMix(
             Graph graph, int nodeIndex, CraftingSimulationState inventory,
             long requestMultipliers, GraphConsumableInput requestInput,
-            PauseCheckpoint pauseCheckpoint, String path, boolean diagnostics,
+            PauseCheckpoint pauseCheckpoint,
             boolean simulationFirstCandidate)
             throws InterruptedException {
-        long startedAt = diagnostics ? System.nanoTime() : 0;
         var usedNodes = new boolean[graph.nodes.size()];
         var states = new byte[graph.nodes.size()];
         var liveTerminalNodes = new boolean[graph.nodes.size()];
@@ -2969,9 +2767,7 @@ public final class AelisPlanner {
         if (!validateSparseRootTemplates(
                 graph.nodes.get(nodeIndex), inventory,
                 requestInput, pauseCheckpoint)) {
-            return rejectSparseCapacityPlan(
-                    graph, nodeIndex, requestMultipliers, path,
-                    diagnostics, startedAt, "root_templates");
+            return null;
         }
         AelisCraftingTreeNodeBridge rootOccurrence;
         try {
@@ -2980,9 +2776,7 @@ public final class AelisPlanner {
                             .occurrences.get(0)
                     : requestInput.child;
         } catch (RuntimeException exception) {
-            return rejectSparseCapacityPlan(
-                    graph, nodeIndex, requestMultipliers, path,
-                    diagnostics, startedAt, "root_occurrence");
+            return null;
         }
         if (!collectSparseCapacitySubgraph(
                         graph, nodeIndex, rootOccurrence, inventory,
@@ -2990,15 +2784,11 @@ public final class AelisPlanner {
                         reusableKeys, consumableTemplates, templateKeys,
                         validatedReusableInputs, pauseCheckpoint,
                         simulationFirstCandidate)) {
-            return rejectSparseCapacityPlan(
-                    graph, nodeIndex, requestMultipliers, path,
-                    diagnostics, startedAt, "unsupported_subgraph");
+            return null;
         }
         if (!validateSparseSubstituteGraphKeys(
                 graph, usedNodes, consumableTemplates)) {
-            return rejectSparseCapacityPlan(
-                    graph, nodeIndex, requestMultipliers, path,
-                    diagnostics, startedAt, "substitute_graph_conflict");
+            return null;
         }
 
         var keyIndexes = new LinkedHashMap<AEKey, Integer>();
@@ -3015,9 +2805,7 @@ public final class AelisPlanner {
             keyIndexes.computeIfAbsent(key, ignored -> keyIndexes.size());
         }
         if (keyIndexes.isEmpty()) {
-            return rejectSparseCapacityPlan(
-                    graph, nodeIndex, requestMultipliers, path,
-                    diagnostics, startedAt, "empty_inventory_snapshot");
+            return null;
         }
 
         var modelNodes = new AelisSparseCapacitySolver.Node[graph.nodes.size()];
@@ -3044,10 +2832,7 @@ public final class AelisPlanner {
             List<CompiledCandidate> candidates = getSparseCapacityCandidates(
                     graph, graphNode, simulationFirstCandidate);
             if (candidates == null || candidates.isEmpty()) {
-                return rejectSparseCapacityPlan(
-                        graph, nodeIndex, requestMultipliers, path,
-                        diagnostics, startedAt,
-                        "unsupported_node:" + graphNode.key);
+                return null;
             }
             var modelCandidates =
                     new AelisSparseCapacitySolver.Candidate[candidates.size()];
@@ -3057,10 +2842,7 @@ public final class AelisPlanner {
                         candidates.get(candidateIndex), keyIndexes,
                         consumableTemplates);
                 if (modelCandidates[candidateIndex] == null) {
-                    return rejectSparseCapacityPlan(
-                            graph, nodeIndex, requestMultipliers, path,
-                            diagnostics, startedAt,
-                            "candidate_model:" + graphNode.key);
+                    return null;
                 }
             }
             modelNodes[index] = AelisSparseCapacitySolver.Node.craftable(
@@ -3084,37 +2866,10 @@ public final class AelisPlanner {
                     : AelisSparseCapacitySolver.plan(
                             model, nodeIndex, requestMultipliers, snapshot);
         } catch (IllegalArgumentException exception) {
-            return rejectSparseCapacityPlan(
-                    graph, nodeIndex, requestMultipliers, path,
-                    diagnostics, startedAt, "invalid_model");
+            return null;
         }
 
-        if (diagnostics) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS sparse capacity plan: path={}, key={}, requested={}, mode={}, complete={}, remaining={}, candidates={}, keys={}, probes={}, equivalentSkipped={}, noProgressSkipped={}, planMs={}",
-                    path, graph.nodes.get(nodeIndex).key,
-                    requestMultipliers,
-                    simulationFirstCandidate ? "simulation_first" : "real_mix",
-                    plan.complete(), plan.remaining(),
-                    plan.candidateAllocations().length, keyIndexes.size(),
-                    plan.probes(), plan.equivalentCandidatesSkipped(),
-                    plan.noProgressCandidatesSkipped(),
-                    (System.nanoTime() - startedAt) / 1_000_000.0);
-        }
         return plan;
-    }
-
-    private static AelisSparseCapacitySolver.Plan rejectSparseCapacityPlan(
-            Graph graph, int nodeIndex, long requestMultipliers,
-            String path, boolean diagnostics, long startedAt, String reason) {
-        if (diagnostics) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS sparse capacity rejected: path={}, key={}, requested={}, reason={}, planMs={}",
-                    path, graph.nodes.get(nodeIndex).key,
-                    requestMultipliers, reason,
-                    (System.nanoTime() - startedAt) / 1_000_000.0);
-        }
-        return null;
     }
 
     private static boolean validateSparseSubstituteGraphKeys(
@@ -3213,10 +2968,11 @@ public final class AelisPlanner {
         }
 
         for (CompiledCandidate candidate : candidates) {
-            if (!hasDeterministicCandidateFlags(candidate)
+            if (!candidate.secondaryOutputs.isEmpty()
+                    || !hasDeterministicCandidateFlags(candidate)
                     || candidate.outputPerPattern <= 0
                     || simulationFirstCandidate
-                            && !isKnownDeterministicPattern(candidate.details)) {
+                            && !hasVerifiedPatternSemantics(candidate)) {
                 states[nodeIndex] = 3;
                 return false;
             }
@@ -3317,7 +3073,7 @@ public final class AelisPlanner {
                         CompiledCandidate candidate =
                                 node.compiledCandidates.get(candidateIndex);
                         if (candidate.sourceIndex != candidateIndex
-                                || !isKnownDeterministicPattern(candidate.details)
+                                || !hasVerifiedPatternSemantics(candidate)
                                 || !hasOnlyExactPrimaryOutputs(node, candidate)
                                 || !hasDeterministicCandidateFlags(candidate)) {
                             allSimulationShapesExact = false;
@@ -3336,7 +3092,7 @@ public final class AelisPlanner {
                 CompiledCandidate candidate =
                         node.compiledCandidates.get(candidateIndex);
                 if (candidate.sourceIndex != candidateIndex
-                        || !isKnownDeterministicPattern(candidate.details)
+                        || !hasVerifiedPatternSemantics(candidate)
                         || !hasOnlyExactPrimaryOutputs(node, candidate)
                         || !hasDeterministicCandidateFlags(candidate)) {
                     allLocalShapesExact = false;
@@ -3518,65 +3274,26 @@ public final class AelisPlanner {
             PauseCheckpoint pauseCheckpoint,
             GraphConsumableInput requestInput,
             CraftingTreeNode candidateRoot,
-            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot,
-            boolean diagnostics, String path)
+            IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot)
             throws InterruptedException {
-        Node node = graph.nodes.get(nodeIndex);
-        long startedAt = diagnostics ? System.nanoTime() : 0;
         var candidateInventory = new ChildCraftingSimulationState(parent);
         var candidateMissing = new KeyCounter();
-        CandidateAttemptStatus status = CandidateAttemptStatus.FALLBACK;
-        String result = "unknown";
         try {
             executeTransactionalNode(
                     graph, nodeIndex, candidateInventory, requestMultipliers,
                     rootRequestedAmount, simulation, candidateMissing, pauseCheckpoint,
-                    ProgressSink.NONE, nodeIndex, candidate, requestInput, null);
-            status = CandidateAttemptStatus.APPLIED;
-            result = "compiled_candidate_applied";
+                    ProgressSink.NONE, nodeIndex, candidate, requestInput, false);
             return new CandidateAttempt(
-                    status, candidateInventory, candidateMissing,
-                    snapshotPossibleStates(candidateRoot), result);
+                    CandidateAttemptStatus.APPLIED, candidateInventory, candidateMissing,
+                    snapshotPossibleStates(candidateRoot));
         } catch (CraftBranchFailure failure) {
-            status = CandidateAttemptStatus.SHORTAGE;
-            result = "candidate_shortage";
-            return new CandidateAttempt(status, null, null, null, result);
+            return new CandidateAttempt(CandidateAttemptStatus.SHORTAGE, null, null, null);
         } catch (CertifiedPrefixProbeFallback fallback) {
-            result = fallback.reason;
-            return new CandidateAttempt(status, null, null, null, result);
+            return new CandidateAttempt(CandidateAttemptStatus.FALLBACK, null, null, null);
         } catch (Fallback fallback) {
-            result = fallback.reason;
-            return new CandidateAttempt(status, null, null, null, result);
-        } catch (InterruptedException exception) {
-            result = "interrupted";
-            throw exception;
-        } catch (RuntimeException | Error failure) {
-            result = "candidate_internal_error";
-            throw failure;
+            return new CandidateAttempt(CandidateAttemptStatus.FALLBACK, null, null, null);
         } finally {
             restorePossibleStates(candidateRoot, possibleSnapshot);
-            if (diagnostics) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS ordered choice candidate: path={}, key={}, amount={}, aggregatedRequest={}, simulation={}, candidate={}, compiledCandidates={}, totalCandidates={}, allCompiled={}, completed={}, result={}, executeMs={}",
-                        path, node.key, node.amount, requestMultipliers,
-                        simulation, candidate.sourceIndex,
-                        node.compiledCandidates.size(), node.candidatePatterns.size(),
-                        node.allCandidatesCompiled,
-                        status == CandidateAttemptStatus.APPLIED, result,
-                        (System.nanoTime() - startedAt) / 1_000_000.0);
-            }
-        }
-    }
-
-    private static void logCandidateAllocation(boolean diagnostics,
-            String path, Node node, CompiledCandidate candidate,
-            long requested, long allocated, int probes, long startedAt) {
-        if (diagnostics) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS ordered choice allocation: path={}, key={}, amount={}, requested={}, allocated={}, candidate={}, probes={}, executeMs={}",
-                    path, node.key, node.amount, requested, allocated,
-                    candidate.sourceIndex, probes,
-                    (System.nanoTime() - startedAt) / 1_000_000.0);
         }
     }
 
@@ -3797,10 +3514,10 @@ public final class AelisPlanner {
                         "stale_candidate0", canonicalCheck.detail);
             }
             addRecoverableProcess(recoverableProcesses, canonicalCheck);
-            if (!isKnownDeterministicPattern(candidate.details)) {
+            if (!hasVerifiedPatternSemantics(candidate)) {
                 return SimulationFirstCandidateProof.reject("unknown_pattern");
             }
-            if (!hasOnlyExactPrimaryOutputs(node, candidate)
+            if (!hasExactCompiledOutputs(node, candidate)
                     || candidate.outputPerPattern <= 0) {
                 return SimulationFirstCandidateProof.reject(
                         "non_primary_output");
@@ -3916,7 +3633,8 @@ public final class AelisPlanner {
                             true, true, candidate.outputPerPattern,
                             serviceIds.candidate(
                                     candidate.details, node.key, node.amount),
-                            inputs));
+                            inputs, candidate.secondaryOutputs.stream()
+                                    .map(GenericStack::what).collect(java.util.stream.Collectors.toSet())));
         }
 
         AelisSimulationFirstCandidateCertificate.Result<AEKey> result =
@@ -3924,7 +3642,6 @@ public final class AelisPlanner {
                         models, rootIndex);
         return result.safe()
                 ? SimulationFirstCandidateProof.accept(
-                        result.produced().size(),
                         List.copyOf(recoverableProcesses.keySet()))
                 : SimulationFirstCandidateProof.reject(
                         result.reason(), result.detail());
@@ -4028,8 +3745,8 @@ public final class AelisPlanner {
             if (allowStateRecovery && AelisExecutionPolicy
                     .mayRecoverSimulationCandidateState(
                             simulation,
-                            isKnownDeterministicPattern(candidate.details),
-                            hasOnlyExactPrimaryOutputs(node, candidate),
+                            hasVerifiedPatternSemantics(candidate),
+                            hasExactCompiledOutputs(node, candidate),
                             statelessCandidate, true)) {
                 return CandidateOccurrenceCheck.recover(liveCandidate);
             }
@@ -4118,18 +3835,12 @@ public final class AelisPlanner {
     }
 
     private record SimulationFirstCandidateProof(
-            boolean safe, String reason, String detail, int producedKeys,
+            boolean safe, String reason, String detail,
             List<CraftingTreeProcess> recoverableProcesses) {
-        private static SimulationFirstCandidateProof accept(int producedKeys) {
-            return new SimulationFirstCandidateProof(
-                    true, null, null, producedKeys, List.of());
-        }
-
         private static SimulationFirstCandidateProof accept(
-                int producedKeys,
                 List<CraftingTreeProcess> recoverableProcesses) {
             return new SimulationFirstCandidateProof(
-                    true, null, null, producedKeys,
+                    true, null, null,
                     recoverableProcesses == null
                             ? List.of() : List.copyOf(recoverableProcesses));
         }
@@ -4141,7 +3852,7 @@ public final class AelisPlanner {
         private static SimulationFirstCandidateProof reject(
                 String reason, String detail) {
             return new SimulationFirstCandidateProof(
-                    false, reason == null ? "unknown" : reason, detail, 0,
+                    false, reason == null ? "unknown" : reason, detail,
                     List.of());
         }
     }
@@ -4218,7 +3929,7 @@ public final class AelisPlanner {
                 || candidate.limitsQuantity
                 || candidate.quantityFeedbackBatch
                 || candidate.orderedInputs.isEmpty()
-                || !isKnownDeterministicPattern(candidate.details)
+                || !hasVerifiedPatternSemantics(candidate)
                 || !hasOnlyExactPrimaryOutputs(node, candidate)) {
             return false;
         }
@@ -4290,6 +4001,23 @@ public final class AelisPlanner {
         }
     }
 
+    /**
+     * Compilation admits stable third-party patterns by observed semantics.
+     * Every later batch proof must use that same contract, including missing
+     * simulation and recovery after a real candidate temporarily failed.
+     * Flags, exact outputs, live input templates and crossfeed are still
+     * checked separately by each caller.
+     */
+    private static boolean hasVerifiedPatternSemantics(CompiledCandidate candidate) {
+        if (candidate == null || candidate.details == null) {
+            return false;
+        }
+        if (candidate.observedPatternSemantics != null) {
+            return candidate.observedPatternSemantics.matches(candidate.details);
+        }
+        return isKnownDeterministicPattern(candidate.details);
+    }
+
     private static boolean hasExactStatelessCandidateInputs(
             CompiledCandidate candidate) {
         if (candidate.hasContainerItems || candidate.limitsQuantity
@@ -4335,9 +4063,20 @@ public final class AelisPlanner {
         }
     }
 
+    private static boolean hasExactCompiledOutputs(Node node, CompiledCandidate candidate) {
+        try {
+            var layout = AelisPatternOutputs.inspect(node.key, java.util.Arrays.asList(candidate.details.getOutputs()));
+            return layout.requestedOutput() == candidate.outputPerPattern
+                    && layout.secondaryOutputs().equals(candidate.secondaryOutputs);
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
     private static boolean isBatchValidCandidateSubgraph(
             Graph graph, CompiledCandidate candidate, byte[] states) {
-        if (candidate.outputPerPattern <= 0
+        if (!candidate.secondaryOutputs.isEmpty()
+                || candidate.outputPerPattern <= 0
                 || candidate.hasContainerItems
                 || candidate.limitsQuantity
                 || candidate.quantityFeedbackBatch) {
@@ -4511,6 +4250,11 @@ public final class AelisPlanner {
 
     private static boolean hasDeterministicCandidateFlags(
             CompiledCandidate candidate) {
+        // Sparse capacity and binary mixing models currently have one output
+        // per firing. Ordinary transactional batches account for all outputs.
+        if (!candidate.secondaryOutputs.isEmpty()) {
+            return false;
+        }
         if (candidate.quantityFeedbackBatch) {
             // compileCandidate sets this flag only after proving a single,
             // exact, remainder-free and net-positive output-as-input shape.
@@ -4582,14 +4326,13 @@ public final class AelisPlanner {
         return result;
     }
 
-    private static int enableSimulationCandidateRecovery(
+    private static void enableSimulationCandidateRecovery(
             SimulationFirstCandidateProof proof,
             IdentityHashMap<CraftingTreeProcess, Boolean> snapshot) {
         if (proof == null || !proof.safe
                 || proof.recoverableProcesses.isEmpty()) {
-            return 0;
+            return;
         }
-        int recovered = 0;
         for (CraftingTreeProcess process : proof.recoverableProcesses) {
             if (process == null) {
                 continue;
@@ -4599,10 +4342,8 @@ public final class AelisPlanner {
             snapshot.putIfAbsent(process, previous);
             if (!previous) {
                 bridge.molecularmanipulator$setPossible(true);
-                recovered++;
             }
         }
-        return recovered;
     }
 
     /** Keep a recovered flag transactional even when the candidate succeeds. */
@@ -4664,55 +4405,23 @@ public final class AelisPlanner {
     }
 
     private static void executeNativeBoundary(Node node,
-            CraftingSimulationState inventory, long requestedAmount, String path)
+            CraftingSimulationState inventory, long requestedAmount)
             throws CraftBranchFailure, InterruptedException, Fallback {
-        executeNativeBoundary(node, inventory, requestedAmount, path, null);
+        executeNativeBoundary(node, inventory, requestedAmount, null);
     }
 
     private static void executeNativeBoundary(Node node,
-            CraftingSimulationState inventory, long requestedAmount, String path,
+            CraftingSimulationState inventory, long requestedAmount,
             GraphConsumableInput requestInput)
             throws CraftBranchFailure, InterruptedException, Fallback {
         if (!AelisExecutionPolicy.mayExecuteNativeBoundary(
                 node.amount, requestedAmount, MAX_LINEAR_NATIVE_BOUNDARY_ITEMS)) {
-            com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                    "native_boundary_work_limit",
-                    "AELIS delegated oversized native boundary: path={}, key={}, amount={}, aggregatedRequest={}, reason={}, linearLimit={}",
-                    path, node.key, node.amount, requestedAmount,
-                    node.barrierReason, MAX_LINEAR_NATIVE_BOUNDARY_ITEMS);
             throw new Fallback("native_boundary_work_limit:" + node.barrierReason);
         }
-        boolean diagnostics = Config.AELIS_DIAGNOSTICS.get();
-        long startedAt = System.nanoTime();
-        boolean completed = false;
-        try {
-            var bridge = requestInput == null
-                    ? (AelisCraftingTreeNodeBridge) node.occurrences.get(0)
-                    : requestInput.child;
-            bridge.molecularmanipulator$request(inventory, requestedAmount, null);
-            completed = true;
-        } finally {
-            long elapsedNanos = System.nanoTime() - startedAt;
-            if (AelisExecutionPolicy.shouldLogNativeBoundary(
-                    diagnostics, completed, elapsedNanos)) {
-                if (diagnostics) {
-                    com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                            "AELIS local native boundary: path={}, key={}, amount={}, aggregatedRequest={}, reason={}, compiledFallback={}, compiledFallbackDetail={}, completed={}, executeMs={}",
-                            path, node.key, node.amount, requestedAmount, node.barrierReason,
-                            node.orderedFallbackReason,
-                            node.orderedFallbackDetail,
-                            completed, elapsedNanos / 1_000_000.0);
-                } else {
-                    com.appliedenhancements.runtime.AelisPlanningLog.warning(
-                            "native_boundary_failure",
-                            "AELIS local native boundary: path={}, key={}, amount={}, aggregatedRequest={}, reason={}, compiledFallback={}, compiledFallbackDetail={}, completed={}, executeMs={}",
-                            path, node.key, node.amount, requestedAmount, node.barrierReason,
-                            node.orderedFallbackReason,
-                            node.orderedFallbackDetail,
-                            completed, elapsedNanos / 1_000_000.0);
-                }
-            }
-        }
+        var bridge = requestInput == null
+                ? (AelisCraftingTreeNodeBridge) node.occurrences.get(0)
+                : requestInput.child;
+        bridge.molecularmanipulator$request(inventory, requestedAmount, null);
     }
 
     private static boolean tryExecuteReusableContainerBoundary(Node node,
@@ -4723,7 +4432,7 @@ public final class AelisPlanner {
             return tryExecuteReusableContainerBoundaryUnchecked(
                     node, parent, requestedAmount, pauseCheckpoint);
         } catch (NoSuchElementException exception) {
-            return rejectReusableBoundary(node, null, "provider_missing", exception);
+            return false;
         }
     }
 
@@ -4743,45 +4452,44 @@ public final class AelisPlanner {
         // template have the same deterministic remainder behavior before the
         // request is batched; all other fuzzy cases still fail those checks.
         if (!isReusableBoundaryReason(node.barrierReason)) {
-            return rejectReusableBoundary(node, null,
-                    "unsupported_barrier:" + node.barrierReason, null);
+            return false;
         }
 
         var nodeBridge = (AelisCraftingTreeNodeBridge) node.occurrences.get(0);
         List<CraftingTreeProcess> processes = nodeBridge.molecularmanipulator$getProcesses();
         if (processes == null || processes.size() != 1) {
-            return rejectReusableBoundary(node, null, "pattern_candidate_count", null);
+            return false;
         }
         if (nodeBridge.molecularmanipulator$canEmit()) {
-            return rejectReusableBoundary(node, null, "emitting_boundary", null);
+            return false;
         }
 
         var process = (AelisCraftingTreeProcessBridge) processes.get(0);
         if (!process.molecularmanipulator$hasContainerItems()) {
-            return rejectReusableBoundary(node, null, "container_flag_missing", null);
+            return false;
         }
 
         IPatternDetails details = process.molecularmanipulator$getDetails();
         if (details == null) {
-            return rejectReusableBoundary(node, null, "missing_pattern_details", null);
+            return false;
         }
         IPatternDetails.IInput[] inputs = details.getInputs();
         Map<CraftingTreeNode, Long> childNodes = process.molecularmanipulator$getChildNodes();
         if (inputs == null || childNodes == null || inputs.length != childNodes.size()) {
-            return rejectReusableBoundary(node, details, "dynamic_input_layout", null);
+            return false;
         }
         long outputPerPattern = 0;
         for (var output : details.getOutputs()) {
             if (output == null || output.what() == null || output.amount() <= 0) {
-                return rejectReusableBoundary(node, details, "invalid_output", null);
+                return false;
             }
             if (!node.key.equals(output.what())) {
-                return rejectReusableBoundary(node, details, "secondary_output", null);
+                return false;
             }
             outputPerPattern = checkedAdd(outputPerPattern, output.amount(), "reusable_output_per_pattern_overflow");
         }
         if (outputPerPattern <= 0) {
-            return rejectReusableBoundary(node, details, "missing_primary_output", null);
+            return false;
         }
 
         var attempt = new ChildCraftingSimulationState(parent);
@@ -4797,7 +4505,7 @@ public final class AelisPlanner {
         }
 
         if (outputPerPattern <= 0) {
-            return rejectReusableBoundary(node, details, "invalid_output_per_pattern", null);
+            return false;
         }
         long totalRequestedItems = checkedMultiply(node.amount, remainingAmount, "reusable_request_overflow");
         long patternTimes = ceilDiv(totalRequestedItems, outputPerPattern);
@@ -4812,16 +4520,15 @@ public final class AelisPlanner {
             IPatternDetails.IInput input = inputs[inputIndex++];
             if (!sameInputSemantics(
                     childBridge.molecularmanipulator$getParentInput(), input)) {
-                return rejectReusableBoundary(node, details, "dynamic_input_identity", null);
+                return false;
             }
             if (!input.isValid(
                     childBridge.molecularmanipulator$getWhat(),
                     childBridge.molecularmanipulator$getLevel())) {
-                return rejectReusableBoundary(node, details,
-                        "selected_input_not_valid", null);
+                return false;
             }
             if (node.key.equals(childBridge.molecularmanipulator$getWhat())) {
-                return rejectReusableBoundary(node, details, "self_referencing_input", null);
+                return false;
             }
 
             GenericStack primaryInput = getPrimaryInputChoice(input);
@@ -4834,13 +4541,13 @@ public final class AelisPlanner {
             BoundaryInputClassification classification = classifyBoundaryInput(
                     input, childBridge, attempt, pauseCheckpoint);
             if (classification.rejectionReason() != null) {
-                return rejectReusableBoundary(node, details, classification.rejectionReason(), null);
+                return false;
             }
             BoundaryInputMode mode = classification.mode();
 
             long multiplier = input.getMultiplier();
             if (multiplier <= 0 || entry.getValue() == null || entry.getValue() != multiplier) {
-                return rejectReusableBoundary(node, details, "invalid_input_multiplier", null);
+                return false;
             }
             if (selectedSubstitute) {
                 selectedSubstituteInputs++;
@@ -4850,14 +4557,12 @@ public final class AelisPlanner {
                                 mode == BoundaryInputMode.DETERMINISTIC_DAMAGE,
                                 multiplier,
                                 childBridge.molecularmanipulator$getAmount())) {
-                    return rejectReusableBoundary(node, details,
-                            "unsupported_selected_substitute", null);
+                    return false;
                 }
             }
             if (mode == BoundaryInputMode.DETERMINISTIC_DAMAGE) {
                 if (multiplier <= 0) {
-                    return rejectReusableBoundary(node, details,
-                            "unsupported_damage_input_multiplier", null);
+                    return false;
                 }
             }
             long childRequest = switch (mode) {
@@ -4871,8 +4576,7 @@ public final class AelisPlanner {
                     input, childBridge, mode, childRequest, multiplier));
         }
         if (fuzzyCraftedBoundary && selectedSubstituteInputs != 1) {
-            return rejectReusableBoundary(node, details,
-                    "ambiguous_selected_substitute_count", null);
+            return false;
         }
 
         var containerItems = new KeyCounter();
@@ -4884,8 +4588,7 @@ public final class AelisPlanner {
                 if (!allocateDeterministicDamageInput(attempt, inputPlan.input,
                         inputPlan.child, inputPlan.multiplier, patternTimes,
                         pauseCheckpoint)) {
-                    return rejectReusableBoundary(node, details,
-                            "insufficient_deterministic_damage_capacity", null);
+                    return false;
                 }
             }
         }
@@ -4900,8 +4603,7 @@ public final class AelisPlanner {
                     if (!catalystAvailableAtRoot(
                             attempt, inputPlan.child, inputPlan.requestedAmount,
                             pauseCheckpoint)) {
-                        return rejectReusableBoundary(node, details,
-                                "insufficient_reusable_input", null);
+                        return false;
                     }
                     var returnedByInput = new KeyCounter();
                     if (reusableInputAvailable(
@@ -4946,12 +4648,7 @@ public final class AelisPlanner {
                             MAX_LINEAR_NATIVE_BOUNDARY_ITEMS)
                             && !canSatisfyConsumableBoundaryInputFromStock(
                                     attempt, inputPlan, pauseCheckpoint)) {
-                        return rejectReusableBoundary(
-                                node,
-                                details,
-                                "oversized_recursive_consumable_input:"
-                                        + inputPlan.child.molecularmanipulator$getWhat(),
-                                null);
+                        return false;
                     }
                     inputPlan.child.molecularmanipulator$request(
                             attempt, inputPlan.requestedAmount, containerItems);
@@ -4972,15 +4669,9 @@ public final class AelisPlanner {
 
         long produced = attempt.extract(node.key, totalRequestedItems, Actionable.MODULATE);
         if (produced != totalRequestedItems) {
-            return rejectReusableBoundary(node, details, "produced_output_mismatch", null);
+            return false;
         }
         attempt.applyDiff(parent);
-        if (Config.AELIS_DIAGNOSTICS.get()) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS reusable boundary applied: key={}, amount={}, requests={}, patterns={}, barrier={}, pattern={}",
-                    node.key, node.amount, requestedAmount, patternTimes,
-                    node.barrierReason, describePattern(details));
-        }
         return true;
     }
 
@@ -5053,35 +4744,6 @@ public final class AelisPlanner {
             return false;
         }
         return false;
-    }
-
-    private static boolean rejectReusableBoundary(Node node, IPatternDetails details,
-            String reason, RuntimeException exception) {
-        if (Config.AELIS_DIAGNOSTICS.get()) {
-            String pattern = describePattern(details);
-            if (exception == null) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS reusable boundary fallback: key={}, amount={}, barrier={}, pattern={}, reason={}",
-                        node.key, node.amount, node.barrierReason, pattern, reason);
-            } else {
-                com.appliedenhancements.runtime.AelisPlanningLog.warning(
-                        "reusable_boundary_failure",
-                        "AELIS reusable boundary failed: key={}, amount={}, barrier={}, pattern={}, reason={}",
-                        node.key, node.amount, node.barrierReason, pattern, reason, exception);
-            }
-        }
-        return false;
-    }
-
-    private static String describePattern(IPatternDetails details) {
-        if (details == null) {
-            return "unknown";
-        }
-        try {
-            return String.valueOf(details.getDefinition());
-        } catch (RuntimeException exception) {
-            return details.getClass().getName();
-        }
     }
 
     private static BoundaryInputClassification classifyBoundaryInput(IPatternDetails.IInput input,
@@ -5272,12 +4934,6 @@ public final class AelisPlanner {
                     child.molecularmanipulator$getWhat(), 1, logicalUses);
             inventory.addStackBytes(
                     child.molecularmanipulator$getWhat(), 1, logicalUses);
-        }
-
-        if (Config.AELIS_DIAGNOSTICS.get() && toolPool.size() > 1) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS multi-tool pool batch: patterns={}, tools={}, totalCapacity={}",
-                    patternTimes, toolPool.size(), totalCapacity);
         }
 
         return true;
@@ -5652,16 +5308,10 @@ public final class AelisPlanner {
             }
             return requestedMultipliers - extractedMultipliers;
         }
-
-        long startedAt = Config.AELIS_DIAGNOSTICS.get()
-                ? System.nanoTime()
-                : 0;
         long remaining = requestedMultipliers;
-        int templateCount = 0;
         for (InputTemplate template
                 : requestInput.child.molecularmanipulator$getValidItemTemplates(inventory)) {
             checkpoint(pauseCheckpoint);
-            templateCount++;
             if (template == null || template.key() == null || template.amount() <= 0) {
                 throw new Fallback("invalid_substitute_input_template");
             }
@@ -5680,13 +5330,6 @@ public final class AelisPlanner {
             }
         }
 
-        if (Config.AELIS_DIAGNOSTICS.get()) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS substitute input batch: key={}, amount={}, requested={}, extracted={}, remaining={}, templates={}, selectMs={}",
-                    node.key, node.amount, requestedMultipliers,
-                    requestedMultipliers - remaining, remaining, templateCount,
-                    (System.nanoTime() - startedAt) / 1_000_000.0);
-        }
         return remaining;
     }
 
@@ -5845,37 +5488,12 @@ public final class AelisPlanner {
                             compatible ? null : "candidate set differs across contexts")));
         }
 
-        Set<AEKey> restoredKeys = Set.of();
         if (craftingService != null && !terminalNodes.isEmpty()) {
-            restoredKeys = restoreConnectedRawCycleCandidates(
+            restoreConnectedRawCycleCandidates(
                     models, exactNodes, terminalNodes, craftingService);
         }
 
         var analysis = AelisCyclicRegionDetector.analyze(models);
-        if (Config.AELIS_DIAGNOSTICS.get()) {
-            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                    "AELIS local cyclic analysis: producerKeys={}, acceptedRegions={}, rejectedRegions={}",
-                    models.size(), analysis.regions().size(),
-                    analysis.rejectedRegions().size());
-            if (!restoredKeys.isEmpty()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS restored recursion-hidden raw candidates: keys={}",
-                        restoredKeys);
-            }
-            for (var region : analysis.regions()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS local cyclic region detected: keys={}, candidates={}, shapes={}",
-                        region.keys(),
-                        region.variants().values().stream()
-                                .mapToInt(List::size).sum(),
-                        region.variants());
-            }
-            for (var rejected : analysis.rejectedRegions()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS local cyclic region rejected: keys={}, reasons={}",
-                        rejected.keys(), rejected.reasons());
-            }
-        }
         var assignedRegions = new ArrayList<LocalCyclicRegion>();
         for (var region : analysis.regions()) {
             var local = new LocalCyclicRegion(region);
@@ -5925,6 +5543,10 @@ public final class AelisPlanner {
                 supported = false;
                 rejectionReasons.add("invalid candidate output");
                 continue;
+            }
+            if (!candidate.secondaryOutputs.isEmpty()) {
+                supported = false;
+                rejectionReasons.add("secondary outputs");
             }
             if (candidate.hasContainerItems) {
                 supported = false;
@@ -6103,7 +5725,7 @@ public final class AelisPlanner {
      * through arbitrarily many layers without expanding unrelated recipes for
      * ordinary external materials such as sand or metal.
      */
-    private static Set<AEKey> restoreConnectedRawCycleCandidates(
+    private static void restoreConnectedRawCycleCandidates(
             Map<AEKey, AelisCyclicRegionDetector.KeyModel<AEKey, CompiledCandidate>> models,
             Map<NodeKey, Node> exactNodes,
             Map<AEKey, Node> terminalNodes,
@@ -6115,7 +5737,7 @@ public final class AelisPlanner {
         models.clear();
         models.putAll(initial.models());
 
-        var restored = new LinkedHashSet<>(initial.restoredKeys());
+        Set<AEKey> restored = initial.restoredKeys();
         var knownProducers = new LinkedHashSet<AEKey>();
         for (var entry : models.entrySet()) {
             if (!entry.getValue().variants().isEmpty()) {
@@ -6160,13 +5782,11 @@ public final class AelisPlanner {
                         models.put(discovered.key(),
                                 new AelisCyclicRegionDetector.KeyModel<>(
                                         discovered.variants(), true));
-                        restored.add(discovered.key());
                         pending.addLast(discovered.key());
                     }
                 }
             }
         }
-        return Set.copyOf(restored);
     }
 
     private static RawCycleSearch findConnectedRawCycleExpansion(
@@ -6295,12 +5915,6 @@ public final class AelisPlanner {
                     node.barrierReason = barrier.reason;
                     node.inspectedOccurrences = node.occurrences.size();
                     if (requiresImmediateFallback(barrier.reason)) {
-                        if (Config.AELIS_DIAGNOSTICS.get()) {
-                            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                                    "AELIS compile-time fallback: key={}, amount={}, barrier={}, pattern={}",
-                                    node.key, node.amount, node.barrierReason,
-                                    describePattern(node.details));
-                        }
                         throw new Fallback("unsafe_pattern_boundary:" + barrier.reason);
                     }
                 }
@@ -6330,8 +5944,9 @@ public final class AelisPlanner {
                     logicalNodeCount, mergedOccurrences, barrierCount, orderedChoiceCount,
                     !contextSplitKeys.isEmpty()
                             || !crossAmountContextSensitiveKeys.isEmpty(),
-                    hasSubstituteInputs, hasReusableInputs, craftingService);
-            CYCLIC_REGIONS.put(graph, cyclicRegions);
+                    hasSubstituteInputs, hasReusableInputs, craftingService, cyclicRegions);
+            prepareGlobalCyclicModel(graph);
+            checkBudget();
             return graph;
         }
 
@@ -6405,11 +6020,6 @@ public final class AelisPlanner {
                     node.executionMode = ExecutionMode.HYBRID_BARRIER;
                     node.barrierReason = fallbackReason;
 
-                    if (Config.AELIS_DIAGNOSTICS.get()) {
-                        com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                                "AELIS hybrid barrier marked: key={}, amount={}, reason={}",
-                                node.key, node.amount, fallbackReason);
-                    }
                 }
             }
         }
@@ -6469,6 +6079,14 @@ public final class AelisPlanner {
                                     reusableInput.child.molecularmanipulator$getLevel())) {
                                 throw new Fallback("reusable_candidate_graph_conflict");
                             }
+                            for (CompiledCandidate candidate : graphNode.compiledCandidates) {
+                                for (GenericStack output : candidate.secondaryOutputs) {
+                                    if (reusableInput.input.isValid(output.what(),
+                                            reusableInput.child.molecularmanipulator$getLevel())) {
+                                        throw new Fallback("reusable_candidate_graph_conflict");
+                                    }
+                                }
+                            }
                         } catch (Fallback fallback) {
                             throw fallback;
                         } catch (RuntimeException exception) {
@@ -6511,11 +6129,6 @@ public final class AelisPlanner {
                     owner.barrierReason = "quantity_feedback_descendant_unsafe";
                     owner.executionMode = ExecutionMode.HYBRID_BARRIER;
                     owner.deterministicCandidateSubgraph = null;
-                    if (Config.AELIS_DIAGNOSTICS.get()) {
-                        com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                                "AELIS quantity feedback kept native: key={}, amount={}, reason=descendant_feedback_isolation",
-                                owner.key, owner.amount);
-                    }
                     break;
                 }
             }
@@ -6579,6 +6192,9 @@ public final class AelisPlanner {
 
                 for (CompiledCandidate descendantCandidate
                         : descendant.compiledCandidates) {
+                    if (!descendantCandidate.secondaryOutputs.isEmpty()) {
+                        return false;
+                    }
                     if (!AelisQuantityFeedbackBatch.isSafeDescendantCandidate(
                             new AelisQuantityFeedbackBatch.DescendantCandidateShape(
                                     descendantCandidate.hasContainerItems,
@@ -6744,11 +6360,6 @@ public final class AelisPlanner {
                         node.allCandidatesCompiled = false;
                         node.candidateCompileFailures.put(
                                 candidateIndex, barrier.reason);
-                        if (Config.AELIS_DIAGNOSTICS.get()) {
-                            com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                                    "AELIS candidate compile skipped: key={}, candidate={}, candidates={}, reason={}",
-                                    node.key, candidateIndex, processes.size(), barrier.reason);
-                        }
                         break;
                     }
                 }
@@ -6788,21 +6399,23 @@ public final class AelisPlanner {
                 }
             }
 
-            long outputPerPattern = 0;
-            int outputEntryCount = 0;
-            for (var output : details.getOutputs()) {
-                outputEntryCount++;
-                if (output == null || output.what() == null || output.amount() <= 0) {
-                    throw new Barrier("invalid_pattern_output");
-                }
-                if (!node.key.equals(output.what())) {
-                    throw new Barrier("secondary_or_fuzzy_output");
-                }
-                outputPerPattern = checkedAdd(
-                        outputPerPattern, output.amount(), "output_count_overflow");
+            AelisPatternOutputs.Layout outputLayout;
+            GenericStack[] outputStacks = details.getOutputs();
+            List<GenericStack> outputs = outputStacks == null
+                    ? null : java.util.Arrays.asList(outputStacks);
+            try {
+                outputLayout = AelisPatternOutputs.inspect(node.key, outputs);
+            } catch (IllegalArgumentException exception) {
+                throw new Barrier(exception.getMessage());
+            } catch (ArithmeticException exception) {
+                throw new Barrier("output_count_overflow");
             }
-            if (outputPerPattern <= 0) {
-                throw new Barrier("missing_primary_output");
+            long outputPerPattern = outputLayout.requestedOutput();
+            int outputEntryCount = outputs.size();
+            if (!outputLayout.secondaryOutputs().isEmpty()
+                    && (hasContainerItems || limitsQuantity
+                            || patternBarrierReason != null && !structurallyStablePattern)) {
+                throw new Barrier("stateful_multi_output");
             }
 
             IPatternDetails.IInput[] inputs = details.getInputs();
@@ -6910,13 +6523,6 @@ public final class AelisPlanner {
                     throw new Barrier("quantity_limited_pattern");
                 }
                 quantityFeedbackBatch = true;
-                if (structurallyStablePattern
-                        && Config.AELIS_DIAGNOSTICS.get()) {
-                    com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                            "AELIS admitted structural quantity feedback: key={}, amount={}, patternType={}, definition={}",
-                            node.key, node.amount, details.getClass().getName(),
-                            details.getDefinition());
-                }
                 if (!contextSplitKeys.contains(node.key)) {
                     // The feedback child carries AE2's recursion-filtered
                     // occurrence. Split before interning so it can never be
@@ -6925,17 +6531,11 @@ public final class AelisPlanner {
                             node, context, "quantity_feedback_input");
                 }
             }
-            if (structurallyStablePattern && !quantityFeedbackBatch
-                    && Config.AELIS_DIAGNOSTICS.get()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS admitted stable unknown pattern: key={}, amount={}, patternType={}, definition={}",
-                        node.key, node.amount, details.getClass().getName(),
-                        details.getDefinition());
-            }
 
             var patternNodeKey = new NodeKey(node.key, node.amount);
             NodeKey patternOwner = patternOwners.putIfAbsent(details, patternNodeKey);
-            if (patternOwner != null && !patternOwner.equals(patternNodeKey)) {
+            if (patternOwner != null && !patternOwner.equals(patternNodeKey)
+                    && outputLayout.secondaryOutputs().isEmpty()) {
                 throw new Barrier("shared_pattern_with_different_request_units");
             }
 
@@ -6998,7 +6598,7 @@ public final class AelisPlanner {
                     List.copyOf(edges), outputPerPattern,
                     hasContainerItems, limitsQuantity, quantityFeedbackBatch,
                     structurallyStablePattern ? observedPatternSemantics : null,
-                    quantityFeedbackProfile, List.of());
+                    quantityFeedbackProfile, List.of(), outputLayout.secondaryOutputs());
             hasSubstituteInputs |= candidateHasSubstituteInputs;
             hasReusableInputs |= hasReusableInput;
             if (primary) {
@@ -7010,6 +6610,7 @@ public final class AelisPlanner {
                 node.hasContainerItems = hasContainerItems;
                 node.limitsQuantity = limitsQuantity;
                 node.outputPerPattern = outputPerPattern;
+                node.secondaryOutputs = outputLayout.secondaryOutputs();
                 node.orderedInputs.addAll(orderedInputs);
                 node.edges.addAll(edges);
             }
@@ -7069,13 +6670,11 @@ public final class AelisPlanner {
             processes = getProgressCandidateProcesses(node, processes, false);
             if (processes.isEmpty()) {
                 if (!node.terminal) {
-                    logContextualTerminalConflict(node, context, processes);
                     throw createContextSplit(node, context, "contextual_terminal");
                 }
                 return;
             }
             if (node.terminal) {
-                logContextualTerminalConflict(node, context, processes);
                 throw createContextSplit(node, context, "contextual_terminal");
             }
 
@@ -7127,13 +6726,6 @@ public final class AelisPlanner {
                         node.noProgressPatterns.put(
                                 bridge.molecularmanipulator$getDetails(),
                                 Boolean.TRUE);
-                        com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                                "pruned_no_progress_candidate",
-                                "AELIS pruned no-progress candidate: key={}, candidate={}, output={}, recursiveDemand={}, pattern={}",
-                                node.key, candidateIndex, progress.output(),
-                                progress.recursiveDemand(),
-                                describePattern(
-                                        bridge.molecularmanipulator$getDetails()));
                     }
                     continue;
                 }
@@ -7196,8 +6788,7 @@ public final class AelisPlanner {
                             Math.multiplyExact(exact.amount(), multiplier));
                 }
                 return recursiveDemand > 0 && recursiveDemand >= output
-                        ? new CandidateProgressCheck(
-                                true, output, recursiveDemand)
+                        ? CandidateProgressCheck.NO_PROGRESS
                         : CandidateProgressCheck.PROGRESS;
             } catch (RuntimeException exception) {
                 return CandidateProgressCheck.PROGRESS;
@@ -7337,14 +6928,7 @@ public final class AelisPlanner {
                     || sameKeyContextBehavior(existing, behavior)) {
                 return;
             }
-            if (crossAmountContextSensitiveKeys.add(node.key)
-                    && Config.AELIS_DIAGNOSTICS.get()) {
-                com.appliedenhancements.runtime.AelisPlanningLog.trace(
-                        "AELIS cross-amount context sensitivity: key={}, canonicalAmount={}, conflictingAmount={}, canonicalPath={}, conflictingPath={}",
-                        node.key, existing.amount, node.amount,
-                        describeRecipeContext(existing.context),
-                        describeRecipeContext(context));
-            }
+            crossAmountContextSensitiveKeys.add(node.key);
         }
 
         private boolean sameKeyContextBehavior(KeyContextBehavior left,
@@ -7379,133 +6963,6 @@ public final class AelisPlanner {
             for (RecipeContext cursor = context; cursor.depth > 0; cursor = cursor.parent) {
                 keys.add(cursor.key);
             }
-        }
-
-        /**
-         * Records enough recursion context to identify the exact reversible or
-         * cyclic pattern that made a key craftable in one occurrence and a
-         * terminal shortage in another. This stays behind the existing
-         * diagnostics option because large recipe paths are intentionally
-         * omitted from normal logs.
-         */
-        private void logContextualTerminalConflict(Node node, RecipeContext context,
-                List<CraftingTreeProcess> occurrenceProcesses) {
-            if (!Config.AELIS_DIAGNOSTICS.get()) {
-                return;
-            }
-
-            RecipeContext canonicalContext = node.occurrenceContexts.isEmpty()
-                    ? RecipeContext.ROOT
-                    : node.occurrenceContexts.get(0);
-            RecipeContext terminalContext = node.terminal ? canonicalContext : context;
-            var diagnosticPatterns = new ArrayList<IPatternDetails>();
-            String patternSource;
-            if (node.terminal) {
-                patternSource = "conflicting";
-                for (CraftingTreeProcess process : occurrenceProcesses) {
-                    diagnosticPatterns.add(((AelisCraftingTreeProcessBridge) process)
-                            .molecularmanipulator$getDetails());
-                }
-            } else {
-                patternSource = "canonical";
-                diagnosticPatterns.addAll(node.candidatePatterns);
-            }
-
-            com.appliedenhancements.runtime.AelisPlanningLog.diagnostic(
-                    "contextual_terminal_conflict",
-                    "AELIS contextual terminal conflict: key={}, amount={}, canonicalTerminal={}, conflictingTerminal={}, canonicalPath={}, conflictingPath={}, patternSource={}, patterns={}",
-                    node.key, node.amount, node.terminal, occurrenceProcesses.isEmpty(),
-                    describeRecipeContext(canonicalContext), describeRecipeContext(context),
-                    patternSource,
-                    describeDiagnosticPatterns(diagnosticPatterns, terminalContext));
-        }
-
-        private String describeDiagnosticPatterns(List<IPatternDetails> patterns,
-                RecipeContext terminalContext) {
-            if (patterns.isEmpty()) {
-                return "[]";
-            }
-            var result = new StringBuilder("[");
-            int limit = Math.min(patterns.size(), 16);
-            for (int index = 0; index < limit; index++) {
-                if (index > 0) {
-                    result.append(", ");
-                }
-                IPatternDetails details = patterns.get(index);
-                result.append(details == null ? "unknown" : details.getClass().getName())
-                        .append(':').append(describePattern(details))
-                        .append(" blockedBy=")
-                        .append(describePatternBlockers(details, terminalContext));
-            }
-            if (patterns.size() > limit) {
-                result.append(", ... +").append(patterns.size() - limit);
-            }
-            return result.append(']').toString();
-        }
-
-        private String describePatternBlockers(IPatternDetails details,
-                RecipeContext context) {
-            var result = new StringBuilder("[");
-            int blockerCount = 0;
-            for (RecipeContext cursor = context;
-                    cursor.depth > 0 && blockerCount < 16; cursor = cursor.parent) {
-                if (!patternMentions(details, cursor.key)) {
-                    continue;
-                }
-                if (blockerCount++ > 0) {
-                    result.append(", ");
-                }
-                result.append(cursor.key);
-            }
-            return result.append(']').toString();
-        }
-
-        private boolean patternMentions(IPatternDetails details, AEKey ancestor) {
-            if (details == null || ancestor == null) {
-                return false;
-            }
-            try {
-                for (GenericStack output : details.getOutputs()) {
-                    if (output != null && ancestor.matches(output)) {
-                        return true;
-                    }
-                }
-                for (IPatternDetails.IInput input : details.getInputs()) {
-                    if (input == null) {
-                        continue;
-                    }
-                    GenericStack[] choices = input.getPossibleInputs();
-                    if (choices != null && choices.length > 0 && choices[0] != null
-                            && ancestor.matches(choices[0])) {
-                        return true;
-                    }
-                }
-            } catch (RuntimeException exception) {
-                return false;
-            }
-            return false;
-        }
-
-        private String describeRecipeContext(RecipeContext context) {
-            var path = new ArrayDeque<AEKey>();
-            RecipeContext cursor = context;
-            while (cursor.depth > 0 && path.size() < 64) {
-                path.addFirst(cursor.key);
-                cursor = cursor.parent;
-            }
-            var result = new StringBuilder("[");
-            if (cursor.depth > 0) {
-                result.append("... -> ");
-            }
-            boolean first = true;
-            for (AEKey key : path) {
-                if (!first) {
-                    result.append(" -> ");
-                }
-                result.append(key);
-                first = false;
-            }
-            return result.append(']').toString();
         }
 
         private List<IPatternDetails> getCandidatePatterns(
@@ -7822,8 +7279,7 @@ public final class AelisPlanner {
 
     private record CandidateAttempt(CandidateAttemptStatus status,
             ChildCraftingSimulationState inventory, KeyCounter missing,
-            IdentityHashMap<CraftingTreeProcess, Boolean> possibleStates,
-            String reason) {
+            IdentityHashMap<CraftingTreeProcess, Boolean> possibleStates) {
     }
 
     private record KeyContextBehavior(long amount, RecipeContext context,
@@ -7926,8 +7382,6 @@ public final class AelisPlanner {
         private final AEKey key;
         private final long amount;
         private final net.minecraft.world.level.Level level;
-        private String orderedFallbackReason;
-        private String orderedFallbackDetail;
         private final List<CraftingTreeNode> occurrences = new ArrayList<>();
         private final List<RecipeContext> occurrenceContexts = new ArrayList<>();
         private final IdentityHashMap<CraftingTreeNode, Boolean> occurrenceSet =
@@ -7957,6 +7411,7 @@ public final class AelisPlanner {
         private boolean hasContainerItems;
         private boolean limitsQuantity;
         private long outputPerPattern;
+        private List<GenericStack> secondaryOutputs = List.of();
         private long logicalOccurrences;
         private boolean allCandidatesCompiled;
         private LocalCyclicRegion localCyclicRegion;
@@ -7990,7 +7445,24 @@ public final class AelisPlanner {
             boolean limitsQuantity, boolean quantityFeedbackBatch,
             AelisObservedPatternSemantics.Snapshot observedPatternSemantics,
             AelisQuantityFeedbackBatch.Profile quantityFeedbackProfile,
-            List<RawCycleInput> rawCycleInputs) {
+            List<RawCycleInput> rawCycleInputs, List<GenericStack> secondaryOutputs) {
+        private CompiledCandidate {
+            secondaryOutputs = List.copyOf(secondaryOutputs);
+        }
+
+        private CompiledCandidate(int sourceIndex,
+                CraftingTreeProcess sourceProcess, IPatternDetails details,
+                List<OrderedGraphInput> orderedInputs, List<Edge> edges,
+                long outputPerPattern, boolean hasContainerItems,
+                boolean limitsQuantity, boolean quantityFeedbackBatch,
+                AelisObservedPatternSemantics.Snapshot observedPatternSemantics,
+                AelisQuantityFeedbackBatch.Profile quantityFeedbackProfile,
+                List<RawCycleInput> rawCycleInputs) {
+            this(sourceIndex, sourceProcess, details, orderedInputs, edges,
+                    outputPerPattern, hasContainerItems, limitsQuantity,
+                    quantityFeedbackBatch, observedPatternSemantics,
+                    quantityFeedbackProfile, rawCycleInputs, List.of());
+        }
     }
 
     private record RawCycleInput(
@@ -8017,22 +7489,18 @@ public final class AelisPlanner {
     }
 
     private record ExternalCyclicRequest(
-            GraphConsumableInput input, long requests) {
+            GraphConsumableInput input, BigInteger requests) {
     }
 
     private record RawExternalCyclicRequest(
-            RawCycleInput input, long requests) {
+            RawCycleInput input, BigInteger requests) {
     }
 
-    private record CandidateProgressCheck(
-            boolean noProgress, long output, long recursiveDemand) {
+    private record CandidateProgressCheck(boolean noProgress) {
         private static final CandidateProgressCheck PROGRESS =
-                new CandidateProgressCheck(false, 0, 0);
-    }
-
-    private static final class RuntimeQuantityStockGuard {
-        private long patternTimes;
-        private int stockedInputKeys;
+                new CandidateProgressCheck(false);
+        private static final CandidateProgressCheck NO_PROGRESS =
+                new CandidateProgressCheck(true);
     }
 
     private static final class EdgeAccumulator {
@@ -8044,11 +7512,69 @@ public final class AelisPlanner {
         }
     }
 
-    private record Graph(List<Node> nodes, int[] topologicalOrder, int rootIndex,
-            long logicalNodeCount, long mergedOccurrences, int barrierCount,
-            int orderedChoiceCount, boolean contextSensitive,
-            boolean hasSubstituteInputs, boolean hasReusableInputs,
-            ICraftingService craftingService) {
+    private static final class Graph {
+        private final List<Node> nodes;
+        private final int[] topologicalOrder;
+        private final int rootIndex;
+        private final long logicalNodeCount;
+        private final long mergedOccurrences;
+        private final int barrierCount;
+        private final int orderedChoiceCount;
+        private final boolean contextSensitive;
+        private final boolean hasSubstituteInputs;
+        private final boolean hasReusableInputs;
+        private final boolean hasSecondaryOutputs;
+        private final ICraftingService craftingService;
+        private final List<LocalCyclicRegion> cyclicRegions;
+        // Owned by one calculation session. Inventory and live pattern checks are never cached.
+        private boolean cyclicModelPrepared;
+        private Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>
+                cyclicVariants;
+
+        private Graph(List<Node> nodes, int[] topologicalOrder, int rootIndex,
+                long logicalNodeCount, long mergedOccurrences, int barrierCount,
+                int orderedChoiceCount, boolean contextSensitive,
+                boolean hasSubstituteInputs, boolean hasReusableInputs,
+                ICraftingService craftingService) {
+            this(nodes, topologicalOrder, rootIndex, logicalNodeCount, mergedOccurrences,
+                    barrierCount, orderedChoiceCount, contextSensitive, hasSubstituteInputs,
+                    hasReusableInputs, craftingService, collectCyclicRegions(nodes));
+        }
+
+        private Graph(List<Node> nodes, int[] topologicalOrder, int rootIndex,
+                long logicalNodeCount, long mergedOccurrences, int barrierCount,
+                int orderedChoiceCount, boolean contextSensitive,
+                boolean hasSubstituteInputs, boolean hasReusableInputs,
+                ICraftingService craftingService, List<LocalCyclicRegion> cyclicRegions) {
+            this.nodes = nodes;
+            this.topologicalOrder = topologicalOrder;
+            this.rootIndex = rootIndex;
+            this.logicalNodeCount = logicalNodeCount;
+            this.mergedOccurrences = mergedOccurrences;
+            this.barrierCount = barrierCount;
+            this.orderedChoiceCount = orderedChoiceCount;
+            this.contextSensitive = contextSensitive;
+            this.hasSubstituteInputs = hasSubstituteInputs;
+            this.hasReusableInputs = hasReusableInputs;
+            this.hasSecondaryOutputs = nodes.stream().anyMatch(node -> node.reachable
+                    && (!node.secondaryOutputs.isEmpty() || node.compiledCandidates.stream()
+                            .anyMatch(candidate -> !candidate.secondaryOutputs.isEmpty())));
+            this.craftingService = craftingService;
+            this.cyclicRegions = List.copyOf(cyclicRegions);
+        }
+
+        private static List<LocalCyclicRegion> collectCyclicRegions(List<Node> nodes) {
+            var seen = new IdentityHashMap<LocalCyclicRegion, Boolean>();
+            var regions = new ArrayList<LocalCyclicRegion>();
+            for (Node node : nodes) {
+                if (node.localCyclicRegion != null
+                        && seen.put(node.localCyclicRegion, Boolean.TRUE) == null) {
+                    regions.add(node.localCyclicRegion);
+                }
+            }
+            return regions;
+        }
+
         private String executionSafetyFailure() {
             return null;
         }
@@ -8071,7 +7597,7 @@ public final class AelisPlanner {
 
         private AelisExecutionPolicy.Scope executionScope() {
             return AelisExecutionPolicy.select(
-                    contextSensitive, hasLocalBoundaries(),
+                    contextSensitive || hasSecondaryOutputs, hasLocalBoundaries(),
                     hasSubstituteInputs, hasReusableInputs);
         }
 
@@ -8110,11 +7636,8 @@ public final class AelisPlanner {
 
     private static final class CertifiedPrefixProbeFallback
             extends RuntimeException {
-        private final String reason;
-
         private CertifiedPrefixProbeFallback(String reason) {
             super(reason, null, false, false);
-            this.reason = reason;
         }
     }
 }

@@ -3,15 +3,11 @@ package com.appliedenhancements;
 import org.slf4j.Logger;
 
 import com.appliedenhancements.config.ConfigFileMigration;
-import com.github.appliedenhancements.network.CraftingCalculationProgressPayload;
-import com.github.appliedenhancements.network.CraftingCalculationPathPayload;
 import com.appliedenhancements.network.NetworkHandler;
 import com.appliedenhancements.network.ServerConfigSyncEvents;
-import com.appliedenhancements.network.ServerConfigSyncPayload;
 import com.mojang.logging.LogUtils;
 
 import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -41,22 +37,10 @@ public class AppliedEnhancements {
 
         ConfigFileMigration.migrate(FMLPaths.CONFIGDIR.get());
         net.minecraftforge.fml.ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC, "appliedenhancements-common.toml");
-
-        LOGGER.info("Applied Enhancements initializing...");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         event.enqueueWork(com.appliedenhancements.runtime.AelisSmartCycleBatchProvider::registerOmniAdapters);
-        LOGGER.info(
-                "Applied Enhancements ready: patternCaching={}, storageBusSlotIndex={}, infiniteStorageLimitBypass={}, ioBusOptimization={}, craftingOrderMode={}, progressDisplay={}, automaticAelis={}, aelisBigIntegerPlanning={}",
-                Config.ENABLE_PATTERN_CACHING.get(),
-                Config.ENABLE_STORAGE_BUS_SLOT_INDEX.get(),
-                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
-                Config.ENABLE_IO_BUS_OPTIMIZATION.get(),
-                Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
-                Config.ENABLE_PROGRESS_DISPLAY.get(),
-                Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get(),
-                Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get());
     }
 
     public static net.minecraft.resources.ResourceLocation id(String path) {

@@ -14,7 +14,7 @@ import java.util.function.Predicate;
  * Pure proof used before an AE2 simulated ordered choice is aggregated into a
  * single first-candidate transaction.
  *
- * <p>The proof deliberately models only primary-output graphs with stable live
+ * <p>The proof models exact-output graphs with stable live
  * input templates. Besides rejecting cycles and stale candidates, it only
  * permits sibling inventory sharing when every touch goes through one
  * recursively proven, unit-sized graph service. Substitutable inputs claim
@@ -56,10 +56,19 @@ final class AelisSimulationFirstCandidateCertificate {
 
     record Node<K>(K key, long amount, boolean terminal, boolean emitter,
             boolean candidateShapeSafe, boolean candidate0Live,
-            long outputPerPattern, int serviceId, List<Input<K>> inputs) {
+            long outputPerPattern, int serviceId, List<Input<K>> inputs,
+            Set<K> secondaryOutputs) {
         Node {
             Objects.requireNonNull(key, "key");
             inputs = inputs == null ? List.of() : List.copyOf(inputs);
+            secondaryOutputs = secondaryOutputs == null ? Set.of() : Set.copyOf(secondaryOutputs);
+        }
+
+        Node(K key, long amount, boolean terminal, boolean emitter,
+                boolean candidateShapeSafe, boolean candidate0Live,
+                long outputPerPattern, int serviceId, List<Input<K>> inputs) {
+            this(key, amount, terminal, emitter, candidateShapeSafe,
+                    candidate0Live, outputPerPattern, serviceId, inputs, Set.of());
         }
 
         Node(K key, long amount, boolean terminal, boolean emitter,
@@ -220,6 +229,10 @@ final class AelisSimulationFirstCandidateCertificate {
                 states[nodeIndex] = 0;
                 return Result.reject("owner_feedback");
             }
+            if (!intersection(leftResult.consumed(), node.secondaryOutputs()).isEmpty()) {
+                states[nodeIndex] = 0;
+                return Result.reject("secondary_output_feedback");
+            }
             for (int right = left + 1; right < childResults.size(); right++) {
                 Result<K> rightResult = childResults.get(right);
                 Set<K> crossfeed = intersection(
@@ -240,6 +253,13 @@ final class AelisSimulationFirstCandidateCertificate {
         produced.add(node.key());
         consumed.add(node.key());
         touchedOwners.put(node.key(), nodeIndex);
+        // A byproduct is available after the producing batch, but requesting
+        // it is a different inventory service. It must not be treated as a
+        // composable primary-output service by the sibling-sharing proof.
+        for (K secondary : node.secondaryOutputs()) {
+            produced.add(secondary);
+            touchedOwners.put(secondary, CONFLICTING_OWNER);
+        }
         for (Result<K> childResult : childResults) {
             produced.addAll(childResult.produced());
             consumed.addAll(childResult.consumed());
@@ -436,6 +456,7 @@ final class AelisSimulationFirstCandidateCertificate {
                     || left.candidateShapeSafe() != right.candidateShapeSafe()
                     || left.candidate0Live() != right.candidate0Live()
                     || left.outputPerPattern() != right.outputPerPattern()
+                    || !left.secondaryOutputs().equals(right.secondaryOutputs())
                     || left.inputs().size() != right.inputs().size()) {
                 return false;
             }

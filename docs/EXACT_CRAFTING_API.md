@@ -1,8 +1,8 @@
-# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.20.1 / 1.1.1-forge）
+# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.20.1 / 1.1.2-forge）
 
 ## English API contract
 
-For Applied Enhancements **1.1.1-forge**, Minecraft **1.20.1**, Java 17 and Forge.
+For Applied Enhancements **1.1.2-forge**, Minecraft **1.20.1**, Java 17 and Forge.
 Call `AelisExactCraftingService.begin(level, requester, request)` on the owning
 server thread with a connected requester. Construction snapshots network state;
 await the returned `Future<ICraftingPlan>` asynchronously. Both
@@ -37,10 +37,26 @@ Use [shared batch execution](BATCH_EXECUTION_API.md) for cycle seeds, input
 ownership and rollback, and [native smart doubling](SMART_DOUBLING_API.md) to
 avoid a second multiplier. The Chinese sections below specify the full lifecycle.
 
+Since 1.1.2-forge, cyclic planning also preserves exact firing counts. Read
+`AelisCycleExecutionPlan.Step.exactCrafts()` and
+`AelisCycleRuntimeController.exactRemainingCrafts()` for full quantities;
+the existing long accessors expose bounded dispatch windows. Runtime snapshots
+retain `exactRemainingCrafts` and `exactPendingOutputs`, and the shared cycle
+NBT API persists them while accepting version 1 and 2 saves. Exact CPUs may
+report accepted batches and returned outputs through the BigInteger overloads
+of `patternDispatched` and `recordReturned`.
+
+`AelisCycleExecutionApi.getExactCyclicCraftAmounts(plan)` returns an immutable
+BigInteger ledger of cyclic production alone, separate from total crafted
+quantities when an output also has ordinary work. Metadata attachment and copying
+preserve this ledger. The confirmation rows and full tooltips receive exact cyclic
+amounts; the existing `getCyclicCraftAmounts` exposes saturated long projections.
+Clients and servers must use the same build with payload protocol `1.1.2-forge-3`.
+
 ## 中文 API 契约
 
 此 API 通过公开执行契约接入独立 CPU。
-客户端与服务端须使用本次同一构建（内部协议 `1.1.0-forge-2`）；接入方须使用包含这些类的 1.1.1-forge JAR 编译和运行。
+客户端与服务端须使用本次同一构建（内部协议 `1.1.2-forge-3`）；接入方须使用包含这些类的 1.1.2-forge JAR 编译和运行。
 
 ## 稳定的计划元数据 API
 
@@ -149,6 +165,8 @@ plan = AelisExactCraftingPlanApi.attachExecutionMetadata(plan, output, tasks, in
 
 必须保留返回值（可能是包装计划）。输出为 null/非正数、映射为 null，或包含空 key、空/非正数量时，保持原计划不变。有效精确次数是完整替换值，不是增量；可选倍率改写无法识别时保留原始完整任务。
 包装或复制计划时使用 `AelisCycleExecutionApi.copyMetadata(source, target)`，可同时保留循环、材料、字节数和最终订单数量。
+
+从 1.1.2-forge 起，`AelisCycleExecutionApi.getExactCyclicCraftAmounts(plan)` 返回只读的 BigInteger 循环产量账本。同一产物包含普通合成和循环合成时，该账本只计循环部分；附加与复制计划元数据会保留它。合成确认页的列表和完整提示同步使用精确循环数量。原有 `getCyclicCraftAmounts(plan)` 继续返回饱和的 long 兼容投影。
 
 ## 共享批量投料
 

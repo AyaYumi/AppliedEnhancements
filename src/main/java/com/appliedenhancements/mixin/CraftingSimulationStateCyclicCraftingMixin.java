@@ -69,6 +69,7 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
     @Unique
     private final Map<AEKey, Long> appliedenhancements$cyclicCraftAmounts =
             new LinkedHashMap<>();
+    @Unique private final Map<AEKey, BigInteger> appliedenhancements$bigIntegerCyclicCraftAmounts = new LinkedHashMap<>();
     @Unique
     private final Map<AEKey, BigInteger> appliedenhancements$bigIntegerCraftAmounts =
             new LinkedHashMap<>();
@@ -104,6 +105,10 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
         appliedenhancements$bigIntegerMissingAmounts.clear();
         appliedenhancements$bigIntegerMissingAmounts.putAll(amounts);
     }
+
+    @Override public void appliedenhancements$recordBigIntegerMissing(AEKey key, BigInteger amount) {
+        appliedenhancements$bigIntegerMissingAmounts.merge(key, amount, BigInteger::add);
+    }
     @Unique
     private final List<AelisCycleExecutionPlan.Step>
             appliedenhancements$cycleExecutionSteps = new ArrayList<>();
@@ -120,10 +125,20 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
     @Override
     public void appliedenhancements$recordCyclicCrafting(
             IPatternDetails pattern, long patternTimes) {
+        if (patternTimes <= 0) return;
+        appliedenhancements$recordCyclicCrafting(pattern, BigInteger.valueOf(patternTimes));
+    }
+
+    @Override
+    public void appliedenhancements$recordCyclicCrafting(IPatternDetails pattern, BigInteger patternTimes) {
+        if (patternTimes == null || patternTimes.signum() <= 0) return;
         if (pattern != null) {
+            var outputs = java.util.Arrays.asList(pattern.getOutputs());
             AelisCyclicCraftingAmounts.addOutputs(
                     appliedenhancements$cyclicCraftAmounts,
-                    java.util.Arrays.asList(pattern.getOutputs()), patternTimes);
+                    outputs, com.github.appliedenhancements.crafting.aelis.AelisBigIntegerMath.saturatingLong(patternTimes));
+            AelisCyclicCraftingAmounts.addExactOutputs(appliedenhancements$bigIntegerCyclicCraftAmounts,
+                    outputs, patternTimes);
         }
     }
 
@@ -132,6 +147,18 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
             Map<AEKey, Long> amounts) {
         AelisCyclicCraftingAmounts.merge(
                 appliedenhancements$cyclicCraftAmounts, amounts);
+        AelisCyclicCraftingAmounts.mergeExact(appliedenhancements$bigIntegerCyclicCraftAmounts,
+                AelisCyclicCraftingAmounts.exactAmounts(amounts, Map.of()));
+    }
+
+    @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerCyclicCraftAmounts() {
+        return Map.copyOf(appliedenhancements$bigIntegerCyclicCraftAmounts);
+    }
+
+    @Override public void appliedenhancements$mergeBigIntegerCyclicCraftAmounts(Map<AEKey, BigInteger> amounts) {
+        AelisCyclicCraftingAmounts.mergeExact(appliedenhancements$bigIntegerCyclicCraftAmounts, amounts);
+        AelisCyclicCraftingAmounts.merge(appliedenhancements$cyclicCraftAmounts,
+                AelisCyclicCraftingAmounts.project(amounts));
     }
 
     @Override
@@ -252,9 +279,7 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
         var patternTimes = new LinkedHashMap<>(parentTracker.appliedenhancements$getBigIntegerPatternTimes());
         appliedenhancements$bigIntegerPatternTimes.forEach((pattern, times) -> patternTimes.merge(pattern, times, BigInteger::add));
         parentTracker.appliedenhancements$setBigIntegerPatternTimes(patternTimes);
-        var missing = new LinkedHashMap<>(parentTracker.appliedenhancements$getBigIntegerMissingAmounts());
-        appliedenhancements$bigIntegerMissingAmounts.forEach((key, amount) -> missing.merge(key, amount, BigInteger::add));
-        parentTracker.appliedenhancements$setBigIntegerMissingAmounts(missing);
+        appliedenhancements$bigIntegerMissingAmounts.forEach(parentTracker::appliedenhancements$recordBigIntegerMissing);
         if (appliedenhancements$previewOnly) parentTracker.appliedenhancements$setPreviewOnly(true);
         if (appliedenhancements$apiPath == AelisCalculationPath.AELIS) {
             ((AelisCalculationPathCarrier) parent).molecularmanipulator$setCalculationPath(AelisCalculationPath.AELIS);
@@ -287,8 +312,8 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
             CraftingSimulationState parent, CallbackInfo callback) {
         if (!CraftingPlannerIntervention.enabled()) return;
         ((AelisCyclicCraftingTracker) parent)
-                .appliedenhancements$mergeCyclicCraftAmounts(
-                        appliedenhancements$getCyclicCraftAmounts());
+                .appliedenhancements$mergeBigIntegerCyclicCraftAmounts(
+                        appliedenhancements$getBigIntegerCyclicCraftAmounts());
         ((AelisCyclicCraftingTracker) parent)
                 .appliedenhancements$recordCycleExecutionPlan(
                         appliedenhancements$getCycleExecutionPlan());
@@ -313,6 +338,9 @@ public abstract class CraftingSimulationStateCyclicCraftingMixin
                             ((AelisBigIntegerCraftAmountsCarrier) state).appliedenhancements$getBigIntegerBytes());
             ((AelisCyclicCraftAmountsCarrier) (Object) callback.getReturnValue())
                     .appliedenhancements$setCyclicCraftAmounts(tracker.appliedenhancements$getCyclicCraftAmounts());
+            ((AelisCyclicCraftAmountsCarrier) (Object) callback.getReturnValue())
+                    .appliedenhancements$setBigIntegerCyclicCraftAmounts(
+                            AelisCyclicCraftingAmounts.overflowingAmounts(tracker.appliedenhancements$getBigIntegerCyclicCraftAmounts()));
             ((AelisCycleExecutionPlanCarrier) (Object) callback.getReturnValue())
                     .appliedenhancements$setCycleExecutionPlan(null);
             ((AelisBigIntegerCraftAmountsCarrier) (Object) callback.getReturnValue())

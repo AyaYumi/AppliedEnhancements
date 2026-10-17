@@ -48,8 +48,12 @@ class AelisOverstrictSafetyRegressionTest {
         assertTrue(source.contains("MAX_LINEAR_NATIVE_BOUNDARY_ITEMS"));
         assertTrue(source.contains("mayExecuteNativeBoundary"));
         assertTrue(source.contains("native_boundary_work_limit:"));
-        assertTrue(source.contains("canSatisfyConsumableBoundaryInputFromStock"));
-        assertTrue(source.contains("oversized_recursive_consumable_input:"));
+        assertTrue(source.replaceAll("\\s+", " ").contains(
+                "if (!AelisExecutionPolicy.mayExecuteNativeBoundary( "
+                        + "inputPlan.child.molecularmanipulator$getAmount(), "
+                        + "inputPlan.requestedAmount, MAX_LINEAR_NATIVE_BOUNDARY_ITEMS) "
+                        + "&& !canSatisfyConsumableBoundaryInputFromStock( "
+                        + "attempt, inputPlan, pauseCheckpoint)) { return false; }"));
     }
 
     @Test

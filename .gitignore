@@ -61,9 +61,6 @@ __pycache__/
 /*_javap.txt
 /ae2javap.txt
 
-# local release-note drafts
-/CHANGELOG_*.md
-
 # Local Forge dependency artifacts
 /libs/*.jar
 
@@ -77,5 +74,3 @@ __pycache__/
 /tools/ui/
 /.claude/
 *.sparkprofile
-*.tmp
-*.bak

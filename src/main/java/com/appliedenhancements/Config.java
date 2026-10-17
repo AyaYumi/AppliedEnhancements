@@ -124,12 +124,13 @@ public final class Config {
                 .translation("appliedenhancements.config.aelis_compile_budget_ms")
                 .defineInRange("compile_budget_ms", 2000, 100, 30000);
 
+        // Existing OmniSequence versions link this field at runtime.
         AELIS_DIAGNOSTICS = builder
                 .comment(
-                        "Enable detailed AELIS planning diagnostics.",
-                        "Repeated templates share a server-wide one-minute rate limit.",
-                        "启用 AELIS 规划诊断详情。",
-                        "重复消息模板共享服务器全局一分钟限流。",
+                        "Enable diagnostics in integrations that read this compatibility setting.",
+                        "Applied Enhancements no longer emits temporary planning traces.",
+                        "为读取此兼容配置的联动模组启用诊断日志。",
+                        "Applied Enhancements 已移除临时规划日志。",
                         "Default / 默认值: false")
                 .translation("appliedenhancements.config.aelis_diagnostics")
                 .define("enable_diagnostics", false);

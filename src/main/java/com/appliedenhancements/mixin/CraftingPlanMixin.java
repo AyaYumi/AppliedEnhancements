@@ -24,6 +24,15 @@ public abstract class CraftingPlanMixin implements AelisCalculationPathCarrier,
             AelisCalculationPath.AE2_NATIVE;
     @Unique
     private Map<AEKey, Long> appliedenhancements$cyclicCraftAmounts = Map.of();
+    @Unique private Map<AEKey, BigInteger> appliedenhancements$bigIntegerCyclicCraftAmounts = Map.of();
+    @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerCyclicCraftAmounts() {
+        return appliedenhancements$bigIntegerCyclicCraftAmounts;
+    }
+    @Override public void appliedenhancements$setBigIntegerCyclicCraftAmounts(Map<AEKey, BigInteger> amounts) {
+        appliedenhancements$bigIntegerCyclicCraftAmounts =
+                com.github.appliedenhancements.crafting.aelis.AelisCyclicCraftingAmounts.exactAmounts(
+                        appliedenhancements$cyclicCraftAmounts, amounts);
+    }
     @Unique
     private Map<AEKey, BigInteger> appliedenhancements$bigIntegerCraftAmounts = Map.of();
     @Unique private Map<AEKey, BigInteger> appliedenhancements$bigIntegerMissingAmounts = Map.of();
@@ -87,6 +96,9 @@ public abstract class CraftingPlanMixin implements AelisCalculationPathCarrier,
     public void appliedenhancements$setCyclicCraftAmounts(Map<AEKey, Long> amounts) {
         appliedenhancements$cyclicCraftAmounts = Map.copyOf(
                 Objects.requireNonNull(amounts, "amounts"));
+        appliedenhancements$bigIntegerCyclicCraftAmounts =
+                com.github.appliedenhancements.crafting.aelis.AelisCyclicCraftingAmounts.exactAmounts(
+                        appliedenhancements$cyclicCraftAmounts, Map.of());
     }
 
     @Override

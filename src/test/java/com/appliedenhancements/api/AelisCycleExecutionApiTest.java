@@ -32,6 +32,25 @@ import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 
 class AelisCycleExecutionApiTest {
+    @Test void exactCyclicSubsetSurvivesRepeatedPlanCopiesWithoutUsingAllCraftedOutputs() {
+        var key = new TestAEKey("ordinary_and_cyclic_output");
+        var cyclic = new BigInteger("44444444444444444444448");
+        var total = cyclic.multiply(BigInteger.TWO).add(BigInteger.valueOf(17));
+        var source = new TestPlan(null, Map.of(key, Long.MAX_VALUE), Map.of(key, total), Map.of(key, cyclic));
+        var copy = AelisCycleExecutionApi.copyMetadata(source, new TestPlan(null));
+        var second = AelisCycleExecutionApi.copyMetadata(copy, new TestPlan(null));
+        for (var plan : List.of(copy, second)) {
+            assertEquals(Map.of(key, cyclic), AelisCycleExecutionApi.getExactCyclicCraftAmounts(plan));
+            assertEquals(Map.of(key, Long.MAX_VALUE), AelisCycleExecutionApi.getCyclicCraftAmounts(plan));
+            assertEquals(total, ((AelisBigIntegerCraftAmountsCarrier) plan)
+                    .appliedenhancements$getBigIntegerCraftAmounts().get(key));
+        }
+        assertThrows(UnsupportedOperationException.class,
+                () -> AelisCycleExecutionApi.getExactCyclicCraftAmounts(second).clear());
+        assertEquals(Map.of(key, BigInteger.valueOf(42)),
+                AelisCycleExecutionApi.getExactCyclicCraftAmounts(new TestPlan(null, Map.of(key, 42L))));
+    }
+
     @Test
     void preparingAnOrdinaryPlanKeepsItsIdentityAndData() {
         var ordinary = new TestPlan(null);
@@ -209,11 +228,15 @@ class AelisCycleExecutionApiTest {
     }
 
     private record TestPlan(AelisCycleExecutionPlan cyclePlan,
-            Map<AEKey, Long> amounts, Map<AEKey, BigInteger> exactAmounts)
+            Map<AEKey, Long> amounts, Map<AEKey, BigInteger> exactAmounts, Map<AEKey, BigInteger> exactCyclicAmounts)
             implements ICraftingPlan, AelisCycleExecutionPlanCarrier,
             AelisCyclicCraftAmountsCarrier, AelisBigIntegerCraftAmountsCarrier {
         TestPlan(AelisCycleExecutionPlan cyclePlan) {
             this(cyclePlan, Map.of(), Map.of());
+        }
+
+        TestPlan(AelisCycleExecutionPlan cyclePlan, Map<AEKey, Long> amounts, Map<AEKey, BigInteger> exactAmounts) {
+            this(cyclePlan, amounts, exactAmounts, Map.of());
         }
 
         TestPlan(AelisCycleExecutionPlan cyclePlan, Map<AEKey, Long> amounts) {
@@ -221,6 +244,9 @@ class AelisCycleExecutionApiTest {
         }
 
         @Override public Map<AEKey, Long> appliedenhancements$getCyclicCraftAmounts() { return amounts; }
+        @Override public Map<AEKey, BigInteger> appliedenhancements$getBigIntegerCyclicCraftAmounts() {
+            return com.github.appliedenhancements.crafting.aelis.AelisCyclicCraftingAmounts.exactAmounts(amounts, exactCyclicAmounts);
+        }
         @Override public void appliedenhancements$setCyclicCraftAmounts(Map<AEKey, Long> values) {
             throw new UnsupportedOperationException();
         }

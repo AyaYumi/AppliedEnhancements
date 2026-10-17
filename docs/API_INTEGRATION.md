@@ -4,12 +4,12 @@
 
 Exact CPU execution: see [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md) for CPU-independent exact plans, output progress and persistence. Custom CPUs opt in through the public execution contracts.
 
-The current `1.1.1-forge` source defaults to AE2 `15.4.10` and retains
+The current `1.1.2-forge` source defaults to AE2 `15.4.10` and retains
 the `[15.4.10,16)` dependency range. The regular build targets AE2 15.4.10; the UELM build targets AE2 UELM 15.5.4. Public API
 signatures use AE2 types; internal CPU display hooks are isolated compatibility
 implementation and require runtime verification after dependency changes.
 
-This guide is intended for Forge mod authors integrating with Applied Enhancements `1.1.1-forge`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+This guide is intended for Forge mod authors integrating with Applied Enhancements `1.1.2-forge`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 ## Compatibility baseline
 
@@ -19,9 +19,9 @@ This guide is intended for Forge mod authors integrating with Applied Enhancemen
 | Java | `17` | Compilation and runtime target |
 | Forge | `47.4.20` | Build/runtime validation version; currently declared range: `[47.4.10,)` |
 | Applied Energistics 2 | `15.4.10` | Declared range: `[15.4.10,16)`; public signatures directly reference AE2 types |
-| Applied Enhancements | `1.1.1-forge` | Version covered by this guide |
+| Applied Enhancements | `1.1.2-forge` | Version covered by this guide |
 
-Version `1.1.1-forge` retains `AelisBatchExecutionContext` for shared extraction/ownership and `AelisSmartDoublingApi` for native enabled-state queries from `1.1.0-forge`, and adds recoverable planning and metadata fallbacks. See [native smart doubling](SMART_DOUBLING_API.md). Clients and servers use the same build; the internal payload protocol remains `1.1.0-forge-2`. Require `1.1.1-forge` at compile time and runtime for the contracts documented here.
+Version `1.1.2-forge` retains `AelisBatchExecutionContext` for shared extraction/ownership and `AelisSmartDoublingApi` for native enabled-state queries from `1.1.0-forge`, and preserves recoverable planning and metadata fallbacks while adding exact cyclic counts, output totals and persistence. See [native smart doubling](SMART_DOUBLING_API.md). Clients and servers use the same build; the internal payload protocol is `1.1.2-forge-3`. Require `1.1.2-forge` at compile time and runtime for the contracts documented here.
 
 BigInteger plans are submitted without a universal CPU capability precheck. A saturated long projection does not force `simulation()` or override the CPU's submission result. Server-side integrations should read exact quantities through `AelisExactCraftingPlanApi.read(plan)`; `AelisCycleExecutionApi.copyMetadata` preserves them. The legacy `isPreviewOnly` marker now only indicates a saturated projection. The standard long fields remain projections, so acceptance by an unadapted CPU does not establish exact BigInteger execution support.
 
@@ -43,7 +43,7 @@ The following are implementation details and do not carry source or binary compa
 - `com.github.appliedenhancements`;
 - bridges, payloads, constants, and other classes outside the public API packages.
 
-## Exact planning and metadata in 1.1.1-forge
+## Exact planning and metadata in 1.1.2-forge
 
 Call `AelisExactCraftingService.begin` on the server thread, then wait asynchronously for the result. There is no 256-digit API limit. Non-positive amounts become empty orders. `REPORT_MISSING_ITEMS` and `CRAFT_LESS` are accepted; reduced native attempts use their own exact request context.
 
@@ -61,7 +61,7 @@ The immutable snapshot exposes final output, bytes, crafted/missing/stored/infin
 
 When `Result.shouldFallback()` is true, `fallbackCategory()` supplies a stable `AelisFallbackReason` instead of requiring string parsing. Unknown details map to `OTHER`, errors to `INTERNAL_ERROR`, and success or branch failure to `NONE`. Both the AELIS and legacy MaxFast results expose this query; diagnostic text remains available.
 
-Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and explicit exact service calls work independently of `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.1.1-forge` build when using the new types.
+Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and explicit exact service calls work independently of `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.1.2-forge` build when using the new types.
 
 ## Development dependency
 
@@ -85,10 +85,10 @@ dependencies {
     compileOnly fg.deobf("maven.modrinth:ae2:15.4.10")
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.1.1-forge")
+    compileOnly fg.deobf(files("libs/appliedenhancements-1.1.2-forge.jar"))
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly fg.deobf("com.appliedenhancements:appliedenhancements:1.1.1-forge")
+    runtimeOnly fg.deobf(files("libs/appliedenhancements-1.1.2-forge.jar"))
 }
 ```
 
@@ -98,7 +98,7 @@ If your integration unconditionally loads Applied Enhancements API classes, decl
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 mandatory=true
-versionRange="[1.1.1-forge,)"
+versionRange="[1.1.2-forge,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -109,7 +109,7 @@ If all API references are isolated behind an optional compatibility layer, decla
 [[dependencies.yourmod]]
 modId="appliedenhancements"
 mandatory=false
-versionRange="[1.1.1-forge,)"
+versionRange="[1.1.2-forge,)"
 ordering="AFTER"
 side="BOTH"
 ```
@@ -158,7 +158,7 @@ The main integration types are listed below; exact request and metadata types ar
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.1-forge` uses internal payload protocol `1.1.0-forge-2`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.2-forge` uses internal payload protocol `1.1.2-forge-3`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 
@@ -342,7 +342,7 @@ While a runtime has active seed protection:
 - use `amountToRetain(key, incoming, currentlyStored)` before routing final output to the requester;
 - persist `snapshot()` together with the execution plan and restore through `withCyclePhase(plan, state)`.
 
-Complete plans retrieved through `getPlan`, `attachToPlan`, or `copyMetadata` receive `phase()` metadata containing ordinary prerequisites and actual cycle outputs. After explicitly opting in through `withCyclePhase`, `canDispatch` blocks unrelated ordinary work during this phase while allowing necessary prerequisites. `isComplete()` still means cyclic steps have been dispatched; `isCyclePhaseComplete()` additionally requires tracked outputs to return. Defer job cleanup until this phase completes even if the requested output has already been delivered, so final seed-restoration steps can finish. Custom persistence must retain `phase()` and the state's `pendingOutputs()` and restore through `withCyclePhase(plan, state)`.
+Complete plans retrieved through `getPlan`, `attachToPlan`, or `copyMetadata` receive `phase()` metadata containing ordinary prerequisites and actual cycle outputs. After explicitly opting in through `withCyclePhase`, `canDispatch` blocks unrelated ordinary work during this phase while allowing necessary prerequisites. `isComplete()` still means cyclic steps have been dispatched; `isCyclePhaseComplete()` additionally requires tracked outputs to return. Defer job cleanup until this phase completes even if the requested output has already been delivered, so final seed-restoration steps can finish. Custom persistence must retain `phase()`, `exactRemainingCrafts()` and `exactPendingOutputs()` and restore through `withCyclePhase(plan, state)`.
 
 The existing `new AelisCycleRuntimeController(plan)` and `(plan, state)` constructors retain legacy concurrent dispatch without a return barrier, so existing third-party CPUs that do not call `recordReturned` will not stall after upgrading. CPU integrations opting into `withCyclePhase` must also settle output returns and defer completion cleanup. Existing plan and state constructors remain available.
 
@@ -351,14 +351,14 @@ The existing `new AelisCycleRuntimeController(plan)` and `(plan, state)` constru
 | Public cycle type | Data and validation |
 |---|---|
 | `AelisCycleExecutionPlan` | Canonical arguments: `List<Step> steps`, `Map<AEKey, Long> minimumSeeds`, `Set<AEKey> protectedKeys`, `AelisCycleSeedPolicy seedPolicy`, nullable `Phase phase`. Steps must be nonempty; amount entries must be positive. Collections are copied |
-| `Step` | `AEKey patternDefinition`, positive `long crafts`, `Map<AEKey, Long> inputsPerCraft`, `Set<AEKey> selfReplenishingInputs`. Every input belongs to `protectedKeys`; self-replenishing keys belong to the step's inputs |
+| `Step` | `AEKey patternDefinition`, positive `BigInteger exactCrafts` (`long crafts` is a saturated projection; legacy constructors remain available), `Map<AEKey, Long> inputsPerCraft`, `Set<AEKey> selfReplenishingInputs`. Every input belongs to `protectedKeys`; self-replenishing keys belong to the step's inputs |
 | `Phase` | `Set<AEKey> prerequisitePatterns`, `Map<AEKey, Map<AEKey, Long>> outputsPerPattern`. Output amounts are per firing, not totals for the order. A non-null phase must contain an output-map entry for every scheduled pattern definition |
-| `AelisCycleRuntimeController.State` | `int stepIndex`, `long remainingCrafts`, `Map<AEKey, Long> pendingOutputs`. The two-argument constructor creates an empty pending map; completed state uses `stepIndex == steps.size()` and `remainingCrafts == 0` |
+| `AelisCycleRuntimeController.State` | `int stepIndex`, `long remainingCrafts`, `Map<AEKey, Long> pendingOutputs`, plus `BigInteger exactRemainingCrafts` and `Map<AEKey, BigInteger> exactPendingOutputs`. The exact constructor accepts the index and exact fields; legacy constructors remain available. The two-argument constructor creates an empty pending map; completed state uses `stepIndex == steps.size()` and `remainingCrafts == 0` |
 | `AelisCycleAwareCpu` | Default `supportsAelisCycleExecution()` returns true. `AelisCycleExecutionApi.supports(ICraftingCPU)` checks the capability; it does not install hooks |
 
 The three-argument plan constructor retains `MAX_THROUGHPUT`; the four-argument constructor accepts a policy and starts without phase metadata. `patternDefinitions()` lists cyclic definitions. `runtime.plan()`, `isCyclePattern(AEKey)`, `currentStep()` and `remainingCrafts()` support dispatch inspection. `canDispatch` does not itself extract or validate inventory.
 
-`withCyclePhase(plan, state)` validates the pending-output map against already dispatched work: completed steps count in full, the current step contributes only `step.crafts() - state.remainingCrafts()`, and future steps contribute nothing. Every pending key must be explainable by those outputs, with a positive amount no greater than their total production. A null `phase()` requires an empty pending map. The legacy constructors deliberately discard phase metadata and pending-output entries rather than restoring the new protocol; never use them to load a phase-aware saved job.
+`withCyclePhase(plan, state)` validates the pending-output map against already dispatched work: completed steps count in full, the current step contributes only `step.exactCrafts().subtract(state.exactRemainingCrafts())`, and future steps contribute nothing. Every pending key must be explainable by those outputs, with a positive amount no greater than their total production. A null `phase()` requires an empty pending map. The legacy constructors deliberately discard phase metadata and pending-output entries rather than restoring the new protocol; never use them to load a phase-aware saved job.
 
 Make returned products available for subsequent cyclic dispatch, using `amountToRetain` to retain final-output material needed by remaining cycles. Batch size is the minimum supported by all current inputs, `remainingCrafts()`, and the provider's safe limit. Advance by the actual dispatched count; do not fix batches to initial seed stock or add unplanned work.
 
@@ -676,7 +676,7 @@ Disabling the session clears selection and the cut buffer. `clear()` clears buff
 
 ## 8. Network-item context-menu extensions
 
-Starting with `1.0.5`, built-in item-action menus use their own configurable binding, **Open Item Actions Menu**, defaulting to **Alt + right-click**. Pattern Quick Move Cut/Paste uses **Open Pattern Quick Move Menu**, defaulting to **right-click**. Both bindings honor Forge modifiers and GUI context. The old shared binding is retained for pattern Quick Move, so a saved right-click mapping does not overwrite the new item-action default. Compatible registered screens receive this separation automatically; registering menu entries does not change either binding. Custom screens own their input routing and must keep the two actions separate. The split retains public API signatures; the current overall build uses payload protocol `1.1.0-forge-2`.
+Starting with `1.0.5`, built-in item-action menus use their own configurable binding, **Open Item Actions Menu**, defaulting to **Alt + right-click**. Pattern Quick Move Cut/Paste uses **Open Pattern Quick Move Menu**, defaulting to **right-click**. Both bindings honor Forge modifiers and GUI context. The old shared binding is retained for pattern Quick Move, so a saved right-click mapping does not overwrite the new item-action default. Compatible registered screens receive this separation automatically; registering menu entries does not change either binding. Custom screens own their input routing and must keep the two actions separate. The split retains public API signatures; the current overall build uses payload protocol `1.1.2-forge-3`.
 
 Register entry providers during Client Setup:
 

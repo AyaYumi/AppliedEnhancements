@@ -6,8 +6,9 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
 import appeng.me.storage.NetworkStorage;
+import com.appliedenhancements.storage.InfiniteStorageNetworkAccess;
 import com.appliedenhancements.storage.InfiniteStorageAmounts;
-import com.appliedenhancements.storage.InfiniteStorageCellRegistry;
+import com.appliedenhancements.storage.MountedInfiniteStorage;
 import com.appliedenhancements.storage.InfiniteStorageSupport;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.appliedenhancements.Config;
@@ -20,23 +21,52 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.Set;
+
 /** Infinite semantics apply only to explicitly marked, mounted cells. */
 @Mixin(value = NetworkStorage.class, remap = false)
-public abstract class NetworkStorageMixin {
-    @Unique private final InfiniteStorageCellRegistry.MountedClassifier
-            appliedenhancements$infiniteCells = new InfiniteStorageCellRegistry.MountedClassifier();
+public abstract class NetworkStorageMixin implements InfiniteStorageNetworkAccess {
+    // Mixin can omit a field initializer when merging constructor bytecode.
+    // Resolve the cache on first access instead of depending on constructor injection.
+    @Unique private volatile MountedInfiniteStorage appliedenhancements$infiniteStorageState;
+
+    @Unique
+    private MountedInfiniteStorage appliedenhancements$infiniteStorageState() {
+        var state = appliedenhancements$infiniteStorageState;
+        if (state == null) {
+            synchronized (this) {
+                state = appliedenhancements$infiniteStorageState;
+                if (state == null) {
+                    state = new MountedInfiniteStorage();
+                    appliedenhancements$infiniteStorageState = state;
+                }
+            }
+        }
+        return state;
+    }
+
+    @Override
+    public Set<AEKey> appliedenhancements$snapshotInfiniteKeys(
+            IActionSource source, Iterable<AEKey> candidateKeys) {
+        var mountedInfinite = appliedenhancements$infiniteStorageState().snapshot();
+        return InfiniteStorageSupport.snapshotInfiniteKeys(
+                mountedInfinite, ignored -> true, candidateKeys, source);
+    }
 
     @Inject(method = "mount", at = @At("RETURN"))
     private void appliedenhancements$rememberMountedCell(int priority, MEStorage storage,
             CallbackInfo callback) {
-        if (Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get()) {
-            appliedenhancements$infiniteCells.isInfinite(storage);
-        }
+        appliedenhancements$refreshInfiniteStorage(storage);
     }
 
     @Inject(method = "unmount", at = @At("RETURN"))
     private void appliedenhancements$forgetUnmountedCell(MEStorage storage, CallbackInfo callback) {
-        appliedenhancements$infiniteCells.forget(storage);
+        appliedenhancements$infiniteStorageState().forget(storage);
+    }
+
+    @Unique
+    private boolean appliedenhancements$refreshInfiniteStorage(MEStorage storage) {
+        return appliedenhancements$infiniteStorageState().refresh(storage);
     }
 
     @WrapOperation(method = "extract", at = @At(value = "INVOKE",
@@ -45,7 +75,7 @@ public abstract class NetworkStorageMixin {
             Actionable mode, IActionSource source, Operation<Long> original) {
         if (amount > 0 && Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get()
                 && !InfiniteStorageSupport.isPhysicalExtract()
-                && appliedenhancements$infiniteCells.isInfinite(storage)) {
+                && appliedenhancements$infiniteStorageState().isInfinite(storage)) {
             // A successful probe proves the configured key is accessible through this wrapper.
             // Do not modulate the backing cell: an explicit infinite source cannot be depleted.
             return original.call(storage, key, 1L, Actionable.SIMULATE, source) > 0 ? amount : 0;
@@ -76,8 +106,7 @@ public abstract class NetworkStorageMixin {
 
         var local = new KeyCounter();
         original.call(storage, local);
-        boolean infiniteStorage = appliedenhancements$infiniteCells.isInfinite(storage);
-        InfiniteStorageSupport.observe(storage, local, infiniteStorage);
+        boolean infiniteStorage = appliedenhancements$refreshInfiniteStorage(storage);
 
         for (var entry : local) {
             var key = entry.getKey();

@@ -16,6 +16,7 @@ class StorageBusSlotIndexTest {
         assertTrue(index.candidates("iron").isEmpty());
 
         index.commitRebuild();
+        assertTrue(index.isCurrent());
         var candidates = index.candidates("iron");
         assertEquals(2, candidates.size());
         assertEquals(2, candidates.get(0));
@@ -34,6 +35,7 @@ class StorageBusSlotIndexTest {
         assertEquals(4, index.candidates("gold").get(0));
 
         index.abortRebuild();
+        assertTrue(!index.isCurrent());
         assertEquals(4, index.candidates("gold").get(0));
         assertTrue(index.candidates("iron").isEmpty());
     }
@@ -48,8 +50,28 @@ class StorageBusSlotIndexTest {
         index.beginRebuild();
         index.record("iron", 1);
         index.commitRebuild();
+        assertTrue(index.isCurrent());
 
         assertTrue(index.candidates("gold").isEmpty());
         assertEquals(1, index.candidates("iron").get(0));
+    }
+
+    @Test
+    void mutationInvalidatesThePublishedSnapshotUntilAFullRebuild() {
+        var index = new StorageBusSlotIndex<String>();
+        index.beginRebuild();
+        index.record("iron", 4);
+        index.commitRebuild();
+        assertTrue(index.isCurrent());
+
+        index.invalidate();
+
+        assertTrue(!index.isCurrent());
+        assertEquals(4, index.candidates("iron").get(0));
+        index.beginRebuild();
+        index.record("iron", 6);
+        index.commitRebuild();
+        assertTrue(index.isCurrent());
+        assertEquals(6, index.candidates("iron").get(0));
     }
 }

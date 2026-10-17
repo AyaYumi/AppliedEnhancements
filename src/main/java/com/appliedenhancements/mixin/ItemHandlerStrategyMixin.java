@@ -1,5 +1,8 @@
 package com.appliedenhancements.mixin;
 
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.List;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -37,44 +40,45 @@ public abstract class ItemHandlerStrategyMixin {
         }
 
         int slotCount = handler.getSlots();
-        int hintedSlot = appliedenhancements$getSlotHints().find(handler, itemKey);
-        if (hintedSlot < 0 || hintedSlot >= slotCount) {
-            if (hintedSlot >= 0) {
-                appliedenhancements$getSlotHints().forget(handler, itemKey);
-            }
-            hintedSlot = -1;
-        }
-
+        var cache = appliedenhancements$getSlotHints();
+        List<Integer> hints = cache.findAll(handler, itemKey);
+        var visited = new BitSet(slotCount);
+        var acceptingSlots = new ArrayList<Integer>(hints.size());
         ItemStack remaining = input;
-        boolean hintAccepted = false;
-        if (hintedSlot >= 0) {
+        for (int hintedSlot : hints) {
+            if (hintedSlot < 0 || hintedSlot >= slotCount || visited.get(hintedSlot)) {
+                continue;
+            }
+            visited.set(hintedSlot);
             int before = remaining.getCount();
             remaining = handler.insertItem(hintedSlot, remaining, simulate);
-            hintAccepted = remaining.getCount() < before;
-            if (!hintAccepted) {
-                appliedenhancements$getSlotHints().forget(handler, itemKey);
+            if (remaining.getCount() < before) {
+                acceptingSlots.add(hintedSlot);
             }
             if (remaining.isEmpty()) {
+                cache.rememberAll(handler, itemKey, acceptingSlots);
                 return ItemStack.EMPTY;
             }
         }
 
         for (int slot = 0; slot < slotCount; slot++) {
-            if (slot == hintedSlot) {
+            if (visited.get(slot)) {
                 continue;
             }
+            visited.set(slot);
 
             int before = remaining.getCount();
             remaining = handler.insertItem(slot, remaining, simulate);
-            if (!hintAccepted && remaining.getCount() < before) {
-                appliedenhancements$getSlotHints().remember(handler, itemKey, slot);
-                hintAccepted = true;
+            if (remaining.getCount() < before) {
+                acceptingSlots.add(slot);
             }
             if (remaining.isEmpty()) {
+                cache.rememberAll(handler, itemKey, acceptingSlots);
                 return ItemStack.EMPTY;
             }
         }
 
+        cache.rememberAll(handler, itemKey, acceptingSlots);
         return remaining;
     }
 

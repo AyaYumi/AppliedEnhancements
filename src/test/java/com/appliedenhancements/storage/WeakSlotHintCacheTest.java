@@ -3,6 +3,7 @@ package com.appliedenhancements.storage;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class WeakSlotHintCacheTest {
@@ -33,6 +34,20 @@ class WeakSlotHintCacheTest {
         assertEquals(1, cache.find(handler, "iron"));
         assertEquals(-1, cache.find(handler, "gold"));
         assertEquals(3, cache.find(handler, "copper"));
+    }
+
+    @Test
+    void remembersAllAcceptingSlotsInStableOrder() {
+        var cache = new WeakSlotHintCache<Object, String>(4);
+        var handler = new Object();
+
+        cache.rememberAll(handler, "iron", List.of(7, 2, 7, 4));
+
+        assertEquals(List.of(2, 4, 7), cache.findAll(handler, "iron"));
+        cache.rememberAll(handler, "iron", List.of(5));
+        assertEquals(List.of(5), cache.findAll(handler, "iron"));
+        cache.rememberAll(handler, "iron", List.of());
+        assertEquals(List.of(), cache.findAll(handler, "iron"));
     }
 
     @Test

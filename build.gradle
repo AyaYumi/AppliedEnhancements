@@ -139,6 +139,8 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // Plain JUnit does not unpack Forge's nested MixinExtras runtime jar.
+    testRuntimeOnly "io.github.llamalad7:mixinextras-common:${mixinextras_version}"
 
     compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixinextras_version}"))
     localRuntime "io.github.llamalad7:mixinextras-forge:${mixinextras_version}"

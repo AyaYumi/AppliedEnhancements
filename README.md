@@ -6,7 +6,7 @@
 
 [中文](README_ZH.md) · [API documentation](docs/README.md) · [Configuration](CONFIGURATION.md)
 
-**1.1.1-forge** extends AE2 crafting, storage access and pattern terminals on Minecraft
+**1.1.2-forge** extends AE2 crafting, storage access and pattern terminals on Minecraft
 1.20.1 / Forge. It adds shared batch extraction/ownership transactions used by
 cycle-aware CPUs, while retaining existing planner and terminal APIs.
 
@@ -28,7 +28,7 @@ retain AE2's normal missing-material result.
 | Infinite cells | Explicit tags/runtime markers/current compatible cells, no inference from a huge finite count |
 | Pattern terminals | Duplicate/invalid filters, selection, atomic Cut/Paste and Quick Move integration |
 | Item actions | AE network context menu plus optional JEI recipe/search/extract/give integration |
-| Diagnostics | Default off process logs; repeated faults and traces share bounded global one-minute windows |
+| Logging | No planning traces or startup configuration dumps; repeated faults are limited per category and globally by severity |
 
 ## Requirements and installation
 
@@ -38,8 +38,8 @@ ExtendedAE, AE2WTLib, JEI, AdvancedAE,
 Data Energistics and other integrations remain optional. New addon versions need
 runtime verification when they change internal hooks.
 
-Build `build/libs/appliedenhancements-1.1.1-forge.jar` and install the same build on
-client and server. Internal network protocol is 1.1.0-forge-2. Addons use the separate public API; this
+Build `build/libs/appliedenhancements-1.1.2-forge.jar` and install the same build on
+client and server. Internal network protocol is 1.1.2-forge-3. Addons use the separate public API; this
 mod is not embedded in their JARs.
 
 ## Configuration and use
@@ -87,4 +87,4 @@ exact execution. Unsupported dynamic/cyclic branches preserve their documented
 failure/fallback boundary. AELIS caches are per planning session, not persistent
 global recipe graphs. Valid huge quantities still require time and memory.
 
-[Changes](CHANGELOG.md) · Licensed under [MIT](LICENSE).
+Licensed under [MIT](LICENSE).

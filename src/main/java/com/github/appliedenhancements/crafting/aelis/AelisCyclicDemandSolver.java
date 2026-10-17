@@ -56,7 +56,11 @@ final class AelisCyclicDemandSolver<K, V> {
     }
 
     record Limits(int maxSccNodes, long maxSearchStates,
-            long deadlineNanos) {
+            long deadlineNanos, boolean exactAmounts) {
+        Limits(int maxSccNodes, long maxSearchStates, long deadlineNanos) {
+            this(maxSccNodes, maxSearchStates, deadlineNanos, false);
+        }
+
         Limits {
             if (maxSccNodes <= 0 || maxSearchStates <= 0 || deadlineNanos <= 0) {
                 throw new IllegalArgumentException("Invalid cyclic solver limits");
@@ -206,11 +210,11 @@ final class AelisCyclicDemandSolver<K, V> {
             }
         }
 
-        if (firings.values().stream().anyMatch(value -> value.compareTo(LONG_MAX) > 0)
+        if (!limits.exactAmounts && (firings.values().stream().anyMatch(value -> value.compareTo(LONG_MAX) > 0)
                 || missing.values().stream().anyMatch(value -> value.compareTo(LONG_MAX) > 0)
                 || demands.values().stream().anyMatch(value -> value.compareTo(LONG_MAX) > 0)
                 || cyclicSchedules.stream().flatMap(List::stream)
-                        .anyMatch(step -> step.firings.compareTo(LONG_MAX) > 0)) {
+                        .anyMatch(step -> step.firings.compareTo(LONG_MAX) > 0))) {
             return failed(Failure.LONG_RANGE_OVERFLOW);
         }
 
@@ -295,60 +299,62 @@ final class AelisCyclicDemandSolver<K, V> {
         var firings = new BigInteger[size];
         java.util.Arrays.fill(firings, ZERO);
 
-        boolean changed;
-        long selectionIterations = 0;
-        long selectionIterationLimit = Math.max(256L, (long) size * 256L);
-        do {
+        // required[i] is maintained incrementally when another firing count grows.
+        // Self-consumption is already subtracted from effectiveOutput[i].
+        var required = new BigInteger[size];
+        var effectiveOutput = new BigInteger[size];
+        var consumers = new ArrayList<List<DemandEdge>>(size);
+        var pending = new ArrayDeque<Integer>();
+        var queued = new boolean[size];
+        for (int index = 0; index < size; index++) {
+            K key = component.get(index);
+            required[index] = value(accumulatedDemands, key).subtract(value(problem.available, key));
+            consumers.add(new ArrayList<>());
+            Variant<K, V> variant = selected[index];
+            if (variant == null) continue;
+            effectiveOutput[index] = variant.outputAmount;
+            for (Input<K> input : variant.inputs) {
+                Integer target = indexes.get(input.key);
+                if (target == null) continue;
+                if (target == index) {
+                    effectiveOutput[index] = effectiveOutput[index].subtract(input.amount);
+                } else {
+                    consumers.get(index).add(new DemandEdge(target, input.amount));
+                }
+            }
+            pending.addLast(index);
+            queued[index] = true;
+        }
+        long updates = 0;
+        long updateLimit = Math.max(256L, (long) size * 256L) * size;
+        while (!pending.isEmpty()) {
             if (!checkpoint()) {
                 return null;
             }
-            if (++selectionIterations > selectionIterationLimit) {
+            if (++updates > updateLimit) {
                 return null;
             }
-            changed = false;
-            for (int outputIndex = 0; outputIndex < size; outputIndex++) {
-                Variant<K, V> variant = selected[outputIndex];
-                if (variant == null) {
-                    continue;
-                }
-                K output = component.get(outputIndex);
-                BigInteger effectiveOutput = variant.outputAmount.subtract(
-                        internalInputAmount(variant, output));
-                BigInteger required = value(accumulatedDemands, output)
-                        .subtract(value(problem.available, output));
-                for (int producer = 0; producer < size; producer++) {
-                    if (producer == outputIndex) {
-                        continue;
-                    }
-                    Variant<K, V> producerVariant = selected[producer];
-                    if (producerVariant == null || firings[producer].signum() == 0) {
-                        continue;
-                    }
-                    BigInteger perFiring = internalInputAmount(
-                            producerVariant, output);
-                    if (perFiring.signum() > 0) {
-                        required = required.add(
-                                perFiring.multiply(firings[producer]));
-                    }
-                }
-                BigInteger needed;
-                if (required.signum() <= 0) {
-                    needed = ZERO;
-                } else if (effectiveOutput.signum() <= 0) {
-                    return null;
-                } else {
-                    needed = ceilDivide(required, effectiveOutput);
-                }
-                if (needed.compareTo(firings[outputIndex]) > 0) {
-                    if (needed.compareTo(LONG_MAX) > 0) {
-                        stoppedBy = Failure.LONG_RANGE_OVERFLOW;
-                        return null;
-                    }
-                    firings[outputIndex] = needed;
-                    changed = true;
+            int outputIndex = pending.removeFirst();
+            queued[outputIndex] = false;
+            if (required[outputIndex].signum() <= 0) continue;
+            if (effectiveOutput[outputIndex].signum() <= 0) return null;
+            BigInteger needed = ceilDivide(required[outputIndex], effectiveOutput[outputIndex]);
+            if (needed.compareTo(firings[outputIndex]) <= 0) continue;
+            if (!limits.exactAmounts && needed.compareTo(LONG_MAX) > 0) {
+                stoppedBy = Failure.LONG_RANGE_OVERFLOW;
+                return null;
+            }
+            BigInteger delta = needed.subtract(firings[outputIndex]);
+            firings[outputIndex] = needed;
+            for (DemandEdge edge : consumers.get(outputIndex)) {
+                int target = edge.keyIndex;
+                required[target] = required[target].add(edge.amount.multiply(delta));
+                if (selected[target] != null && !queued[target]) {
+                    pending.addLast(target);
+                    queued[target] = true;
                 }
             }
-        } while (changed);
+        }
 
         for (int keyIndex = 0; keyIndex < size; keyIndex++) {
             K key = component.get(keyIndex);
@@ -700,6 +706,9 @@ final class AelisCyclicDemandSolver<K, V> {
             }
         }
         return result;
+    }
+
+    private record DemandEdge(int keyIndex, BigInteger amount) {
     }
 
     private static BigInteger ceilDivide(BigInteger value, BigInteger divisor) {

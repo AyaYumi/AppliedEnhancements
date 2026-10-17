@@ -1,6 +1,7 @@
 package com.appliedenhancements.api;
 
 import appeng.api.stacks.AEKey;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -95,10 +96,27 @@ public record AelisCycleExecutionPlan(
             AEKey patternDefinition,
             long crafts,
             Map<AEKey, Long> inputsPerCraft,
-            Set<AEKey> selfReplenishingInputs) {
+            Set<AEKey> selfReplenishingInputs,
+            BigInteger exactCrafts) {
+        /** Retains the constructor used by existing CPU integrations. */
+        public Step(AEKey patternDefinition, long crafts,
+                Map<AEKey, Long> inputsPerCraft, Set<AEKey> selfReplenishingInputs) {
+            this(patternDefinition, crafts, inputsPerCraft, selfReplenishingInputs,
+                    BigInteger.valueOf(crafts));
+        }
+
+        /** Exact task count; crafts() remains a saturated per-dispatch compatibility view. */
+        public Step(AEKey patternDefinition, BigInteger crafts,
+                Map<AEKey, Long> inputsPerCraft, Set<AEKey> selfReplenishingInputs) {
+            this(patternDefinition, crafts.min(BigInteger.valueOf(Long.MAX_VALUE)).longValueExact(),
+                    inputsPerCraft, selfReplenishingInputs, crafts);
+        }
+
         public Step {
             Objects.requireNonNull(patternDefinition, "patternDefinition");
-            if (crafts <= 0) {
+            Objects.requireNonNull(exactCrafts, "exactCrafts");
+            if (crafts <= 0 || exactCrafts.signum() <= 0
+                    || crafts != exactCrafts.min(BigInteger.valueOf(Long.MAX_VALUE)).longValueExact()) {
                 throw new IllegalArgumentException("Step crafts must be positive");
             }
             inputsPerCraft = positiveMap(inputsPerCraft, "inputsPerCraft");

@@ -2,7 +2,7 @@
 
 Minecraft 1.20.1 / Forge.
 
-Current: 1.1.1-forge. [API index](README.md).
+Current: 1.1.2-forge. [API index](README.md).
 
 | Public query | Result |
 | --- | --- |
@@ -20,7 +20,7 @@ if (AelisSmartDoublingApi.isExternallyManaged(pattern)) {
 
 These are read-only classifications, not capacity, ownership or execution-capability
 checks. Query current pattern state on its owning scheduling thread. Compile and
-run with 1.1.1-forge for the contracts documented here. The query types are also
+run with 1.1.2-forge for the contracts documented here. The query types are also
 available in the updated 1.1.0-forge builds.
 
 `AelisSmartDoublingApi.isExternallyManaged(pattern)` reads the EAEP

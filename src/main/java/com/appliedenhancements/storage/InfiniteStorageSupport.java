@@ -12,14 +12,17 @@ import com.appliedenhancements.Config;
 import com.appliedenhancements.mixin.AelisChildSimulationStateAccessor;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 /** World access is confined to snapshot creation on the server thread. */
 public final class InfiniteStorageSupport {
-    private record Probe(IActionSource source, Set<AEKey> keys) {}
-    private static final ThreadLocal<Probe> PROBE = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> PHYSICAL_EXTRACT = new ThreadLocal<>();
+    private static final ThreadLocal<IdentityHashMap<MEStorage, Boolean>> AVAILABILITY_QUERIES =
+            new ThreadLocal<>();
 
     private InfiniteStorageSupport() {}
 
@@ -72,29 +75,73 @@ public final class InfiniteStorageSupport {
         for (AEKey key : infiniteKeys) list.set(key, Long.MAX_VALUE);
     }
 
-    public static Set<AEKey> snapshot(MEStorage storage, IActionSource source) {
-        if (!Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get()) return Set.of();
-        Probe previous = PROBE.get();
-        Probe probe = new Probe(source == null ? IActionSource.empty() : source, new HashSet<>());
-        PROBE.set(probe);
+    public static Set<AEKey> snapshot(
+            MEStorage storage, IActionSource source, Iterable<AEKey> candidateKeys) {
+        if (!Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get()
+                || !(storage instanceof InfiniteStorageNetworkAccess access)) {
+            return Set.of();
+        }
+        return access.appliedenhancements$snapshotInfiniteKeys(
+                source == null ? IActionSource.empty() : source, candidateKeys);
+    }
+
+    public static Set<AEKey> snapshotInfiniteKeys(Iterable<? extends MEStorage> storages,
+            java.util.function.Predicate<MEStorage> isInfinite,
+            Iterable<AEKey> candidateKeys, IActionSource source) {
+        var candidates = new LinkedHashSet<AEKey>();
+        for (AEKey key : candidateKeys) {
+            if (key != null) candidates.add(key);
+        }
+        var keys = new LinkedHashSet<AEKey>();
+        for (MEStorage storage : storages) {
+            if (keys.size() == candidates.size()) break;
+            if (storage == null || !isInfinite.test(storage)) {
+                continue;
+            }
+
+            for (AEKey key : candidates) {
+                if (keys.contains(key)) continue;
+                if (storage.extract(key, 1, Actionable.SIMULATE,
+                        source == null ? IActionSource.empty() : source) > 0) {
+                    keys.add(key);
+                }
+            }
+        }
+        return Set.copyOf(keys);
+    }
+
+    public static Map<AEKey, Long> availableAmounts(
+            MEStorage storage, Iterable<AEKey> keys, IActionSource source) {
+        var amounts = new LinkedHashMap<AEKey, Long>();
+        for (AEKey key : keys) {
+            if (key != null) {
+                amounts.put(key, Math.max(0L, physicalAvailable(storage, key, source)));
+            }
+        }
+        return Map.copyOf(amounts);
+    }
+
+    public static long physicalAvailable(MEStorage storage, AEKey key, IActionSource source) {
+        var queries = AVAILABILITY_QUERIES.get();
+        if (queries == null) {
+            queries = new IdentityHashMap<>();
+            AVAILABILITY_QUERIES.set(queries);
+        }
+        queries.put(storage, Boolean.TRUE);
         try {
-            storage.getAvailableStacks(new KeyCounter());
-            return Set.copyOf(probe.keys());
+            return storage.extract(key, Long.MAX_VALUE, Actionable.SIMULATE,
+                    source == null ? IActionSource.empty() : source);
         } finally {
-            if (previous == null) PROBE.remove(); else PROBE.set(previous);
+            queries.remove(storage);
+            if (queries.isEmpty()) {
+                AVAILABILITY_QUERIES.remove();
+            }
         }
     }
 
-    public static void observe(MEStorage storage, KeyCounter contents, boolean infiniteStorage) {
-        Probe probe = PROBE.get();
-        if (probe == null || !infiniteStorage) return;
-        for (var entry : contents) {
-            // Go through the mounted wrapper, preserving extraction filters and source checks.
-            if (entry.getLongValue() > 0
-                    && storage.extract(entry.getKey(), 1, Actionable.SIMULATE, probe.source()) > 0) {
-                probe.keys().add(entry.getKey());
-            }
-        }
+    public static boolean isAvailabilityQuery(MEStorage storage) {
+        var queries = AVAILABILITY_QUERIES.get();
+        return queries != null && queries.containsKey(storage);
     }
 
     public static boolean isInfinite(ICraftingInventory inventory, AEKey key) {

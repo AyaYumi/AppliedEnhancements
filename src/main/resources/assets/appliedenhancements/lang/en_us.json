@@ -92,6 +92,7 @@
   "message.appliedenhancements.long_range_disabled": "Long-range crafting is disabled on this server.",
   "message.appliedenhancements.crafting_target_unavailable": "Could not start the crafting calculation: the target grid node is currently unavailable. Check that this terminal is connected and powered.",
   "message.appliedenhancements.crafting_plan_stalled": "The crafting calculation never started, so the crafting plan screen was closed.",
+  "message.appliedenhancements.crafting_reservation_conflict": "The inventory kept changing, so ingredients could not be reserved. Start a new crafting plan.",
   "appliedenhancements.config.max_crafting_order_amount": "Crafting Order Handling",
   "appliedenhancements.config.enable_pattern_caching": "Enable Pattern Caching",
   "appliedenhancements.config.pattern_cache_size": "Pattern Cache Entries per Pattern",

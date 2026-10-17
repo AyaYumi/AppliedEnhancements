@@ -2,7 +2,7 @@
 
 [English](README.md) · [接口文档](docs/README.md) · [配置参考](CONFIGURATION.md)
 
-当前 **1.1.1-forge** 为 Minecraft 1.20.1 / Forge 提供 AE2 规划、存储访问和样板终端
+当前 **1.1.2-forge** 为 Minecraft 1.20.1 / Forge 提供 AE2 规划、存储访问和样板终端
 增强。本版增加共享批量投料事务，让循环 CPU 的首份抽料、额外份数、回滚和原生
 Provider 钩子保持同一材料账本。
 
@@ -22,7 +22,7 @@ Provider 钩子保持同一材料账本。
 | 无限元件 | 标签、运行标记和明确兼容元件；不凭巨大有限数值推断无限 |
 | 样板终端 | 重复/失效筛选、框选、原子剪切粘贴、快速移动接入 |
 | 物品菜单 | ME 网络操作及可选 JEI 配方、搜索、抽取、作弊权限联动 |
-| 日志 | 诊断默认关闭；重复故障与过程记录按全局一分钟窗口限流 |
+| 日志 | 不输出规划追踪或启动配置详情；故障日志按类别及严重程度全局限流 |
 
 ## 安装
 
@@ -30,8 +30,8 @@ Provider 钩子保持同一材料账本。
 默认构建使用 AE2 15.4.10，同一份 JAR 也支持 UELM 15.5.4。ExtendedAE、AE2WTLib、JEI、AdvancedAE 和其他
 附属兼容均为可选；内部接口变化后的新版仍需实际运行验证。
 
-构建 `build/libs/appliedenhancements-1.1.1-forge.jar` 后放入两端 mods，客户端和
-服务端使用相同构建，内部载荷协议为 `1.1.0-forge-2`。附属使用独立安装的公开 API，不嵌入本模组。
+构建 `build/libs/appliedenhancements-1.1.2-forge.jar` 后放入两端 mods，客户端和
+服务端使用相同构建，内部载荷协议为 `1.1.2-forge-3`。附属使用独立安装的公开 API，不嵌入本模组。
 
 ## 配置与操作
 
@@ -70,4 +70,4 @@ InfiniteStorageCellMarker；普通磁盘容量和 Long.MAX_VALUE 数量不代表
 CPU 接受计划不等于获得精确执行能力。动态或不支持的循环保持各自失败/回退边界。
 AELIS 缓存属于本次规划会话，超大合法数量仍会消耗时间与内存。
 
-[本版变更](CHANGELOG.md) · 项目采用 [MIT 许可证](LICENSE)。
+项目采用 [MIT 许可证](LICENSE)。

@@ -313,30 +313,6 @@ class AelisExecutionPolicyTest {
     }
 
     @Test
-    void diagnosticsLogEveryNativeBoundary() {
-        assertEquals(
-                true,
-                AelisExecutionPolicy.shouldLogNativeBoundary(
-                        true, true, 0));
-    }
-
-    @Test
-    void quietModeOnlyLogsSlowOrIncompleteNativeBoundaries() {
-        assertEquals(
-                false,
-                AelisExecutionPolicy.shouldLogNativeBoundary(
-                        false, true, 999_999_999L));
-        assertEquals(
-                true,
-                AelisExecutionPolicy.shouldLogNativeBoundary(
-                        false, true, 1_000_000_000L));
-        assertEquals(
-                true,
-                AelisExecutionPolicy.shouldLogNativeBoundary(
-                        false, false, 0));
-    }
-
-    @Test
     void isolatedMonotonicNativeLeavesAllowBinaryAllocation() {
         assertEquals(
                 true,

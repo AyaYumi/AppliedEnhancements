@@ -7,12 +7,50 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.appliedenhancements.test.TestAEKey;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class AelisCycleRuntimeControllerTest {
+    @Test
+    void exactCycleDoesNotAdvanceAtLongMaxAndRestoresBothProgressAndPendingOutputs() {
+        var pattern = new TestAEKey("huge_cycle");
+        var seed = new TestAEKey("huge_seed");
+        var limit = BigInteger.valueOf(Long.MAX_VALUE);
+        var crafts = limit.multiply(BigInteger.TWO).add(BigInteger.TEN);
+        var plan = new AelisCycleExecutionPlan(
+                List.of(new AelisCycleExecutionPlan.Step(pattern, crafts, Map.of(seed, 1L), Set.of(seed))),
+                Map.of(seed, 1L), Set.of(seed), AelisCycleSeedPolicy.PRESERVE_MINIMUM,
+                new AelisCycleExecutionPlan.Phase(Set.of(), Map.of(pattern, Map.of(seed, 2L))));
+        var runtime = AelisCycleRuntimeController.withCyclePhase(plan);
+        assertEquals(crafts, runtime.exactRemainingCrafts());
+        assertEquals(Long.MAX_VALUE, runtime.remainingCrafts());
+        assertEquals(1L, runtime.requiredRetainedAmount(seed));
+
+        var beforeDispatch = runtime.snapshot();
+        runtime.patternDispatched(pattern, Long.MAX_VALUE);
+        assertFalse(runtime.isComplete());
+        assertEquals(limit.add(BigInteger.TEN), runtime.exactRemainingCrafts());
+        assertEquals(limit.multiply(BigInteger.TWO), runtime.snapshot().exactPendingOutputs().get(seed));
+
+        var restored = AelisCycleRuntimeController.withCyclePhase(plan, runtime.snapshot());
+        restored.recordReturned(seed, Long.MAX_VALUE);
+        assertEquals(limit, restored.snapshot().exactPendingOutputs().get(seed));
+        restored.patternDispatched(pattern, limit.add(BigInteger.TEN));
+        assertTrue(restored.isComplete());
+        assertFalse(restored.isCyclePhaseComplete());
+        restored.recordReturned(seed, restored.snapshot().exactPendingOutputs().get(seed).subtract(BigInteger.ONE));
+        assertFalse(restored.isCyclePhaseComplete());
+        restored.recordReturned(seed, 1);
+        assertTrue(restored.isCyclePhaseComplete());
+
+        runtime.restore(beforeDispatch);
+        assertEquals(crafts, runtime.exactRemainingCrafts());
+        assertTrue(runtime.snapshot().exactPendingOutputs().isEmpty());
+    }
+
     @Test
     void enforcesProvenStepOrderAndExposesOrdinaryConsumerFloor() {
         var makeC = new TestAEKey("make_c");

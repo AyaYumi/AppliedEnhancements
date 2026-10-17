@@ -196,6 +196,55 @@ class AelisCyclicDemandSolverTest {
                 stateLimited.failure());
     }
 
+    @Test
+    void sparsePropagationMatchesReferenceBalanceIterationOnProductiveRings() {
+        var random = new java.util.Random(917);
+        for (int trial = 0; trial < 100; trial++) {
+            int size = 2 + random.nextInt(5);
+            var variants = new LinkedHashMap<String,
+                    List<AelisCyclicDemandSolver.Variant<String, String>>>();
+            var demands = new LinkedHashMap<String, BigInteger>();
+            var available = new LinkedHashMap<String, BigInteger>();
+            long[] outputs = new long[size];
+            long[] inputs = new long[size];
+            long[] stock = new long[size];
+            long[] demand = new long[size];
+            long[] reference = new long[size];
+            for (int index = 0; index < size; index++) {
+                inputs[index] = 1 + random.nextInt(3);
+                outputs[index] = inputs[index] + 2;
+                stock[index] = random.nextInt(4);
+                demand[index] = random.nextInt(100);
+                String key = "K" + index;
+                variants.put(key, List.of(variant("P" + index, key, outputs[index],
+                        input("K" + ((index + 1) % size), 1),
+                        input("K" + ((index + 1) % size), inputs[index] - 1 == 0 ? 1 : inputs[index] - 1))));
+                // Both input slots intentionally share one key.
+                inputs[index] = inputs[index] == 1 ? 2 : inputs[index];
+                demands.put(key, bi(demand[index]));
+                available.put(key, bi(stock[index]));
+            }
+            boolean changed;
+            do {
+                changed = false;
+                for (int index = 0; index < size; index++) {
+                    int producer = (index + size - 1) % size;
+                    long required = demand[index] - stock[index] + inputs[producer] * reference[producer];
+                    long needed = required <= 0 ? 0 : (required + outputs[index] - 1) / outputs[index];
+                    if (needed > reference[index]) {
+                        reference[index] = needed;
+                        changed = true;
+                    }
+                }
+            } while (changed);
+            var result = solve(variants, demands, available, limits(256, 1_000_000));
+            assertTrue(result.solved(), () -> String.valueOf(result.failure()));
+            for (int index = 0; index < size; index++) {
+                assertEquals(bi(reference[index]), result.plan().firings().getOrDefault("P" + index, BigInteger.ZERO));
+            }
+        }
+    }
+
     private static AelisCyclicDemandSolver.Result<String, String> solve(
             Map<String, List<AelisCyclicDemandSolver.Variant<String, String>>> variants,
             Map<String, BigInteger> demands,

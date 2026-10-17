@@ -40,7 +40,9 @@ public final class AelisCycleRuntimePreparation {
                 pending.putAll(recoverPending(prepared, state, normalized, waitingFor));
             }
             return AelisCycleRuntimeController.withCyclePhase(prepared, new AelisCycleRuntimeController.State(
-                    state.stepIndex(), state.remainingCrafts(), pending));
+                    state.stepIndex(), state.remainingCrafts(), pending,
+                    state.exactRemainingCrafts(), state.exactPendingOutputs().isEmpty()
+                            ? exactPending(pending) : state.exactPendingOutputs()));
         } catch (RuntimeException unavailable) {
             com.appliedenhancements.runtime.AelisPlanningLog.warn(
                     "Could not prepare saved AELIS cycle phase; previous runtime retained", unavailable);
@@ -79,6 +81,12 @@ public final class AelisCycleRuntimePreparation {
         return counts;
     }
 
+    private static Map<AEKey, java.math.BigInteger> exactPending(Map<AEKey, Long> values) {
+        var exact = new LinkedHashMap<AEKey, java.math.BigInteger>();
+        values.forEach((key, amount) -> exact.put(key, java.math.BigInteger.valueOf(amount)));
+        return Map.copyOf(exact);
+    }
+
     private static Map<AEKey, Long> recoverPending(
             AelisCycleExecutionPlan plan, AelisCycleRuntimeController.State state,
             Map<IPatternDetails, Long> tasks, KeyCounter waitingFor) {
@@ -100,14 +108,15 @@ public final class AelisCycleRuntimePreparation {
         var dispatchedOutputs = new LinkedHashMap<AEKey, Long>();
         for (int index = 0; index < plan.steps().size() && index <= state.stepIndex(); index++) {
             var step = plan.steps().get(index);
-            long dispatched = index < state.stepIndex()
-                    ? step.crafts() : step.crafts() - state.remainingCrafts();
-            if (dispatched <= 0) continue;
+            var dispatched = index < state.stepIndex()
+                    ? step.exactCrafts() : step.exactCrafts().subtract(state.exactRemainingCrafts());
+            if (dispatched.signum() <= 0) continue;
             for (var output : plan.phase().outputsPerPattern()
                     .getOrDefault(step.patternDefinition(), Map.of()).entrySet()) {
                 if (!ambiguousOutputs.contains(output.getKey())) {
                     dispatchedOutputs.merge(output.getKey(),
-                            SaturatingLongMath.multiply(output.getValue(), dispatched),
+                            com.github.appliedenhancements.crafting.aelis.AelisBigIntegerMath.saturatingLong(
+                                    java.math.BigInteger.valueOf(output.getValue()).multiply(dispatched)),
                             SaturatingLongMath::add);
                 }
             }

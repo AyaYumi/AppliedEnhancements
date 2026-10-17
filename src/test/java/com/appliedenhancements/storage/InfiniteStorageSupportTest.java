@@ -11,6 +11,7 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.AEKeyType;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,6 +79,59 @@ class InfiniteStorageSupportTest {
         assertFalse(InfiniteStorageSupport.isPhysicalExtract());
     }
 
+    @Test
+    void infiniteSnapshotProbesOnlyRequestedKeysOnMarkedStorages() {
+        var finite = new ListedStorage(Map.of(WATER, 10L));
+        var infinite = new ListedStorage(Map.of(INFINITE, 5L));
+
+        var keys = InfiniteStorageSupport.snapshotInfiniteKeys(
+                List.of(finite, infinite), storage -> storage == infinite,
+                List.of(INFINITE), IActionSource.empty());
+
+        assertEquals(Set.of(INFINITE), keys);
+        assertEquals(0, finite.listings);
+        assertEquals(0, infinite.listings);
+        assertEquals(List.of(INFINITE), infinite.extractionQueries);
+    }
+
+    @Test
+    void infiniteSnapshotDoesNotProbeKeysOutsideTheCandidateSet() {
+        var infinite = new ListedStorage(Map.of(WATER, 10L, INFINITE, 5L));
+
+        var keys = InfiniteStorageSupport.snapshotInfiniteKeys(
+                List.of(infinite), storage -> true, List.of(WATER), IActionSource.empty());
+
+        assertEquals(Set.of(WATER), keys);
+        assertEquals(0, infinite.listings);
+        assertEquals(List.of(WATER), infinite.extractionQueries);
+    }
+
+    @Test
+    void infiniteSnapshotStopsAfterFindingEachCandidateKey() {
+        var first = new ListedStorage(Map.of(INFINITE, 5L));
+        var second = new ListedStorage(Map.of(INFINITE, 8L));
+
+        var keys = InfiniteStorageSupport.snapshotInfiniteKeys(
+                List.of(first, second), storage -> true,
+                List.of(INFINITE), IActionSource.empty());
+
+        assertEquals(Set.of(INFINITE), keys);
+        assertEquals(List.of(INFINITE), first.extractionQueries);
+        assertEquals(List.of(), second.extractionQueries);
+    }
+
+    @Test
+    void requestedAvailabilityDoesNotListUnrelatedInventory() {
+        var storage = new ListedStorage(Map.of(WATER, 42L, INFINITE, 17L));
+
+        var available = InfiniteStorageSupport.availableAmounts(
+                storage, List.of(WATER), IActionSource.empty());
+
+        assertEquals(Map.of(WATER, 42L), available);
+        assertEquals(0, storage.listings);
+        assertEquals(List.of(WATER), storage.extractionQueries);
+    }
+
     private static class ProbeStorage implements MEStorage {
         private final Map<AEKey, Long> available;
         private int probes;
@@ -92,6 +146,33 @@ class InfiniteStorageSupportTest {
             assertEquals(Actionable.SIMULATE, mode);
             assertEquals(Long.MAX_VALUE, amount);
             ++probes;
+            return Math.min(amount, available.getOrDefault(what, 0L));
+        }
+
+        @Override
+        public Component getDescription() {
+            return Component.empty();
+        }
+    }
+
+    private static final class ListedStorage implements MEStorage {
+        private final Map<AEKey, Long> available;
+        private final List<AEKey> extractionQueries = new ArrayList<>();
+        private int listings;
+
+        private ListedStorage(Map<AEKey, Long> available) {
+            this.available = available;
+        }
+
+        @Override
+        public void getAvailableStacks(KeyCounter output) {
+            ++listings;
+            available.forEach(output::set);
+        }
+
+        @Override
+        public long extract(AEKey what, long amount, Actionable mode, IActionSource source) {
+            extractionQueries.add(what);
             return Math.min(amount, available.getOrDefault(what, 0L));
         }
 

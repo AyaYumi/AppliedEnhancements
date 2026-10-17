@@ -18,4 +18,11 @@ public interface AelisBigIntegerCraftingTracker extends AelisBigIntegerCraftAmou
 
     void appliedenhancements$mergeBigIntegerCraftAmounts(
             Map<AEKey, BigInteger> amounts);
+
+    /** Append inside the owning simulation transaction without exposing its mutable ledger. */
+    default void appliedenhancements$recordBigIntegerMissing(AEKey key, BigInteger amount) {
+        var missing = new java.util.LinkedHashMap<>(appliedenhancements$getBigIntegerMissingAmounts());
+        missing.merge(key, amount, BigInteger::add);
+        appliedenhancements$setBigIntegerMissingAmounts(missing);
+    }
 }
