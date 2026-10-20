@@ -2,7 +2,7 @@
 
 Minecraft 1.21.1 / NeoForge.
 
-Current: 1.1.2. [API index](README.md).
+Current: 1.1.3. [API index](README.md).
 
 | Public query | Result |
 | --- | --- |

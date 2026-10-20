@@ -4,12 +4,12 @@
 
 Exact CPU execution: see [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md) for CPU-independent exact plans, output progress and persistence. Custom CPUs opt in through the public execution contracts.
 
-The current `1.1.2` source defaults to AE2 `19.2.18` and retains
+The current `1.1.3` source defaults to AE2 `19.2.18` and retains
 the `[19.2.17,)` dependency range. Public API
 signatures use AE2 types; internal CPU display hooks are isolated compatibility
 implementation and require runtime verification after dependency changes.
 
-This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.1.2`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+This guide is intended for NeoForge mod authors integrating with Applied Enhancements `1.1.3`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 ## Compatibility baseline
 
@@ -19,9 +19,9 @@ This guide is intended for NeoForge mod authors integrating with Applied Enhance
 | Java | `21` | Compilation and runtime target |
 | NeoForge | `21.1.220` | Build/runtime validation version; currently declared range: `[21.1.220,)` |
 | Applied Energistics 2 | `19.2.18` | Declared range: `[19.2.17,)`; public signatures directly reference AE2 types |
-| Applied Enhancements | `1.1.2` | Version covered by this guide |
+| Applied Enhancements | `1.1.3` | Version covered by this guide |
 
-Version `1.1.2` continues to provide the public APIs introduced in `1.1.1`, including the shared extraction/ownership API `AelisBatchExecutionContext` and `AelisSmartDoublingApi` for native enabled-state queries. See [native smart doubling](SMART_DOUBLING_API.md). Clients and servers use the same build; the internal payload protocol is `10`. Consumers of the new query need `1.1.1` or later at compile time and runtime.
+Version `1.1.3` continues to provide the public APIs introduced in `1.1.1`, including the shared extraction/ownership API `AelisBatchExecutionContext` and `AelisSmartDoublingApi` for native enabled-state queries. See [native smart doubling](SMART_DOUBLING_API.md). Clients and servers use the same build; the internal payload protocol is `10`. Consumers of the new query need `1.1.1` or later at compile time and runtime.
 
 BigInteger plans are submitted without a universal CPU capability precheck. A saturated long projection does not force `simulation()` or override the CPU's submission result. Server-side integrations should read exact quantities through `AelisExactCraftingPlanApi.read(plan)`; `AelisCycleExecutionApi.copyMetadata` preserves them. The legacy `isPreviewOnly` marker now only indicates a saturated projection. The standard long fields remain projections, so acceptance by an unadapted CPU does not establish exact BigInteger execution support.
 
@@ -61,7 +61,7 @@ The immutable snapshot exposes final output, bytes, crafted/missing/stored/infin
 
 When `Result.shouldFallback()` is true, `fallbackCategory()` supplies a stable `AelisFallbackReason` instead of requiring string parsing. Unknown details map to `OTHER`, errors to `INTERNAL_ERROR`, and success or branch failure to `NONE`. Both the AELIS and legacy MaxFast results expose this query; diagnostic text remains available.
 
-Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and explicit exact service calls work independently of `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. The APIs described here are available starting with `1.1.1`; the current release is `1.1.2`.
+Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and explicit exact service calls work independently of `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. The APIs described here are available starting with `1.1.1`; the current release is `1.1.3`.
 
 ## Development dependency
 
@@ -74,10 +74,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.18"
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly files("libs/appliedenhancements-1.1.2.jar")
+    compileOnly files("libs/appliedenhancements-1.1.3.jar")
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly files("libs/appliedenhancements-1.1.2.jar")
+    runtimeOnly files("libs/appliedenhancements-1.1.3.jar")
 }
 ```
 
@@ -147,7 +147,7 @@ The main integration types are listed below; exact request and metadata types ar
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.2` uses internal payload protocol `10`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.3` uses internal payload protocol `10`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, but not server-only task counts, third-party registrations or custom CPU state. Payload classes are internal.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 

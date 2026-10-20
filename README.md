@@ -6,7 +6,7 @@
 
 [中文](README_ZH.md) · [API documentation](docs/README.md) · [Configuration](CONFIGURATION.md)
 
-**1.1.2** extends AE2 crafting, storage access and pattern terminals on Minecraft
+**1.1.3** extends AE2 crafting, storage access and pattern terminals on Minecraft
 1.21.1 / NeoForge. It adds shared batch extraction/ownership transactions used by
 cycle-aware CPUs, while retaining existing planner and terminal APIs.
 
@@ -22,6 +22,7 @@ retain AE2's normal missing-material result.
 | --- | --- |
 | Crafting orders | Native, long-range or exact BigInteger input modes; exact quantities with a 1,048,576-character transport limit |
 | AELIS | Session-local planner, exact material/byte metadata, cycle solving and safe supported fallback |
+| Plan review | Compact AELIS screen, exact material columns, cyclic quantities, filters/search and optional JEI missing-material bookmarks |
 | Cycle execution | One protected inventory view for initial/batch extraction, phase limits, rollback and pending returns |
 | Manual confirmation | Finite stock reservations across open confirmations; explicitly infinite sources remain available |
 | Storage | Pattern/container caches, storage-bus candidate index and validated import/export slot hints |
@@ -37,7 +38,7 @@ The default build uses AE2 19.2.18. ExtendedAE, AE2WTLib, JEI, AdvancedAE,
 Data Energistics and other integrations remain optional. New addon versions need
 runtime verification when they change internal hooks.
 
-Build `build/libs/appliedenhancements-1.1.2.jar` and install the same build on
+Build `build/libs/appliedenhancements-1.1.3.jar` and install the same build on
 client and server. Internal network protocol is 10. Addons use the separate public API; this mod is
 not embedded in their JARs.
 
@@ -52,6 +53,11 @@ Pattern Quick Move defaults to right-click; item actions default to Alt +
 right-click. Both are GUI-only, independently configurable NeoForge key bindings.
 Server movement/extraction revalidates permissions, source items and destination
 capacity. JEI give actions retain JEI's synchronized cheat permissions.
+
+AELIS results open a compact plan review with an AE2-view fallback. Missing materials
+are highlighted and can be bookmarked through JEI. Hold Shift when Start is disabled
+to submit a waiting-input order; an available CPU with enough storage is still required.
+This does not create missing ingredients or bypass server submission checks.
 
 Infinite supply requires an explicit marker such as the
 `#appliedenhancements:infinite_storage_cells` item tag or InfiniteStorageCellMarker.

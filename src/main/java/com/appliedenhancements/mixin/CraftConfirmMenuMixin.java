@@ -59,7 +59,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Mixin(value = CraftConfirmMenu.class, remap = false)
 public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgressMenuBridge,
-        LongCraftingConfirmMenuBridge, AelisCalculationPathMenuBridge, com.appliedenhancements.ae2.ExactCraftingMenuBridge {
+        LongCraftingConfirmMenuBridge, AelisCalculationPathMenuBridge, com.appliedenhancements.ae2.ExactCraftingMenuBridge,
+        com.appliedenhancements.ae2.ForceCraftingMenuBridge {
     @Unique private BigInteger appliedenhancements$exactRequestedAmount;
 
     @Override public boolean appliedenhancements$planExact(AEKey what, BigInteger requested) {
@@ -646,6 +647,35 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         var reservation = this.result == appliedenhancements$reservedPlan ? appliedenhancements$inventoryReservation : null;
         if (reservation == null) { original.call(); return; }
         reservation.submit(() -> { original.call(); return null; });
+    }
+
+    @Override
+    public void appliedenhancements$startForced() {
+        var menu = (CraftConfirmMenu) (Object) this;
+        if (menu.isClientSide()) {
+            PacketDistributor.sendToServer(new com.appliedenhancements.network.ForceCraftingStartPayload(menu.containerId));
+            return;
+        }
+        if (menu.getPlayer().containerMenu != menu || !menu.stillValid(menu.getPlayer())
+                || appliedenhancements$calculationPath != AelisCalculationPath.AELIS
+                || this.result == null || appliedenhancements$getCurrentGrid() == null) return;
+        ICraftingPlan original = this.result;
+        final ICraftingPlan forced;
+        try {
+            forced = com.appliedenhancements.runtime.AelisForcedPlan.prepare(original);
+        } catch (ArithmeticException unsupportedAmount) {
+            menu.getPlayer().displayClientMessage(Component.translatable(
+                    "gui.appliedenhancements.plan.force_amount_too_large"), false);
+            return;
+        }
+        this.result = forced;
+        if (appliedenhancements$reservedPlan == original) appliedenhancements$reservedPlan = forced;
+        try {
+            menu.startJob();
+        } finally {
+            if (this.result == forced) this.result = original;
+            if (appliedenhancements$reservedPlan == forced) appliedenhancements$reservedPlan = original;
+        }
     }
 
     @WrapOperation(method = "startJob", at = @At(value = "INVOKE",

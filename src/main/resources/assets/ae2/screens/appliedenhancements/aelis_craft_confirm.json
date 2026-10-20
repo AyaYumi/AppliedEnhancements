@@ -1,0 +1,4 @@
+{
+  "includes": ["../craft_confirm.json"],
+  "generatedBackground": {"width": 500, "height": 330}
+}

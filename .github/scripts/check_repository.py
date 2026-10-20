@@ -35,6 +35,12 @@ for relative in filter(None, paths):
         failures.append(f"{relative}: temporary/generated resource")
     if relative.startswith("docs/") and (source.parent != ROOT / "docs" or source.name not in allowed_docs):
         failures.append(f"{relative}: not public API documentation")
+    if relative.startswith("src/main/java/") and source.suffix == ".java":
+        content = source.read_text(encoding="utf-8")
+        if re.search(r"\bSystem\.(?:out|err)\b|\.printStackTrace\s*\(", content):
+            failures.append(f"{relative}: direct console/stack trace output in production code")
+        if re.search(r"\b(?:LOGGER|logger)\.(?:trace|debug)\s*\(", content):
+            failures.append(f"{relative}: development trace logging in production code")
     if source.suffix.lower() in {".json", ".mcmeta"}:
         try:
             json.loads(source.read_text(encoding="utf-8"))
