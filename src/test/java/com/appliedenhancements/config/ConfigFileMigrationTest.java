@@ -37,6 +37,7 @@ class ConfigFileMigrationTest {
                 .build()) {
             migrated.load();
             assertEquals(true, migrated.get("crafting.aelis.enable_automatic_planner"));
+            assertEquals(true, migrated.get("crafting.aelis.enable_plan_screen"));
             assertEquals(654321,
                     ((Number) migrated.get("crafting.aelis.max_nodes")).intValue());
             assertEquals(4321,
@@ -185,6 +186,7 @@ class ConfigFileMigrationTest {
 
                 [crafting.aelis]
                 enable_automatic_planner = false
+                enable_plan_screen = false
                 """);
 
         ConfigFileMigration.migrate(configDirectory);
@@ -194,6 +196,7 @@ class ConfigFileMigrationTest {
                 .build()) {
             migrated.load();
             assertEquals("LONG_MAX", migrated.get("crafting.max_crafting_order_amount"));
+            assertEquals(false, migrated.get("crafting.aelis.enable_plan_screen"));
             assertFalse(migrated.contains("crafting.enable_long_range_crafting"));
         }
     }

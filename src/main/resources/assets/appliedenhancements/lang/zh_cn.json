@@ -112,6 +112,7 @@
   "appliedenhancements.config.cycle_seed_policy": "循环种子策略",
   "appliedenhancements.config.section.crafting": "合成",
   "appliedenhancements.config.section.aelis": "AELIS 规划器",
+  "appliedenhancements.config.enable_aelis_plan_screen": "AELIS 合成计划新界面",
   "appliedenhancements.config.section.cycle_solver": "循环依赖求解器",
   "appliedenhancements.config.section.performance": "性能优化",
   "appliedenhancements.config.section.pattern_cache": "样板缓存",

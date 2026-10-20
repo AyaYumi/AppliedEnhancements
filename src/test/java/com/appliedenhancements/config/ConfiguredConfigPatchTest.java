@@ -17,6 +17,28 @@ class ConfiguredConfigPatchTest {
     private static final String MATERIALS = "crafting.enable_enhanced_material_calculation";
     private static final String PLANNER = "crafting.aelis.enable_automatic_planner";
     private static final String DIAGNOSTICS = "crafting.aelis.enable_diagnostics";
+    private static final String PLAN_SCREEN = "crafting.aelis.enable_plan_screen";
+
+    @Test
+    void missingPlanScreenSettingDefaultsOnAndAnExplicitDisableSurvivesOtherSaves() {
+        var current = customizedConfig();
+        assertEquals(true, current.get(PLAN_SCREEN));
+        var changes = emptyConfig();
+        changes.set(PLAN_SCREEN, false);
+        ConfiguredConfigPatch.apply(current, changes);
+        Config.SPEC.correct(current);
+        assertEquals(false, current.get(PLAN_SCREEN));
+        assertCustomValues(current);
+
+        changes = emptyConfig();
+        changes.set(PLANNER, true);
+        ConfiguredConfigPatch.apply(current, changes);
+        Config.SPEC.correct(current);
+        assertEquals(false, current.get(PLAN_SCREEN));
+        assertEquals(true, current.get(PLANNER));
+        assertCustomValues(current);
+        assertTrue(Config.SPEC.isCorrect(current));
+    }
 
     @Test
     void enablingMaterialsAndDiagnosticsPreservesProgressAndPlanner() {

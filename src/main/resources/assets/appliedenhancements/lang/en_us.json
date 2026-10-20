@@ -112,6 +112,7 @@
   "appliedenhancements.config.cycle_seed_policy": "Cycle Seed Policy",
   "appliedenhancements.config.section.crafting": "Crafting",
   "appliedenhancements.config.section.aelis": "AELIS Planner",
+  "appliedenhancements.config.enable_aelis_plan_screen": "AELIS Crafting Plan Screen",
   "appliedenhancements.config.section.cycle_solver": "Cyclic Dependency Solver",
   "appliedenhancements.config.section.performance": "Performance",
   "appliedenhancements.config.section.pattern_cache": "Pattern Cache",

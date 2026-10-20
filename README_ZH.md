@@ -38,7 +38,7 @@ Provider 钩子保持同一材料账本。
 
 配置位于正在使用实例的 `config/appliedenhancements-common.toml`。
 订单接管、进度显示、增强材料预览和自动 AELIS 默认关闭；缓存与存储优化默认开启。
-完整 [17 项配置](CONFIGURATION.md) 描述分组、默认值、范围和迁移。
+完整 [18 项配置](CONFIGURATION.md) 描述分组、默认值、范围和迁移。
 
 样板快速移动默认右键，物品操作默认 Alt＋右键，两项独立绑定且只在 GUI 内生效。
 服务端重新验证权限、源物品和容量。JEI 给予物品沿用 JEI 的同步作弊权限。
@@ -46,6 +46,8 @@ Provider 钩子保持同一材料账本。
 AELIS 结果使用紧凑的计划确认界面，可随时切回 AE2 原版视图。缺失材料高亮显示，
 并可通过 JEI 一键收藏。开始按钮不可用时按住 Shift 可提交等待补料的订单，
 仍需可用 CPU 及足够的存储容量，不会生成缺失材料或绕过服务端提交检查。
+新界面默认开启；将客户端配置中的 `crafting.aelis.enable_plan_screen` 设为 `false`
+即可保留 AE2 原版确认界面。
 
 无限来源须明确标记，如 `#appliedenhancements:infinite_storage_cells` 或
 InfiniteStorageCellMarker；普通磁盘容量和 Long.MAX_VALUE 数量不代表无限供料。

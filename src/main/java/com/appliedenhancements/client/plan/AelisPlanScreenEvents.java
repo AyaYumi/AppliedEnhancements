@@ -2,6 +2,7 @@ package com.appliedenhancements.client.plan;
 
 import appeng.client.gui.me.crafting.CraftConfirmScreen;
 import com.appliedenhancements.AppliedEnhancements;
+import com.appliedenhancements.Config;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathMenuBridge;
 import java.util.Collections;
@@ -23,7 +24,8 @@ public final class AelisPlanScreenEvents {
     @SubscribeEvent
     public static void onRender(ScreenEvent.Render.Pre event) {
         // Do not replace other addons' subclasses, unfinished plans or non-AELIS results.
-        if (event.getScreen().getClass() != CraftConfirmScreen.class) return;
+        if (event.getScreen().getClass() != CraftConfirmScreen.class
+                || !Config.ENABLE_AELIS_PLAN_SCREEN.get()) return;
         var original = (CraftConfirmScreen) event.getScreen();
         var minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.screen != original || ORIGINAL_VIEW.contains(original)

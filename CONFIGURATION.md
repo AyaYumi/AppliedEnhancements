@@ -12,6 +12,7 @@ in the active instance. Edit existing sections and restart both sides.
 | `crafting.enable_progress_display` | false | Calculation progress and planner-path display |
 | `crafting.enable_enhanced_material_calculation` | false | Enhanced preview stock/crafting/missing statistics |
 | `crafting.aelis.enable_automatic_planner` | false | Automatic AELIS interception and manual-plan stock reservations |
+| `crafting.aelis.enable_plan_screen` | true | Local client AELIS plan-review screen; false keeps AE2's original confirmation screen without changing planning or execution |
 | `crafting.aelis.enable_big_integer_planning` | true | Exact automatic AELIS arithmetic preference; explicit exact service requests remain exact even when false |
 | `crafting.aelis.max_nodes` | 100000 | 1000–1,000,000 nodes per attempt |
 | `crafting.aelis.compile_budget_ms` | 2000 | 100–30000 ms per compile attempt |
@@ -27,6 +28,12 @@ in the active instance. Edit existing sections and restart both sides.
 | `storage.infinite.enable_listing_limit_bypass` | false | Explicitly marked infinite cells supply without finite listing limits |
 
 ## Planning and reservations
+
+The new AELIS plan screen defaults on. To disable it, set
+`enable_plan_screen = false` in the existing `[crafting.aelis]` section on the
+client. Once the changed configuration is loaded, an open AELIS plan screen also
+returns to the original AE2 view. This is a local presentation preference, not a
+server-controlled planner or crafting switch.
 
 Automatic AELIS defaults off. Explicit planner API calls remain available under
 their own contracts. BIG_INTEGER input selects explicit exact requests; the
@@ -61,9 +68,13 @@ retry, cancellation or material ownership.
 
 ## 中文
 
-上表覆盖当前全部 17 项配置，注释与界面翻译支持中英文。订单模式为三选一：
+上表覆盖当前全部 18 项配置，注释与界面翻译支持中英文。订单模式为三选一：
 关闭接管、long 上限、大整数。自动 AELIS 与大整数规划分别控制自动介入和精确
 算术偏好；显式精确请求不受偏好开关阻止，不能把 long 投影当作完整订单或无限来源。
+
+新界面默认启用。客户端配置文件已有的 `[crafting.aelis]` 节中，设置
+`enable_plan_screen = false` 即可关闭；配置重新加载后，已经打开的新界面也会切回
+AE2 原版确认界面。此项只控制当前客户端的界面，不影响服务端规划和合成执行。
 
 无限元件通过标签、运行标记或明确兼容来源识别；普通大容量元件不会因数字很大
 被视为无限。修改已有节后重启，旧配置迁移会保存备份。诊断选项仅供兼容联动读取，

@@ -66,6 +66,7 @@ public final class ConfigFileMigration {
                                     "crafting.max_fast.enable_automatic_planner",
                                     readBoolean(legacyPreAelis,
                                             "maxfast.enableAutomaticMaxFastPlanner", false))),
+                    readBoolean(common, "crafting.aelis.enable_plan_screen", true),
                     (int) clamp(readLong(common, "crafting.aelis.max_nodes",
                             readLong(common, "crafting.max_fast.max_nodes",
                                     readLong(legacyPreAelis,
@@ -148,6 +149,7 @@ public final class ConfigFileMigration {
                     values.enhancedMaterialCalculation());
             output.set("crafting.aelis.enable_automatic_planner",
                     values.automaticAelis());
+            output.set("crafting.aelis.enable_plan_screen", values.aelisPlanScreen());
             output.set("crafting.aelis.max_nodes", values.aelisMaxNodes());
             output.set("crafting.aelis.compile_budget_ms",
                     values.aelisCompileBudgetMs());
@@ -266,6 +268,7 @@ public final class ConfigFileMigration {
             boolean progressDisplay,
             boolean enhancedMaterialCalculation,
             boolean automaticAelis,
+            boolean aelisPlanScreen,
             int aelisMaxNodes,
             int aelisCompileBudgetMs,
             int cycleSolverMaxSccNodes,

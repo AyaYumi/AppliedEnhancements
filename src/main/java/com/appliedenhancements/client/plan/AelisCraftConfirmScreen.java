@@ -10,6 +10,7 @@ import appeng.client.gui.style.StyleManager;
 import appeng.client.gui.widgets.AE2Button;
 import appeng.menu.me.crafting.CraftingPlanSummary;
 import com.appliedenhancements.AppliedEnhancements;
+import com.appliedenhancements.Config;
 import com.appliedenhancements.ae2.ForceCraftingMenuBridge;
 import com.appliedenhancements.client.CraftingPlanAmountFormatter;
 import com.appliedenhancements.client.CraftingStorageFormatter;
@@ -125,6 +126,10 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
 
     @Override
     protected void updateBeforeRender() {
+        if (!Config.ENABLE_AELIS_PLAN_SCREEN.get()) {
+            switchToScreen(original);
+            return;
+        }
         super.updateBeforeRender(); // Includes AE2's CraftErrorScreen and retry/replan behavior.
         if (minecraft.screen != this || start == null) return;
         var plan = menu.getPlan();

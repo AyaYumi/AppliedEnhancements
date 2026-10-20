@@ -15,6 +15,7 @@ public final class Config {
 
     // Crafting / AELIS
     public static final ModConfigSpec.BooleanValue ENABLE_AUTOMATIC_AELIS_PLANNER;
+    public static final ModConfigSpec.BooleanValue ENABLE_AELIS_PLAN_SCREEN;
     public static final ModConfigSpec.BooleanValue ENABLE_AELIS_BIG_INTEGER_PLANNING;
     public static final ModConfigSpec.IntValue AELIS_MAX_NODES;
     public static final ModConfigSpec.IntValue AELIS_COMPILE_BUDGET_MS;
@@ -91,6 +92,16 @@ public final class Config {
                         "Default / 默认值: false")
                 .translation("appliedenhancements.config.enable_automatic_aelis_planner")
                 .define("enable_automatic_planner", false);
+
+        ENABLE_AELIS_PLAN_SCREEN = builder
+                .comment(
+                        "Use the AELIS crafting-plan screen on this client.",
+                        "Disable to use AE2's original confirmation screen without changing planning or execution.",
+                        "在当前客户端使用 AELIS 合成计划新界面。",
+                        "关闭后使用 AE2 原版确认界面，不影响规划与合成执行。",
+                        "Default / 默认值: true")
+                .translation("appliedenhancements.config.enable_aelis_plan_screen")
+                .define("enable_plan_screen", true);
 
         ENABLE_AELIS_BIG_INTEGER_PLANNING = builder
                 .comment(

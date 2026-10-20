@@ -47,7 +47,7 @@ not embedded in their JARs.
 The active instance generates `config/appliedenhancements-common.toml`.
 Order interception, progress display, enhanced material preview and automatic
 AELIS default off; cache/storage optimizations default on. See the complete
-[17-option reference](CONFIGURATION.md) before enabling a planner mode.
+[18-option reference](CONFIGURATION.md) before enabling a planner mode.
 
 Pattern Quick Move defaults to right-click; item actions default to Alt +
 right-click. Both are GUI-only, independently configurable NeoForge key bindings.
@@ -58,6 +58,8 @@ AELIS results open a compact plan review with an AE2-view fallback. Missing mate
 are highlighted and can be bookmarked through JEI. Hold Shift when Start is disabled
 to submit a waiting-input order; an available CPU with enough storage is still required.
 This does not create missing ingredients or bypass server submission checks.
+The new screen defaults on; set `crafting.aelis.enable_plan_screen = false` in the
+client's common configuration to keep AE2's original confirmation view.
 
 Infinite supply requires an explicit marker such as the
 `#appliedenhancements:infinite_storage_cells` item tag or InfiniteStorageCellMarker.

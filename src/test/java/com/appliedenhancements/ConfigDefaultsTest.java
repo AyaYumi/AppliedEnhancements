@@ -37,6 +37,11 @@ class ConfigDefaultsTest {
     }
 
     @Test
+    void aelisPlanScreenIsEnabledByDefault() {
+        assertTrue(Config.ENABLE_AELIS_PLAN_SCREEN.getDefault());
+    }
+
+    @Test
     void validatedModpackPerformanceProfileIsTheDefault() {
         assertEquals(CraftingOrderMode.DISABLED, Config.MAX_CRAFTING_ORDER_AMOUNT.getDefault());
         assertTrue(Config.ENABLE_PATTERN_CACHING.getDefault());
@@ -52,6 +57,7 @@ class ConfigDefaultsTest {
         assertTrue(values.contains("crafting.enable_progress_display"));
         assertTrue(values.contains("crafting.enable_enhanced_material_calculation"));
         assertTrue(values.contains("crafting.aelis.enable_automatic_planner"));
+        assertTrue(values.contains("crafting.aelis.enable_plan_screen"));
         assertTrue(values.contains("crafting.aelis.enable_big_integer_planning"));
         assertTrue(values.contains("crafting.aelis.max_nodes"));
         assertTrue(values.contains("crafting.aelis.compile_budget_ms"));
