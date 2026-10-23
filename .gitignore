@@ -64,7 +64,15 @@ __pycache__/
 # Local Forge dependency artifacts
 /libs/*.jar
 
-# Local investigation notes and generated verification tools
+# Local development fixtures and generated captures
+/src/test/
+/src/integrationTest/
+/qa/
+/tools/qa/
+/screenshots/
+/test-results/
+
+# Local investigation notes and generated tools
 /docs/remaining-interceptions.md
 /docs/development.md
 /docs/DEVELOPMENT.md

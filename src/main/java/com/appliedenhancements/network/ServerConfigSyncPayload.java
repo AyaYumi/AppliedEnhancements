@@ -1,6 +1,5 @@
 package com.appliedenhancements.network;
 
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.CraftingOrderMode;
 import net.minecraft.network.FriendlyByteBuf;

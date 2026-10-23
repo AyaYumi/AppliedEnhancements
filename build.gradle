@@ -32,17 +32,10 @@ minecraft {
             }
         }
 
-        client {
-            property 'forge.enabledGameTestNamespaces', mod_id
-        }
+        client {}
 
         server {
-            property 'forge.enabledGameTestNamespaces', mod_id
             args '--nogui'
-        }
-
-        gameTestServer {
-            property 'forge.enabledGameTestNamespaces', mod_id
         }
 
         data {
@@ -61,7 +54,8 @@ mixin {
 jarJar.enable()
 
 tasks.named('jarJar', Jar).configure {
-    archiveClassifier = (project.hasProperty('uelm') || project.hasProperty('ae2_uelm_version')) ? 'uelm' : ''
+    // One runtime artifact supports both upstream AE2 and UELM.
+    archiveClassifier = ''
     includeEmptyDirs = false
     preserveFileTimestamps = false
     reproducibleFileOrder = true
@@ -121,6 +115,7 @@ configurations {
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
+    // Select the AE2 compile dependency; both implementations use the same release JAR.
     if (project.hasProperty('ae2_uelm_version')) {
         api fg.deobf("appeng:appliedenergistics2-forge:${project.property('ae2_uelm_version')}")
     } else if (project.hasProperty('uelm')) {
@@ -135,12 +130,6 @@ dependencies {
     if (!project.hasProperty('withoutJei')) {
         localRuntime fg.deobf("mezz.jei:jei-1.20.1-forge:${jei_version}")
     }
-
-    testImplementation platform('org.junit:junit-bom:5.11.4')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    // Plain JUnit does not unpack Forge's nested MixinExtras runtime jar.
-    testRuntimeOnly "io.github.llamalad7:mixinextras-common:${mixinextras_version}"
 
     compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixinextras_version}"))
     localRuntime "io.github.llamalad7:mixinextras-forge:${mixinextras_version}"
@@ -176,7 +165,9 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
-    archiveClassifier = (project.hasProperty('uelm') || project.hasProperty('ae2_uelm_version')) ? 'slim-uelm' : 'slim'
+    archiveClassifier = 'slim'
+    // Keep the unbundled intermediate out of the single-JAR distribution directory.
+    destinationDirectory = layout.buildDirectory.dir('intermediates/jars')
     manifest {
         attributes([
                 'Specification-Title'    : mod_id,
@@ -220,12 +211,8 @@ tasks.withType(ProcessResources).configureEach {
     includeEmptyDirs = false
     // Keep editor backups and development artifacts out of runtime resources.
     exclude '**/*.bak', '**/*.old', '**/*.orig', '**/*.rej', '**/*.tmp', '**/*.log', '**/*~',
-            '**/*.bbmodel', '**/*.psd', '**/*.xcf', '**/*.blend',
+            '**/*.bbmodel', '**/*.psd', '**/*.xcf', '**/*.blend', '**/*.md',
             '**/.DS_Store', '**/Thumbs.db', '**/desktop.ini'
-}
-
-tasks.named('test', Test).configure {
-    useJUnitPlatform()
 }
 
 idea {
@@ -235,19 +222,14 @@ idea {
     }
 }
 
-// Both distributable jars must use Forge runtime names.
+// Reobfuscate both the intermediate and the universal runtime JAR for Forge.
 reobf { jarJar {} }
 tasks.named("jarJar").configure { finalizedBy "reobfJarJar" }
-tasks.named("build").configure { dependsOn "jarJar" }
+tasks.named('assemble').configure { dependsOn 'jarJar' }
 
-// Current source documentation ships with both regular and UELM runtime jars.
+// Keep API guides in the repository; runtime artifacts only include the license.
 tasks.withType(Jar).configureEach {
     from('LICENSE')
-    from('docs') {
-        include 'README.md', 'API_INTEGRATION.md', 'API_INTEGRATION_ZH.md', 'BATCH_EXECUTION_API.md',
-                'EXACT_CRAFTING_API.md', 'SMART_DOUBLING_API.md'
-        into 'docs'
-    }
 }
 
 tasks.register('apiJavadoc', Javadoc) {

@@ -1,8 +1,10 @@
-# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.20.1 / 1.1.2-forge）
+# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.20.1 / 1.1.4-forge）
 
 ## English API contract
 
-For Applied Enhancements **1.1.2-forge**, Minecraft **1.20.1**, Java 17 and Forge.
+For Applied Enhancements **1.1.4-forge**, Java 17, Minecraft **1.20.1** and
+Forge 47.4.10+ (build baseline: 47.4.20). AE2 15.4.10 and UELM 15.5.4 use the
+same `appliedenhancements-1.1.4-forge.jar`.
 Call `AelisExactCraftingService.begin(level, requester, request)` on the owning
 server thread with a connected requester. Construction snapshots network state;
 await the returned `Future<ICraftingPlan>` asynchronously. Both
@@ -34,7 +36,7 @@ batches, uses bounded long windows and reports actual deliveries. Unissued
 pending outputs exclude work already dispatched. Explicit infinite inputs never
 become physical refunds; large finite numbers alone do not mark an infinite source.
 Use [shared batch execution](BATCH_EXECUTION_API.md) for cycle seeds, input
-ownership and rollback, and [native smart doubling](SMART_DOUBLING_API.md) to
+ownership and rollback, and [native smart doubling](API_INTEGRATION.md#native-smart-doubling) to
 avoid a second multiplier. The Chinese sections below specify the full lifecycle.
 
 Since 1.1.2-forge, cyclic planning also preserves exact firing counts. Read
@@ -51,12 +53,12 @@ BigInteger ledger of cyclic production alone, separate from total crafted
 quantities when an output also has ordinary work. Metadata attachment and copying
 preserve this ledger. The confirmation rows and full tooltips receive exact cyclic
 amounts; the existing `getCyclicCraftAmounts` exposes saturated long projections.
-Clients and servers must use the same build with payload protocol `1.1.2-forge-3`.
+Clients and servers must use the same build with payload protocol `1.1.4-forge-5`.
 
 ## 中文 API 契约
 
 此 API 通过公开执行契约接入独立 CPU。
-客户端与服务端须使用本次同一构建（内部协议 `1.1.2-forge-3`）；接入方须使用包含这些类的 1.1.2-forge JAR 编译和运行。
+客户端与服务端须使用本次同一构建（网络协议 `1.1.4-forge-5`）；接入方须使用匹配当前构建的 1.1.4-forge JAR 编译和运行。
 
 ## 稳定的计划元数据 API
 
@@ -152,7 +154,7 @@ boolean finished = outputProgress.complete();
 ## 规划阶段的样板倍增
 
 精确样板次数是完整账本，不是仅包含溢出项的补丁；非空时不得再合并旧的 long 任务表，否则会把原始样板和倍增样板重复计算。
-已知原生包装契约由可选兼容识别，无用之物的智能倍增无需设为前置。`AelisScaledPattern` 属于内部兼容接口，不是稳定公开接入点；第三方通过公开倍增查询避免重复包装，并保留完整任务元数据。
+已知原生包装契约由可选兼容识别，无用之物的智能倍增无需设为前置。`AelisScaledPattern` 属于内部兼容接口，不是稳定公开接入点；第三方通过[原生智能倍增查询](API_INTEGRATION_ZH.md#原生智能倍增)避免重复包装，并保留完整任务元数据。
 附加或复制元数据时，会将完整次数按实际包装倍率重新分成整批和原样板余数，并同步重建 long 窗口。
 提交前再次改写计划也保留元数据。已对齐计划的复制不会再次乘除倍率；存档保留批次样板定义和精确剩余次数。
 该修复不扩展接收机器的单批容量，单次材料和输出仍须符合原接口的 long 范围。

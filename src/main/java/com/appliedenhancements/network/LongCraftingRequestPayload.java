@@ -2,9 +2,7 @@ package com.appliedenhancements.network;
 
 import com.appliedenhancements.network.PacketCodec;
 import net.minecraft.network.FriendlyByteBuf;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
 /**

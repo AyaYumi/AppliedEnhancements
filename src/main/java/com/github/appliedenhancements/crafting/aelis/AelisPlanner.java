@@ -3319,25 +3319,6 @@ public final class AelisPlanner {
         return true;
     }
 
-    private static boolean isLiveFirstCandidate(
-            Node node, CraftingTreeNode candidateRoot) {
-        if (candidateRoot == null || node.compiledCandidates.isEmpty()) {
-            return false;
-        }
-        CompiledCandidate candidate = node.compiledCandidates.get(0);
-        if (candidate.sourceIndex != 0) {
-            return false;
-        }
-        var rootBridge = (AelisCraftingTreeNodeBridge) candidateRoot;
-        List<CraftingTreeProcess> processes = withoutNoProgressCandidates(
-                node, rootBridge.molecularmanipulator$getProcesses());
-        if (processes == null || processes.isEmpty()
-                || processes.get(0) != candidate.sourceProcess) {
-            return false;
-        }
-        return isLiveCandidate(candidate, processes.get(0));
-    }
-
     private static boolean hasLiveCandidateSet(
             Node node, CraftingTreeNode candidateRoot) {
         if (candidateRoot == null || !node.allCandidatesCompiled
@@ -3858,26 +3839,6 @@ public final class AelisPlanner {
     }
 
     /**
-     * Simulation-specific certificate for one exact, direct-stock first
-     * candidate. Unlike the real AGGRESSIVE certificate, this proof admits no
-     * descendants whose craft ordering could change the simulated missing
-     * list.
-     */
-    private static boolean hasDirectStockFirstCandidate(
-            Graph graph, Node node) {
-        if (node.directStockFirstCandidate != null) {
-            return node.directStockFirstCandidate;
-        }
-        boolean safe = AelisExecutionPolicy
-                .supportsDirectStockOutputMix(node.amount)
-                && !node.compiledCandidates.isEmpty()
-                && isDirectStockCandidate(
-                        graph, node, node.compiledCandidates.get(0), 0);
-        node.directStockFirstCandidate = safe;
-        return safe;
-    }
-
-    /**
      * Strict certificate for the common large ordered choice whose candidates
      * consume only exact items already present in storage. Different candidate
      * output counts are safe for the sparse/binary capacity mixer because no
@@ -3962,30 +3923,6 @@ public final class AelisPlanner {
                     || !child.edges.isEmpty()
                     || !child.dependencyEdges.isEmpty()
                     || !child.reusableInputs.isEmpty()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static boolean validateLiveDirectStockCandidate(
-            Graph graph, Node node, CompiledCandidate candidate,
-            CraftingSimulationState inventory,
-            GraphConsumableInput requestInput,
-            PauseCheckpoint pauseCheckpoint) throws InterruptedException {
-        if (!validateSparseRootTemplates(
-                node, inventory, requestInput, pauseCheckpoint)) {
-            return false;
-        }
-        for (OrderedGraphInput input : candidate.orderedInputs) {
-            if (input.reusable()) {
-                return false;
-            }
-            GraphConsumableInput consumable = input.consumableInput;
-            if (consumable == null
-                    || !validateSparseConsumableTemplates(
-                            graph.nodes.get(consumable.childIndex),
-                            consumable.child, inventory, pauseCheckpoint)) {
                 return false;
             }
         }
@@ -5951,108 +5888,6 @@ public final class AelisPlanner {
         }
 
         /**
-         * Analyze the compiled graph to determine optimal execution modes.
-         * Nodes that would benefit from native AE2 handling (e.g., complex
-         * multi-candidate patterns, recursive structures) are marked for
-         * selective fallback while the rest uses fast path.
-         */
-        private void analyzeExecutionModes(int[] topologicalOrder) {
-            for (int nodeIndex : topologicalOrder) {
-                Node node = nodes.get(nodeIndex);
-                if (!node.reachable) {
-                    continue;
-                }
-
-                // Check if this node should use full fallback
-                boolean needsFullFallback = false;
-                String fallbackReason = null;
-
-                // Criterion 1: Multiple candidate patterns with different output amounts
-                if (node.candidatePatterns.size() > 1) {
-                    long firstOutput = -1;
-                    for (IPatternDetails pattern : node.candidatePatterns) {
-                        long outputSum = 0;
-                        for (var output : pattern.getOutputs()) {
-                            if (output != null && node.key.equals(output.what())) {
-                                outputSum += output.amount();
-                            }
-                        }
-                        if (firstOutput < 0) {
-                            firstOutput = outputSum;
-                        } else if (firstOutput != outputSum) {
-                            needsFullFallback = true;
-                            fallbackReason = "variable_output_candidates";
-                            break;
-                        }
-                    }
-                }
-
-                // Criterion 2: Deep barrier subtrees (>3 barriers in downstream)
-                if (!needsFullFallback && node.barrier) {
-                    int downstreamBarriers = countDownstreamBarriers(node, topologicalOrder);
-                    if (downstreamBarriers > 3) {
-                        needsFullFallback = true;
-                        fallbackReason = "deep_barrier_subtree:" + downstreamBarriers;
-                    }
-                }
-
-                // Criterion 3: Context-sensitive nodes with ordered choices
-                if (!needsFullFallback && node.logicalOccurrences > 1) {
-                    boolean hasOrderedChoices = false;
-                    for (CraftingTreeNode occurrence : node.occurrences) {
-                        var bridge = (AelisCraftingTreeNodeBridge) occurrence;
-                        List<CraftingTreeProcess> processes = bridge.molecularmanipulator$getProcesses();
-                        if (processes != null && processes.size() > 1) {
-                            hasOrderedChoices = true;
-                            break;
-                        }
-                    }
-                    if (hasOrderedChoices) {
-                        needsFullFallback = true;
-                        fallbackReason = "multi_occurrence_ordered_choices";
-                    }
-                }
-
-                if (needsFullFallback) {
-                    // Keep a local hybrid boundary instead of forcing a full fallback.
-                    // This allows AELIS to try batch execution first, falling back
-                    // to AE2 bridge only if needed, rather than skipping entirely
-                    node.executionMode = ExecutionMode.HYBRID_BARRIER;
-                    node.barrierReason = fallbackReason;
-
-                }
-            }
-        }
-
-        /**
-         * Count how many barrier nodes exist downstream of the given node.
-         */
-        private int countDownstreamBarriers(Node startNode, int[] topologicalOrder) {
-            var visited = new HashSet<Integer>();
-            var queue = new ArrayDeque<Integer>();
-            queue.add(startNode.index);
-            visited.add(startNode.index);
-            int barrierCount = 0;
-
-            while (!queue.isEmpty()) {
-                int nodeIndex = queue.removeFirst();
-                Node node = nodes.get(nodeIndex);
-
-                if (node.barrier && nodeIndex != startNode.index) {
-                    barrierCount++;
-                }
-
-                for (Edge edge : node.dependencyEdges) {
-                    if (visited.add(edge.childIndex)) {
-                        queue.add(edge.childIndex);
-                    }
-                }
-            }
-
-            return barrierCount;
-        }
-
-        /**
          * Aggregating all repetitions of an earlier consumable input can change
          * the amount of its surplus that is visible to a later reusable slot.
          * Reject that graph whenever any ordinary graph key is also a valid
@@ -7417,7 +7252,6 @@ public final class AelisPlanner {
         private LocalCyclicRegion localCyclicRegion;
         private Boolean deterministicCandidateSubgraph;
         private Boolean batchValidFirstCandidateSubgraph;
-        private Boolean directStockFirstCandidate;
         private Boolean directStockCandidateSet;
         private ExecutionMode executionMode = ExecutionMode.PURE_FAST;
 
@@ -7431,8 +7265,7 @@ public final class AelisPlanner {
 
     private enum ExecutionMode {
         PURE_FAST,        // Full batch execution
-        HYBRID_BARRIER,   // Upstream batch + this node calls AE2
-        FULL_FALLBACK     // Entire subtree uses AE2
+        HYBRID_BARRIER    // Upstream batch + this node calls AE2
     }
 
     private record Edge(int childIndex, long requestMultiplier, int occurrences) {

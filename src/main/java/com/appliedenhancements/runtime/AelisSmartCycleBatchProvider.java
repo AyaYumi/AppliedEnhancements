@@ -78,7 +78,6 @@ public final class AelisSmartCycleBatchProvider {
                 return Optional.of(new BridgeTypes(smart, molecular,
                         bigInteger, bigIntegerAccess,
                         patterns.getMethod("maximumSafeMultiplier", IPatternDetails.class),
-                        patterns.getMethod("operationsPerPush", IPatternDetails.class),
                         patterns.getMethod("scale", IPatternDetails.class, long.class),
                         dynamic.getMethod("resolve", IPatternDetails.class)));
             } catch (ReflectiveOperationException | LinkageError unavailable) {
@@ -278,8 +277,7 @@ public final class AelisSmartCycleBatchProvider {
 
     private record BridgeTypes(Class<?> smartProvider, Class<?> molecularProvider,
             Class<?> bigIntegerProvider, BigIntegerAccess bigIntegerAccess,
-            Method maximumMultiplier, Method operationsPerPush,
-            Method scale, Method dynamicResolve) {
+            Method maximumMultiplier, Method scale, Method dynamicResolve) {
     }
 
     private record BatchHandler(ICraftingProvider provider, IPatternDetails pattern,
@@ -722,10 +720,6 @@ public final class AelisSmartCycleBatchProvider {
             state.target = nextTarget(state.target, state.ewmaNanos)
                     .min(BigInteger.valueOf(Math.max(1, machineThreads)))
                     .max(BigInteger.ONE);
-        }
-
-        synchronized void clear() {
-            states.clear();
         }
 
         private State state(ICraftingProvider provider, IPatternDetails pattern) {

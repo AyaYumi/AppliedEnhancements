@@ -6,14 +6,16 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 properties = dict(re.findall(r"^([a-z_]+)=(.*)$", (ROOT / "gradle.properties").read_text(encoding="utf-8"), re.M))
-allowed_docs = {"README.md", "API_INTEGRATION.md", "API_INTEGRATION_ZH.md",
-                "BATCH_EXECUTION_API.md", "EXACT_CRAFTING_API.md", "SMART_DOUBLING_API.md"}
-allowed_root_docs = {"README.md", "README_ZH.md", "CONFIGURATION.md"}
+allowed_docs = {"API_INTEGRATION.md", "API_INTEGRATION_ZH.md",
+                "BATCH_EXECUTION_API.md", "EXACT_CRAFTING_API.md"}
+allowed_markdown = {"README.md", "README_ZH.md", "CONFIGURATION.md"} | {
+    f"docs/{name}" for name in allowed_docs
+}
 paths = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
                                 cwd=ROOT).decode("utf-8").split("\0")
 failures = []
 for source in ROOT.glob("*.md"):
-    if source.name not in allowed_root_docs:
+    if source.name not in allowed_markdown:
         failures.append(f"{source.name}: not project or public API documentation")
 for source in (ROOT / "docs").rglob("*"):
     if source.is_file() and (source.parent != ROOT / "docs" or source.name not in allowed_docs):
@@ -33,8 +35,20 @@ for relative in filter(None, paths):
             or lower.startswith(("tools/client/", "tools/pack/", "tools/ui/"))
             or source.name.lower() in {"desktop.ini", "thumbs.db", ".ds_store"}):
         failures.append(f"{relative}: temporary/generated resource")
-    if relative.startswith("docs/") and (source.parent != ROOT / "docs" or source.name not in allowed_docs):
-        failures.append(f"{relative}: not public API documentation")
+    if source.suffix.lower() == ".md" and relative not in allowed_markdown:
+        failures.append(f"{relative}: not required project or public API documentation")
+    if (relative.startswith(("src/test/", "src/integrationTest/", "qa/", "tools/qa/"))
+            or any(part in {"fixtures", "harness", "qa-src", "qa-resources"} for part in parts)):
+        failures.append(f"{relative}: removed development fixture or test source")
+    if relative.startswith("src/main/java/") and source.suffix == ".java":
+        content = source.read_text(encoding="utf-8")
+        if re.search(r"\bSystem\.(?:out|err)\b|\.(?:printStackTrace|dumpStack)\s*\(", content):
+            failures.append(f"{relative}: direct console/stack trace output in production code")
+        if re.search(r"\b(?:LOGGER|logger|LOG|log)\.(?:trace|debug|info)\s*\(", content):
+            failures.append(f"{relative}: routine/development logging in production code")
+        if (relative != "src/main/java/com/appliedenhancements/runtime/AelisPlanningLog.java"
+                and re.search(r"\b(?:LOGGER|logger|LOG|log)\.(?:warn|error)\s*\(", content)):
+            failures.append(f"{relative}: fault logging bypasses the shared rate limiter")
     if source.suffix.lower() in {".json", ".mcmeta"}:
         try:
             json.loads(source.read_text(encoding="utf-8"))

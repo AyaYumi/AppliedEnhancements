@@ -9,7 +9,6 @@ import com.appliedenhancements.api.PatternSlotRef;
 import com.appliedenhancements.api.PatternTerminalIntegrationApi;
 import com.appliedenhancements.api.PatternTerminalIntegrationApi.Family;
 import com.appliedenhancements.api.client.PatternQuickMoveSession;
-import com.appliedenhancements.client.pattern.DuplicatePatternIndex;
 import com.appliedenhancements.client.pattern.DuplicatePatternInteraction;
 import com.appliedenhancements.client.pattern.DuplicatePatternRows;
 import com.appliedenhancements.client.pattern.DuplicatePatternRows.InvalidSourcePattern;

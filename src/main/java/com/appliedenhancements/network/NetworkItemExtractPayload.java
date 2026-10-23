@@ -2,7 +2,6 @@ package com.appliedenhancements.network;
 
 import com.appliedenhancements.network.PacketCodec;
 import net.minecraft.network.FriendlyByteBuf;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.integration.ae2.NetworkItemExtractionMenuBridge;
 import net.minecraft.server.level.ServerPlayer;
 

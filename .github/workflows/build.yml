@@ -23,12 +23,19 @@ jobs:
       - name: Validate repository files and public documentation
         run: python .github/scripts/check_repository.py
 
-      - name: Build and test
-        run: bash gradlew ${{ matrix.args }} build apiJavadoc --console=plain
-      - uses: actions/upload-artifact@v4
+      - name: Compile and package
+        run: bash gradlew ${{ matrix.args }} assemble apiJavadoc --console=plain
+      - name: Upload universal mod JAR
+        if: matrix.name == 'ae2'
+        uses: actions/upload-artifact@v4
         with:
-          name: appliedenhancements-1.1.2-forge-${{ matrix.name }}
-          path: |
-            build/libs/*.jar
-            build/docs/api/
-            build/reports/tests/test/
+          name: appliedenhancements-forge
+          path: build/libs/*.jar
+          if-no-files-found: error
+      - name: Upload API documentation
+        if: matrix.name == 'ae2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: appliedenhancements-api
+          path: build/docs/api/
+          if-no-files-found: error

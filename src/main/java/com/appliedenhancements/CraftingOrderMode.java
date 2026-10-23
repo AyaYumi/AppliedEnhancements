@@ -1,5 +1,7 @@
 package com.appliedenhancements;
 
+import net.minecraft.network.chat.Component;
+
 /** Controls whether Applied Enhancements takes over AE2 crafting order entry. */
 public enum CraftingOrderMode {
     /** Leave AE2's native crafting order handling untouched. */
@@ -13,6 +15,15 @@ public enum CraftingOrderMode {
 
     CraftingOrderMode(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    /** Localized display name; {@link #name()} remains the stored TOML identifier. */
+    public Component getTranslatedName() {
+        return Component.translatable(switch (this) {
+            case DISABLED -> "appliedenhancements.config.max_crafting_order_amount.disabled";
+            case LONG_MAX -> "appliedenhancements.config.max_crafting_order_amount.long_max";
+            case BIG_INTEGER -> "appliedenhancements.config.max_crafting_order_amount.big_integer";
+        });
     }
 
     public boolean isEnabled() {

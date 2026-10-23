@@ -1,7 +1,6 @@
 package com.github.appliedenhancements.network;
 
 import com.appliedenhancements.network.PacketCodec;
-import com.appliedenhancements.AppliedEnhancements;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;

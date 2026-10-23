@@ -7,6 +7,8 @@ import com.github.appliedenhancements.integration.ae2.AelisCalculationPathMenuBr
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
@@ -14,20 +16,24 @@ import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Pseudo
 @Mixin(targets = "com.neuvillette.ae2ct.gui.CraftingTreeWidget", remap = false)
 public abstract class Ae2CraftingTreeWidgetMixin {
-    @Inject(method = "<init>", at = @At("HEAD"))
-    private static void appliedenhancements$attachExactTotals(AEBaseScreen<?> screen, @Coerce Object data,
-            List<CraftingPlanSummaryEntry> entries, boolean missingOnly, CallbackInfo callback) {
+    // Publish totals before AE2CT submits its asynchronous build. A constructor HEAD
+    // callback cannot safely access this instance, and RETURN would race the worker.
+    @WrapOperation(method = "<init>", at = @At(value = "INVOKE", target =
+            "Ljava/util/concurrent/CompletableFuture;supplyAsync(Ljava/util/function/Supplier;)Ljava/util/concurrent/CompletableFuture;"))
+    private CompletableFuture<?> appliedenhancements$attachExactTotals(Supplier<?> build,
+            Operation<CompletableFuture<?>> original, AEBaseScreen<?> screen, @Coerce Object data,
+            List<CraftingPlanSummaryEntry> entries, boolean missingOnly) {
         if (screen.getMenu() instanceof AelisCalculationPathMenuBridge bridge) {
             ExactCraftingTree.attach(data, bridge.appliedenhancements$getBigIntegerCraftAmounts(),
                     bridge.appliedenhancements$getBigIntegerMissingAmounts(),
                     bridge.appliedenhancements$getBigIntegerStoredAmounts(), bridge.appliedenhancements$getBigIntegerFinalAmount());
         }
+        return original.call(build);
     }
 
     @Inject(method = "getDrawAmount", at = @At("HEAD"), cancellable = true)

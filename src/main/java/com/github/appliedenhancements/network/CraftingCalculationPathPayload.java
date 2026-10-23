@@ -1,6 +1,5 @@
 package com.github.appliedenhancements.network;
 
-import com.appliedenhancements.AppliedEnhancements;
 import appeng.api.stacks.AEKey;
 import com.appliedenhancements.network.PacketCodec;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;

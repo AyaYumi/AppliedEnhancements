@@ -2,13 +2,10 @@ package com.appliedenhancements.mixin;
 
 import appeng.client.gui.me.crafting.CraftingStatusTableRenderer;
 import appeng.menu.me.crafting.CraftingStatusEntry;
-import appeng.core.localization.GuiText;
 import com.appliedenhancements.ae2.ExactCraftingStatusEntry;
-import com.appliedenhancements.util.AmountFormatter;
 import java.math.*;
 import java.util.*;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.contents.TranslatableContents;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.*;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;

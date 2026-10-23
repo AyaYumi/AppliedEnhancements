@@ -1,12 +1,10 @@
 package com.appliedenhancements.network;
 
 import com.appliedenhancements.network.PacketCodec;
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.api.PatternBatchMoveApi;
 import com.appliedenhancements.api.PatternSlotRef;
 import io.netty.handler.codec.DecoderException;
 import java.util.ArrayList;
-import java.util.List;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;

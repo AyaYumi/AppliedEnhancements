@@ -15,6 +15,7 @@ public final class Config {
 
     // Crafting / AELIS
     public static final ForgeConfigSpec.BooleanValue ENABLE_AUTOMATIC_AELIS_PLANNER;
+    public static final ForgeConfigSpec.BooleanValue ENABLE_AELIS_PLAN_SCREEN;
     public static final ForgeConfigSpec.BooleanValue ENABLE_AELIS_BIG_INTEGER_PLANNING;
     public static final ForgeConfigSpec.IntValue AELIS_MAX_NODES;
     public static final ForgeConfigSpec.IntValue AELIS_COMPILE_BUDGET_MS;
@@ -52,6 +53,7 @@ public final class Config {
                         "DISABLED 保持 AE2 原生处理，不接管合成数量。",
                         "LONG_MAX 启用 long 数值路径，最大为 Long.MAX_VALUE。",
                         "BIG_INTEGER 额外启用超过 Long.MAX_VALUE 的精确大整数订单。",
+                        "Allowed values / 可选值: DISABLED, LONG_MAX, BIG_INTEGER",
                         "Default / 默认值: DISABLED")
                 .translation("appliedenhancements.config.max_crafting_order_amount")
                 .defineEnum("max_crafting_order_amount", CraftingOrderMode.DISABLED);
@@ -92,6 +94,16 @@ public final class Config {
                 .translation("appliedenhancements.config.enable_automatic_aelis_planner")
                 .define("enable_automatic_planner", false);
 
+        ENABLE_AELIS_PLAN_SCREEN = builder
+                .comment(
+                        "Use the AELIS crafting-plan screen on this client.",
+                        "Disable to use AE2's original confirmation screen without changing planning or execution.",
+                        "在当前客户端使用 AELIS 合成计划新界面。",
+                        "关闭后使用 AE2 原版确认界面，不影响规划与合成执行。",
+                        "Default / 默认值: true")
+                .translation("appliedenhancements.config.enable_aelis_plan_screen")
+                .define("enable_plan_screen", true);
+
         ENABLE_AELIS_BIG_INTEGER_PLANNING = builder
                 .comment(
                         "Use exact BigInteger arithmetic for AELIS orders and intermediate demands above Long.MAX_VALUE.",
@@ -110,6 +122,7 @@ public final class Config {
                         "Higher values allow more complex recipes but use more memory.",
                         "AELIS 每次尝试允许分析的最大节点数。",
                         "数值越高，可处理的配方越复杂，但会占用更多内存。",
+                        "Range / 取值范围: 1000 ~ 1000000",
                         "Default / 默认值: 100000")
                 .translation("appliedenhancements.config.aelis_max_nodes")
                 .defineInRange("max_nodes", 100000, 1000, 1000000);
@@ -120,6 +133,7 @@ public final class Config {
                         "Limits time spent analyzing the crafting tree before execution.",
                         "每次 AELIS 尝试的编译时间预算，单位为毫秒。",
                         "限制执行前分析合成树所花费的最长时间。",
+                        "Range / 取值范围: 100 ~ 30000",
                         "Default / 默认值: 2000")
                 .translation("appliedenhancements.config.aelis_compile_budget_ms")
                 .defineInRange("compile_budget_ms", 2000, 100, 30000);
@@ -145,6 +159,7 @@ public final class Config {
                 .comment(
                         "Maximum material nodes in one strongly connected component.",
                         "单个强连通分量允许包含的最大材料节点数。",
+                        "Range / 取值范围: 4 ~ 1024",
                         "Default / 默认值: 256")
                 .translation("appliedenhancements.config.cycle_solver_max_scc_nodes")
                 .defineInRange("max_scc_nodes", 256, 4, 1024);
@@ -153,6 +168,7 @@ public final class Config {
                 .comment(
                         "Maximum branch-search states for multi-candidate cyclic components.",
                         "多候选循环分量允许搜索的最大分支状态数。",
+                        "Range / 取值范围: 1000 ~ 10000000",
                         "Default / 默认值: 1000000")
                 .translation("appliedenhancements.config.cycle_solver_max_search_states")
                 .defineInRange("max_search_states", 1_000_000, 1_000, 10_000_000);
@@ -161,6 +177,7 @@ public final class Config {
                 .comment(
                         "Maximum time spent by one global or local cyclic solve in milliseconds.",
                         "单次全图或局部循环求解允许使用的最大时间（毫秒）。",
+                        "Range / 取值范围: 10 ~ 5000",
                         "Default / 默认值: 1000")
                 .translation("appliedenhancements.config.cycle_solver_budget_ms")
                 .defineInRange("budget_ms", 1000, 10, 5000);
@@ -173,6 +190,7 @@ public final class Config {
                         "已证明循环顺序执行完成后，启动材料的处理策略。",
                         "PRESERVE_MINIMUM 会为下一份订单保留最低种子向量。",
                         "MAX_THROUGHPUT 允许当前订单使用全部循环材料。",
+                        "Allowed values / 可选值: PRESERVE_MINIMUM, MAX_THROUGHPUT",
                         "Default / 默认值: PRESERVE_MINIMUM")
                 .translation("appliedenhancements.config.cycle_seed_policy")
                 .defineEnum("seed_policy", AelisCycleSeedPolicy.PRESERVE_MINIMUM);
@@ -210,6 +228,7 @@ public final class Config {
                         "Limits memory use while preserving useful cache diversity.",
                         "每张样板保留的多键缓存最大条目数。",
                         "在保留有效缓存多样性的同时限制内存占用。",
+                        "Range / 取值范围: 8 ~ 256",
                         "Default / 默认值: 32")
                 .translation("appliedenhancements.config.pattern_cache_size")
                 .defineInRange("max_entries_per_pattern", 32, 8, 256);
