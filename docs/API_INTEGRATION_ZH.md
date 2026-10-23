@@ -2,11 +2,11 @@
 
 [English documentation](API_INTEGRATION.md)
 
-当前 `1.1.3` 源码默认使用 AE2 `19.2.18`，声明 `[19.2.17,)` 依赖范围，
+当前 `1.1.4` 源码默认使用 AE2 `19.2.18`，声明 `[19.2.17,)` 依赖范围，
 公开 API 使用 AE2 类型；CPU 显示内部钩子属于
 独立兼容实现，依赖更新后仍需实际运行验证。
 
-本文面向希望接入 Applied Enhancements `1.1.3` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
+本文面向希望接入 Applied Enhancements `1.1.4` 的 NeoForge 模组作者，涵盖依赖声明、稳定 API、注册生命周期、客户端/服务端边界和失败回退要求。
 
 ## 兼容基线
 
@@ -16,9 +16,9 @@
 | Java | `21` | 编译与运行目标 |
 | NeoForge | `21.1.220` | 构建与运行验证版本；当前声明范围：`[21.1.220,)` |
 | Applied Energistics 2 | `19.2.18` | 声明范围：`[19.2.17,)`；公共接口直接引用 AE2 类型 |
-| Applied Enhancements | `1.1.3` | 本文档对应版本 |
+| Applied Enhancements | `1.1.4` | 本文档对应版本 |
 
-`1.1.3` 延续 `1.1.1` 引入的公开接口，包括 `AelisBatchExecutionContext` 共享投料事务和 `AelisSmartDoublingApi` 原生倍增状态查询，详见[原生智能倍增](SMART_DOUBLING_API.md)。客户端与服务端使用同一构建，内部载荷协议为 `10`。使用新增查询时，编译和运行最低版本为 `1.1.1`。
+`1.1.4` 延续 `1.1.1` 引入的公开接口，包括 `AelisBatchExecutionContext` 共享投料事务和 `AelisSmartDoublingApi` 原生倍增状态查询，详见[原生智能倍增](#原生智能倍增)。客户端与服务端使用同一构建，内部载荷协议为 `11`。使用新增查询时，编译和运行最低版本为 `1.1.1`。
 
 BigInteger 计划不做统一 CPU 能力预检。long 投影饱和不会强制 `simulation()`，也不会改写 CPU 的提交结果。服务端接入方应通过 `AelisExactCraftingPlanApi.read(plan)` 读取精确数量；`AelisCycleExecutionApi.copyMetadata` 会保留这些字段。旧名 `isPreviewOnly` 现在只表示投影发生饱和。标准 long 字段仍是投影，未适配 CPU 接受订单不代表已支持完整 BigInteger 执行。
 
@@ -58,7 +58,7 @@ AelisExecutionRequirement requirement = metadata.executionRequirement();
 
 当 `Result.shouldFallback()` 为 true 时，通过 `fallbackCategory()` 获取稳定的 `AelisFallbackReason`，无需解析字符串。未知原因返回 `OTHER`，异常返回 `INTERNAL_ERROR`，成功或分支失败返回 `NONE`。AELIS 和旧 MaxFast 结果均提供此查询，原始诊断文本继续保留。
 
-关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，显式精确服务不再受 `enable_big_integer_planning` 阻止。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。本文接口最低版本为 `1.1.1`；当前文档对应 `1.1.3`。
+关闭自动 AELIS 时普通 AE2 计算保持原生行为；显式规划 API 调用仍启用对应扩展，显式精确服务不再受 `enable_big_integer_planning` 阻止。调用者无需管理内部线程作用域。旧服务重载和数量查询方法继续保留。本文接口最低版本为 `1.1.1`；当前文档对应 `1.1.4`。
 
 ## 开发环境依赖
 
@@ -70,10 +70,10 @@ dependencies {
     compileOnly "org.appliedenergistics:appliedenergistics2:19.2.18"
 
     // 仅用于编译，不要把 Applied Enhancements 打入自己的 JAR。
-    compileOnly files("libs/appliedenhancements-1.1.3.jar")
+    compileOnly files("libs/appliedenhancements-1.1.4.jar")
 
     // 只有需要在开发运行环境中联调时才添加。
-    runtimeOnly files("libs/appliedenhancements-1.1.3.jar")
+    runtimeOnly files("libs/appliedenhancements-1.1.4.jar")
 }
 ```
 
@@ -143,7 +143,7 @@ if (ModList.get().isLoaded("appliedenhancements")) {
 | 批量移动 | Common Setup 注册服务端处理器；客户端调用 `requestMove`，服务端可调用 `execute` | 公共 API 没有结果回调或 Future；以服务端菜单更新为准，或由接入方增加结果协议 |
 | 无限磁盘物品标签 | 服务端数据包加载物品标签，在标签可用后查询 | Minecraft 同步物品标签。Java 标记接口仅表示本地类型能力，不是同步机制 |
 
-使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.1.3` 的内部载荷协议为 `10`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，不同步仅服务端使用的精确样板次数、第三方注册表或自定义 CPU 状态。载荷类属于内部实现。
+使用网络功能时，客户端与服务端应安装同一 Applied Enhancements 发行构建；开发包只有版本字符串相同并不能保证内容一致。`1.1.4` 的内部载荷协议为 `11`。内置网络同步部分服务端功能配置、计算进度、规划路径显示及有界的精确 BigInteger 待合成、缺失、库存供应总量和存储字节估计，并按需同步当前 AELIS 计划的有界依赖图（最多 512 个材料节点、2048 条边，每个图数据包最多 512 KiB）。该图仅用于 UI 展示；这些计划数据包不包含仅服务端使用的精确样板次数、第三方注册表或 CPU 执行状态。图模型、桥接和载荷均属于内部实现，不构成新增的稳定图 API。
 
 注册 API 提供不可修改的快照，但没有注销或替换操作。不要在每次读档、打开界面或连接服务器时重复注册。规划回调在计算上下文中运行，可能位于工作线程；访问界面或世界时，应切换到对应所属线程。
 
@@ -251,6 +251,40 @@ if (result.shouldFallback()) {
 读取完整精确任务表，不能与 long 投影叠加。配方语义或循环工作量改变时重新规划。
 无法读取的倍率改写恢复原始精确工作量；原生智能倍增保留包装身份与精确尾数。
 
+### 原生智能倍增
+
+`AelisSmartDoublingApi` 提供只读分类查询，编译和运行均要求 `1.1.1` 或更高版本：
+
+| 查询 | 结果 |
+|---|---|
+| `isExternallyManaged(IPatternDetails pattern)` | EAEP 每样板 `eap$allowScaling()` 开关启用，或已是受支持的 EAEP/无用之物倍率包装时返回 true；null 返回 false |
+| `isExternallyManagedProvider(ICraftingProvider provider)` | Provider 带有可选的无用之物智能提供器标记时返回 true；null 返回 false |
+
+在样板所属调度线程读取当前状态。返回 true 时保留外部包装身份和任务次数，只绕过
+第二次本地倍率；false 时允许普通本地批量。仅安装附属不会启用绕过。两项查询均
+不检查容量、材料所有权或执行能力。
+
+```java
+if (AelisSmartDoublingApi.isExternallyManaged(pattern)) {
+    dispatchUnchanged(pattern, inputs);
+} else {
+    dispatchWithLocalBatching(pattern, inputs);
+}
+```
+
+已识别的可选开关查询抛出 `RuntimeException` 或 `LinkageError` 时，保守地保留
+外部管理分类，避免重复倍增；这不证明包装可读或派发成功。无法完整核对包装时，
+保留原始精确任务。
+
+可选包装适配器读取 `getOriginal()` 与原生倍率，不要求或附加内部 `AelisScaledPattern`
+接口。原生任务拆分的加权总和等于源工作量时，精确元数据保留该拆分；有限投影不符时
+补足精确余数，无法读取或识别的倍率改写恢复原始完整任务。long 预览饱和时仍保留
+BigInteger 账本，绕过二次倍率不会截断请求产量。未知包装不能根据类名或提供器模组
+已安装来推断。
+
+反射发现按类缓存，每次决策重新读取开关；接口不扫描网络或存储，也不新增每 tick
+全网扫描。新附属契约需要适配器或既有原生 ABI；客户端与服务端应使用同一构建。
+
 ### API 调用中的来源标识与循环元数据
 
 通过 API 成功规划的普通和循环计划都会保留 `AELIS` 来源标识，自动规划关闭时也适用。
@@ -311,7 +345,7 @@ if (cyclePlan != null) {
 - 最终产物交给请求方前调用 `amountToRetain(key, incoming, currentlyStored)`；
 - 将 `snapshot()` 与执行计划一起持久化，并通过 `withCyclePhase(plan, state)` 恢复。
 
-通过 `getPlan`、`attachToPlan` 或 `copyMetadata` 获取的完整计划会补充 `phase()`，包含循环的普通前置和各循环样板的真实产物。使用 `withCyclePhase` 显式启用后，`canDispatch` 会在循环阶段阻止无关普通任务，但放行必要前置。`isComplete()` 仍只表示循环步骤已派发完；`isCyclePhaseComplete()` 还要求跟踪的产物全部返回。即使请求数量已经交付，也须等循环阶段完成后再清理订单，避免丢失最后的补种步骤。自行持久化时要保存 `phase()` 和状态中的 `pendingOutputs()`，并通过 `withCyclePhase(plan, state)` 恢复。
+通过 `getPlan`、`attachToPlan` 或 `copyMetadata` 获取的完整计划会补充 `phase()`，包含循环的普通前置和各循环样板的真实产物。使用 `withCyclePhase` 显式启用后，`canDispatch` 会在循环阶段阻止无关普通任务，但放行必要前置。`isComplete()` 仍只表示循环步骤已派发完；`isCyclePhaseComplete()` 还要求跟踪的产物全部返回。即使请求数量已经交付，也须等循环阶段完成后再清理订单，避免丢失最后的补种步骤。自行持久化时要保存 `phase()` 和状态中的 `exactPendingOutputs()`、`exactRemainingCrafts()`，避免饱和投影丢失数量，并通过 `withCyclePhase(plan, state)` 恢复。
 
 旧的 `new AelisCycleRuntimeController(plan)` 和 `(plan, state)` 构造器保留旧的并发执行语义，不启用阶段等待，因此尚未接入 `recordReturned` 的第三方 CPU 不会因升级而卡住。升级 CPU 接入时应同时改用 `withCyclePhase`、结算返回产物并延后完成清理；旧的计划与状态构造器继续可用。
 
@@ -320,16 +354,16 @@ if (cyclePlan != null) {
 | 公共循环类型 | 数据与约束 |
 |---|---|
 | `AelisCycleExecutionPlan` | 完整构造参数为 `List<Step> steps`、`Map<AEKey, Long> minimumSeeds`、`Set<AEKey> protectedKeys`、`AelisCycleSeedPolicy seedPolicy`、可为空的 `Phase phase`。步骤不能为空，数量必须为正，集合会复制 |
-| `Step` | `AEKey patternDefinition`、正数 `long crafts`、`Map<AEKey, Long> inputsPerCraft`、`Set<AEKey> selfReplenishingInputs`。每个输入属于 `protectedKeys`，自补充键属于该步骤输入 |
+| `Step` | `AEKey patternDefinition`、正数 `long crafts`、`Map<AEKey, Long> inputsPerCraft`、`Set<AEKey> selfReplenishingInputs`、正数 `BigInteger exactCrafts`。`crafts` 为 `min(exactCrafts, Long.MAX_VALUE)`；原有四参数 long 构造器与四参数 BigInteger 重载并存。每个输入属于 `protectedKeys`，自补充键属于该步骤输入 |
 | `Phase` | `Set<AEKey> prerequisitePatterns`、`Map<AEKey, Map<AEKey, Long>> outputsPerPattern`。产量按每次执行记录，不是整个订单总量。非 null 阶段必须为每个计划内样板定义提供产物映射条目 |
-| `AelisCycleRuntimeController.State` | `int stepIndex`、`long remainingCrafts`、`Map<AEKey, Long> pendingOutputs`。两参数构造器生成空待返还表；步骤全部派发完时，索引等于 `steps.size()` 且剩余次数为 `0` |
+| `AelisCycleRuntimeController.State` | `int stepIndex`、`long remainingCrafts`、`Map<AEKey, Long> pendingOutputs`、`BigInteger exactRemainingCrafts`、`Map<AEKey, BigInteger> exactPendingOutputs`。long 次数与映射数量是对应精确字段的饱和兼容投影，必须与精确值匹配。`State(int, long)` 生成空待返还表；步骤全部派发完时，`stepIndex == steps.size()` 且 `exactRemainingCrafts().signum() == 0` |
 | `AelisCycleAwareCpu` | 默认 `supportsAelisCycleExecution()` 返回 true。`AelisCycleExecutionApi.supports(ICraftingCPU)` 只检查能力声明，不安装执行钩子 |
 
-计划的三参数构造器保留 `MAX_THROUGHPUT`；四参数构造器接收显式策略，初始无阶段信息。`patternDefinitions()` 返回循环样板定义；`runtime.plan()`、`isCyclePattern(AEKey)`、`currentStep()`、`remainingCrafts()` 用于检查调度状态。`canDispatch` 本身不会提取或验证库存。
+计划的三参数构造器保留 `MAX_THROUGHPUT`；四参数构造器接收显式策略，初始无阶段信息。`State` 保留 `State(int, long)` 和 `State(int, long, Map<AEKey, Long>)`；精确恢复使用 `State(int, BigInteger, Map<AEKey, BigInteger>)`。`patternDefinitions()` 返回循环样板定义；`runtime.plan()`、`isCyclePattern(AEKey)`、`currentStep()`、`remainingCrafts()`、`exactRemainingCrafts()` 用于检查调度状态。`canDispatch` 本身不会提取或验证库存。
 
-`withCyclePhase(plan, state)` 会用已派发工作校验待返还表：已经完成的步骤计入全部次数，当前步骤只计入 `step.crafts() - state.remainingCrafts()`，未来步骤不计入。每个待返还键都必须能由这些产物解释，数量为正且不能超过其产量总和。`phase()` 为 null 时待返还表必须为空。旧构造器会主动丢弃阶段信息与待返还条目，而非恢复新协议；不能用它们加载启用了阶段执行的存档订单。
+`withCyclePhase(plan, state)` 会用已派发工作校验 `state.exactPendingOutputs()`：已经完成的步骤计入完整的 `step.exactCrafts()`，当前步骤只计入 `step.exactCrafts().subtract(state.exactRemainingCrafts())`，未来步骤不计入。每个待返还键都必须能由这些产物解释，数量为正且不能超过其精确产量总和。`phase()` 为 null 时待返还表必须为空。旧构造器会主动丢弃阶段信息与待返还条目，而非恢复新协议；不能用它们加载启用了阶段执行的存档订单。
 
-返回产物应随时计入 CPU 可用库存，最终产物用 `amountToRetain` 保留后续循环需要的部分。批量取当前全部输入能支持的次数、`remainingCrafts()` 和提供器安全上限的最小值；每次用实际派发次数推进，不固定为初始种子批量，也不追加未规划工作。
+返回产物应随时计入 CPU 可用库存，最终产物用 `amountToRetain` 保留后续循环需要的部分。批量取当前全部输入能支持的次数、`remainingCrafts()` 和提供器安全上限的最小值。`remainingCrafts()` 用作有界的 long 派发窗口，总剩余次数与待返还产物使用 BigInteger 记账；单次派发的材料数量和现有 long 保留量辅助方法仍受 long 范围限制。每次用实际派发次数推进，不固定为初始种子批量，也不追加未规划工作。
 
 在 `PRESERVE_MINIMUM` 下，规划器已经为“完整下单产物 + 最小启动种子向量”安排了足够的循环产量。CPU 应把该向量留在内部库存直到订单结束，再由正常清理流程回存 ME；不能用保留量冲抵或缩减请求方的最终产物。
 
@@ -635,7 +669,7 @@ public void onClose() {
 
 ## 8. 网络物品右键菜单扩展
 
-从 `1.0.5` 起，内置物品操作菜单使用独立的“打开物品操作菜单”绑定，默认 **Alt＋右键**；样板快速移动的剪切、粘贴使用“打开样板移动菜单”，默认 **右键**。两项均检查 NeoForge 修饰键和 GUI 状态。旧共享绑定保留给样板移动，因此已保存的右键设置不会覆盖新的物品操作默认值。已注册的兼容界面会自动采用这一区分，注册菜单条目不会修改任何绑定。完全自定义的界面需要自行分开处理两类输入。本次拆分不改变公共 Java API 签名，当前整体构建的内部载荷协议为 `10`。
+从 `1.0.5` 起，内置物品操作菜单使用独立的“打开物品操作菜单”绑定，默认 **Alt＋右键**；样板快速移动的剪切、粘贴使用“打开样板移动菜单”，默认 **右键**。两项均检查 NeoForge 修饰键和 GUI 状态。旧共享绑定保留给样板移动，因此已保存的右键设置不会覆盖新的物品操作默认值。已注册的兼容界面会自动采用这一区分，注册菜单条目不会修改任何绑定。完全自定义的界面需要自行分开处理两类输入。本次拆分不改变公共 Java API 签名，当前整体构建的内部载荷协议为 `11`。
 
 在 Client Setup 中注册菜单项提供器：
 

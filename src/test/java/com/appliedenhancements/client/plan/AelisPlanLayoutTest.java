@@ -20,6 +20,26 @@ class AelisPlanLayoutTest {
     }
 
     @Test
+    void wrappedGraphHintsLeaveAUsableCanvasAndNeverOverlapTheFooter() {
+        for (int height = 232; height <= 1080; height++) {
+            var layout = AelisPlanLayout.fit(427, height);
+            for (int lines = 1; lines <= 6; lines++) {
+                var area = layout.graphArea(122, lines, 9);
+                assertTrue(area.bottom() - area.top() >= 30,
+                        "A wrapped hint must not squeeze away the graph");
+                assertTrue(area.bottom() < layout.footerTop());
+                if (area.inlineHint()) {
+                    assertTrue(area.bottom() - area.top() >= 48);
+                    assertEquals(5, area.hintTop() - area.bottom());
+                    assertTrue(area.hintTop() + lines * 10 <= layout.footerTop() - 8);
+                }
+            }
+        }
+        assertFalse(AelisPlanLayout.fit(427, 240).graphArea(122, 2, 9).inlineHint());
+        assertTrue(AelisPlanLayout.fit(640, 360).graphArea(122, 2, 9).inlineHint());
+    }
+
+    @Test
     void tinyViewportsFallBackToAe2() {
         assertFalse(AelisPlanLayout.fit(300, 200).usable());
     }

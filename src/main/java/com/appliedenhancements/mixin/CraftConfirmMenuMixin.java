@@ -60,7 +60,70 @@ import java.util.concurrent.atomic.AtomicLong;
 @Mixin(value = CraftConfirmMenu.class, remap = false)
 public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgressMenuBridge,
         LongCraftingConfirmMenuBridge, AelisCalculationPathMenuBridge, com.appliedenhancements.ae2.ExactCraftingMenuBridge,
-        com.appliedenhancements.ae2.ForceCraftingMenuBridge {
+        com.appliedenhancements.ae2.ForceCraftingMenuBridge,
+        com.appliedenhancements.ae2.AelisPlanGraphMenuBridge {
+    @Unique private com.appliedenhancements.plan.AelisPlanGraph appliedenhancements$planGraph;
+    @Unique private com.appliedenhancements.plan.AelisPlanGraph appliedenhancements$cachedGraph;
+    @Unique private ICraftingPlan appliedenhancements$graphSource;
+    @Unique private appeng.menu.me.crafting.CraftingPlanSummary appliedenhancements$graphBinding;
+    @Unique private int appliedenhancements$graphRequest;
+
+    @Override
+    public com.appliedenhancements.plan.AelisPlanGraph appliedenhancements$getPlanGraph() {
+        return appliedenhancements$graphBinding == this.plan ? appliedenhancements$planGraph : null;
+    }
+
+    @Override
+    public void appliedenhancements$requestPlanGraph() {
+        var menu = (CraftConfirmMenu) (Object) this;
+        if (!menu.isClientSide() || this.plan == null) return;
+        appliedenhancements$graphBinding = this.plan;
+        appliedenhancements$planGraph = null;
+        appliedenhancements$graphRequest = appliedenhancements$graphRequest == Integer.MAX_VALUE
+                ? 1 : appliedenhancements$graphRequest + 1;
+        PacketDistributor.sendToServer(new com.appliedenhancements.network.AelisPlanGraphRequest(
+                menu.containerId, appliedenhancements$graphRequest));
+    }
+
+    @Override
+    public void appliedenhancements$acceptPlanGraph(int request, com.appliedenhancements.plan.AelisPlanGraph graph) {
+        var menu = (CraftConfirmMenu) (Object) this;
+        if (menu.isClientSide() && request == appliedenhancements$graphRequest
+                && this.plan != null && appliedenhancements$graphBinding == this.plan) {
+            appliedenhancements$planGraph = graph;
+        }
+    }
+
+    @Override
+    public void appliedenhancements$sendPlanGraph(int request) {
+        var menu = (CraftConfirmMenu) (Object) this;
+        if (!(menu.getPlayer() instanceof ServerPlayer player) || player.containerMenu != menu
+                || !menu.stillValid(player) || this.result == null
+                || appliedenhancements$resolveCalculationPath(this.result) != AelisCalculationPath.AELIS) return;
+        if (appliedenhancements$graphSource != this.result) {
+            appliedenhancements$graphSource = this.result;
+            try {
+                appliedenhancements$cachedGraph = com.appliedenhancements.runtime.AelisPlanGraphBuilder.build(this.result);
+                // Preflight optional component-rich keys before scheduling a bounded network packet.
+                var buffer = new net.minecraft.network.RegistryFriendlyByteBuf(
+                        io.netty.buffer.Unpooled.buffer(), player.registryAccess(), player.connection.getConnectionType());
+                try {
+                    com.appliedenhancements.network.AelisPlanGraphPayload.STREAM_CODEC.encode(buffer,
+                            new com.appliedenhancements.network.AelisPlanGraphPayload(menu.containerId, request,
+                                    appliedenhancements$cachedGraph));
+                } finally {
+                    buffer.release();
+                }
+            } catch (RuntimeException | LinkageError unavailable) {
+                appliedenhancements$cachedGraph = new com.appliedenhancements.plan.AelisPlanGraph(
+                        java.util.List.of(), java.util.List.of(), -1, false);
+                com.appliedenhancements.runtime.AelisPlanningLog.warning("plan_graph",
+                        "Could not read the optional crafting dependency graph; original plan retained", unavailable);
+            }
+        }
+        PacketDistributor.sendToPlayer(player, new com.appliedenhancements.network.AelisPlanGraphPayload(
+                menu.containerId, request, appliedenhancements$cachedGraph));
+    }
     @Unique private BigInteger appliedenhancements$exactRequestedAmount;
 
     @Override public boolean appliedenhancements$planExact(AEKey what, BigInteger requested) {
@@ -275,10 +338,13 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
      */
     @Unique
     private void appliedenhancements$clearDisplayedPlan() {
+        appliedenhancements$planGraph = null;
+        appliedenhancements$graphBinding = null;
         if (this.plan != null) {
             this.plan = null;
         }
     }
+
 
     @Inject(method = "planJob", at = @At("HEAD"))
     private void appliedenhancements$cancelProgressBeforePlan(
@@ -374,8 +440,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                     what,
                     requestedAmount,
                     strategy);
-            this.job = appliedenhancements$observeCalculationJob(
-                    rawJob, progressTask, requestedAmount);
+            this.job = appliedenhancements$observeCalculationJob(rawJob, progressTask);
             return true;
         } catch (RuntimeException | Error failure) {
             appliedenhancements$finishFailedProgress(progressTask, failure);
@@ -475,7 +540,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
                     what,
                     amount,
                     strategy);
-            return appliedenhancements$observeCalculationJob(rawJob, progressTask, amount);
+            return appliedenhancements$observeCalculationJob(rawJob, progressTask);
         } catch (RuntimeException | Error failure) {
             appliedenhancements$finishFailedProgress(progressTask, failure);
             throw failure;
@@ -485,8 +550,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Unique
     private Future<ICraftingPlan> appliedenhancements$observeCalculationJob(
             Future<ICraftingPlan> rawJob,
-            CraftingProgressTaskBinding.Task progressTask,
-            long requestedAmount) {
+            CraftingProgressTaskBinding.Task progressTask) {
         Objects.requireNonNull(rawJob, "Crafting service returned a null planning future");
         return new TerminalAwareFuture<>(
                 rawJob,

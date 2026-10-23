@@ -220,8 +220,8 @@ tasks.named('jar', Jar).configure {
     reproducibleFileOrder = true
     from('LICENSE')
     from('docs') {
-        include 'README.md', 'API_INTEGRATION.md', 'API_INTEGRATION_ZH.md', 'BATCH_EXECUTION_API.md',
-                'EXACT_CRAFTING_API.md', 'SMART_DOUBLING_API.md'
+        include 'API_INTEGRATION.md', 'API_INTEGRATION_ZH.md', 'BATCH_EXECUTION_API.md',
+                'EXACT_CRAFTING_API.md'
         into 'docs'
     }
 }

@@ -21,6 +21,15 @@ public record AelisPlanLayout(int width, int height) {
     public int rowsBottom() { return ROW_TOP + visibleRows() * ROW_HEIGHT; }
     public boolean usable() { return width >= 300 && height >= 220; }
 
+    public GraphArea graphArea(int top, int hintLines, int lineHeight) {
+        int hintTop = footerTop() - 8 - hintLines * (lineHeight + 1);
+        boolean inlineHint = hintTop - 5 - top >= 48;
+        int bottom = inlineHint ? hintTop - 5 : footerTop() - 4;
+        return new GraphArea(top, Math.max(top, bottom), hintTop, inlineHint);
+    }
+
+    public record GraphArea(int top, int bottom, int hintTop, boolean inlineHint) {}
+
     public Columns columns(boolean cyclic) { return new Columns(tableRight() - 14, cyclic); }
 
     /** Right-aligned amount columns share a layout with their headers and material names. */

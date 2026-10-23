@@ -1,7 +1,7 @@
 # Shared batch execution / 共享批量投料 API
 
-Applied Enhancements **1.1.3**, Java 21, Minecraft 1.21.1, NeoForge 21.1.220+,
-AE2 19.2.17+. [API index](README.md) · [Cycle and integration guide](API_INTEGRATION.md)
+Applied Enhancements **1.1.4**, Java 21, Minecraft 1.21.1, NeoForge 21.1.220+,
+AE2 19.2.17+. [Cycle and integration guide](API_INTEGRATION.md) · [中文接入](API_INTEGRATION_ZH.md)
 
 A CPU must retain one protected inventory view throughout initial extraction,
 batch expansion and rollback. Acquiring a fresh view after extracting one recipe

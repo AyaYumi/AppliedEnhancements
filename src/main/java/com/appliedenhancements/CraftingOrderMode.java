@@ -1,7 +1,10 @@
 package com.appliedenhancements;
 
+import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.common.TranslatableEnum;
+
 /** Controls whether Applied Enhancements takes over AE2 crafting order entry. */
-public enum CraftingOrderMode {
+public enum CraftingOrderMode implements TranslatableEnum {
     /** Leave AE2's native crafting order handling untouched. */
     DISABLED(false),
     /** Enable the long-valued path up to {@link Long#MAX_VALUE}. */
@@ -13,6 +16,15 @@ public enum CraftingOrderMode {
 
     CraftingOrderMode(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    @Override
+    public Component getTranslatedName() {
+        return Component.translatable(switch (this) {
+            case DISABLED -> "appliedenhancements.config.max_crafting_order_amount.disabled";
+            case LONG_MAX -> "appliedenhancements.config.max_crafting_order_amount.long_max";
+            case BIG_INTEGER -> "appliedenhancements.config.max_crafting_order_amount.big_integer";
+        });
     }
 
     public boolean isEnabled() {

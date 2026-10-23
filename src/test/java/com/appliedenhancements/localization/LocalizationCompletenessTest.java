@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.appliedenhancements.AppliedEnhancements;
+import com.appliedenhancements.CraftingOrderMode;
+import com.appliedenhancements.api.AelisCycleSeedPolicy;
 import com.appliedenhancements.api.PatternBatchMoveApi;
+import com.appliedenhancements.client.plan.AelisPlanRows;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -23,6 +26,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import net.minecraft.network.chat.contents.TranslatableContents;
+import net.neoforged.neoforge.common.TranslatableEnum;
 import org.junit.jupiter.api.Test;
 
 class LocalizationCompletenessTest {
@@ -36,15 +41,20 @@ class LocalizationCompletenessTest {
                     + "|key\\.appliedenhancements|appliedenhancements\\.config)"
                     + "\\.[A-Za-z0-9_.-]+"
                     + "|key\\.categories\\.appliedenhancements)\"");
+    private static final Pattern PLAN_HELPER_KEY = Pattern.compile(
+            "\\btr\\(\\s*\"([A-Za-z0-9_.]+)\"");
     private static final Pattern CONFIG_DEFINE = Pattern.compile(
             "\\.define(?:InRange|Enum)?\\s*\\(");
     private static final Pattern CONFIG_TRANSLATED_DEFINE = Pattern.compile(
             "(?s)\\.translation\\(\"([^\"]+)\"\\)\\s*"
                     + "\\.define(?:InRange|Enum)?\\s*\\(");
     private static final Pattern CONFIG_COMMENT = Pattern.compile(
-            "(?s)\\.comment\\((.*?)\\)\\s*"
-                    + "(?:\\.translation\\(\"[^\"]+\"\\)\\s*)?"
-                    + "\\.(?:translation|push)\\(");
+            "(?s)\\.comment\\((.*?)\\)\\s*\\.translation\\(\"([^\"]+)\"\\)");
+    private static final Pattern CONFIG_TRANSLATION = Pattern.compile(
+            "\\.translation\\(\"([^\"]+)\"\\)");
+    private static final Pattern CONFIG_RANGE = Pattern.compile(
+            "(?s)\\.comment\\((.*?)\\)\\s*\\.translation\\(\"([^\"]+)\"\\)\\s*"
+                    + "\\.defineInRange\\(\"[^\"]+\",\\s*([\\d_]+),\\s*([\\d_]+),\\s*([\\d_]+)\\)");
     private static final Pattern HAN_CHARACTER = Pattern.compile("\\p{IsHan}");
     private static final Pattern ENGLISH_CHARACTER = Pattern.compile("[A-Za-z]");
     private static final Pattern FORMAT_SPECIFIER = Pattern.compile(
@@ -69,6 +79,8 @@ class LocalizationCompletenessTest {
             String chineseValue = chinese.get(key);
             assertFalse(englishValue.isBlank(), key + " has an empty English value");
             assertFalse(chineseValue.isBlank(), key + " has an empty Chinese value");
+            assertFalse(HAN_CHARACTER.matcher(englishValue).find(),
+                    key + " contains Chinese text in its English translation: " + englishValue);
             assertEquals(formatSignature(englishValue), formatSignature(chineseValue),
                     key + " uses different format arguments between languages");
             if (!INTENTIONALLY_LANGUAGE_NEUTRAL.contains(key)) {
@@ -85,11 +97,19 @@ class LocalizationCompletenessTest {
         Set<String> usedKeys = new HashSet<>();
 
         for (Path source : javaSources()) {
-            var matcher = TRANSLATION_KEY.matcher(Files.readString(source));
+            String text = Files.readString(source);
+            var matcher = TRANSLATION_KEY.matcher(text);
             while (matcher.find()) {
                 String key = matcher.group(1);
                 if (!key.endsWith(".")) {
                     usedKeys.add(key);
+                }
+            }
+            if (source.getFileName().toString().equals("AelisCraftConfirmScreen.java")) {
+                var helperKeys = PLAN_HELPER_KEY.matcher(text);
+                while (helperKeys.find()) {
+                    String suffix = helperKeys.group(1);
+                    if (!suffix.endsWith(".")) usedKeys.add("gui.appliedenhancements.plan." + suffix);
                 }
             }
         }
@@ -125,6 +145,10 @@ class LocalizationCompletenessTest {
                     ? "unknown"
                     : failure.name().toLowerCase(Locale.ROOT);
             dynamicKeys.add("message.appliedenhancements.pattern_batch_move.failure." + suffix);
+        }
+
+        for (AelisPlanRows.Filter filter : AelisPlanRows.Filter.values()) {
+            dynamicKeys.add("gui.appliedenhancements.plan.filter." + filter.name().toLowerCase(Locale.ROOT));
         }
 
         for (String key : dynamicKeys) {
@@ -170,6 +194,69 @@ class LocalizationCompletenessTest {
             }
             assertEquals(defineCount, translatedDefineCount,
                     relative + " contains a config value without .translation(...)");
+        }
+    }
+
+    @Test
+    void everyConfigNameAndTooltipExistsInBothLanguages() throws Exception {
+        Map<String, String> english = readLanguage(ENGLISH_LANGUAGE);
+        Map<String, String> chinese = readLanguage(CHINESE_LANGUAGE);
+        for (Path source : javaSources()) {
+            String text = Files.readString(source);
+            if (!text.contains("ModConfigSpec.Builder")) continue;
+            var keys = CONFIG_TRANSLATION.matcher(text);
+            int count = 0;
+            while (keys.find()) {
+                count++;
+                for (String key : List.of(keys.group(1), keys.group(1) + ".tooltip")) {
+                    assertTrue(english.containsKey(key), "Missing config English key: " + key);
+                    assertTrue(chinese.containsKey(key), "Missing config Chinese key: " + key);
+                }
+            }
+            assertTrue(count > 0, source + " defines no translated config names");
+        }
+    }
+
+    @Test
+    void configRangesHaveBilingualCommentsAndLocalizedBounds() throws Exception {
+        Map<String, String> english = readLanguage(ENGLISH_LANGUAGE);
+        Map<String, String> chinese = readLanguage(CHINESE_LANGUAGE);
+        for (Path source : javaSources()) {
+            String text = Files.readString(source);
+            if (!text.contains("ModConfigSpec.Builder")) continue;
+            var ranges = CONFIG_RANGE.matcher(text);
+            int count = 0;
+            while (ranges.find()) {
+                count++;
+                String key = ranges.group(2) + ".tooltip";
+                String lower = ranges.group(4).replace("_", "");
+                String upper = ranges.group(5).replace("_", "");
+                String bounds = lower + " ~ " + upper;
+                assertTrue(ranges.group(1).contains("Range / 取值范围: " + bounds),
+                        key + " is missing bilingual TOML range documentation");
+                assertTrue(english.get(key).contains(bounds), key + " has incorrect English bounds");
+                assertTrue(chinese.get(key).contains(bounds), key + " has incorrect Chinese bounds");
+            }
+            assertEquals(text.split("\\.defineInRange\\(", -1).length - 1, count,
+                    source + " has unchecked numeric configuration ranges");
+        }
+    }
+
+    @Test
+    void configEnumsTranslateWithoutChangingTheirSerializedNames() throws Exception {
+        Map<String, String> english = readLanguage(ENGLISH_LANGUAGE);
+        Map<String, String> chinese = readLanguage(CHINESE_LANGUAGE);
+        List<Enum<?>> options = new ArrayList<>();
+        options.addAll(List.of(CraftingOrderMode.values()));
+        options.addAll(List.of(AelisCycleSeedPolicy.values()));
+        for (Enum<?> option : options) {
+            assertTrue(option instanceof TranslatableEnum, option.name() + " cannot be translated by NeoForge");
+            var contents = ((TranslatableEnum) option).getTranslatedName().getContents();
+            assertTrue(contents instanceof TranslatableContents, option.name() + " still uses a literal label");
+            String key = ((TranslatableContents) contents).getKey();
+            assertTrue(english.containsKey(key), "Missing enum English key: " + key);
+            assertTrue(chinese.containsKey(key), "Missing enum Chinese key: " + key);
+            assertEquals(option.name(), option.toString(), "TOML enum values must remain stable");
         }
     }
 

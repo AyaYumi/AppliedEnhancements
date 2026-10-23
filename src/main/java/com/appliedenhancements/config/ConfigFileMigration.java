@@ -1,6 +1,5 @@
 package com.appliedenhancements.config;
 
-import com.appliedenhancements.AppliedEnhancements;
 import com.appliedenhancements.CraftingOrderMode;
 import com.electronwill.nightconfig.core.CommentedConfig;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
@@ -127,9 +126,6 @@ public final class ConfigFileMigration {
 
             writeUnifiedConfig(commonPath, values);
             archiveLegacyFile(legacyPreAelisPath);
-            AppliedEnhancements.LOGGER.info(
-                    "Migrated Applied Enhancements configuration to unified file {}",
-                    commonPath);
         }
     }
 

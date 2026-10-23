@@ -57,6 +57,8 @@
     "NumberEntryWidgetAccessor",
     "CPUSelectionListMixin",
     "ConfiguredNeoForgeConfigMixin",
+    "ConfiguredEnumEntryMixin",
+    "ConfiguredValueTooltipMixin",
     "CraftConfirmScreenMixin",
     "CraftConfirmTableRendererMixin",
     "ExtendedPatternAccessGroupHeaderMixin",

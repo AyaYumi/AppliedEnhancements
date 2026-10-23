@@ -110,15 +110,6 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
             }
         }
 
-        // Check maximum crafting amount
-        long maximumAmount = Long.MAX_VALUE;
-        if (amount > maximumAmount) {
-            menu.getPlayer().sendSystemMessage(Component.translatable(
-                    "message.appliedenhancements.crafting_amount_too_large",
-                    maximumAmount));
-            return;
-        }
-
         if (!(menu.getPlayer() instanceof ServerPlayer player)) {
             return;
         }
