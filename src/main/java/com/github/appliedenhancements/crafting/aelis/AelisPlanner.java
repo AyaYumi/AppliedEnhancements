@@ -43,6 +43,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -1706,6 +1707,7 @@ public final class AelisPlanner {
                     exactNonNegativeLong(patternTimes, "big_integer_feedback_boundary_overflow"), pauseCheckpoint);
         }
         var returnedReusableInputs = new KeyCounter();
+        var returnedFixedInputs = new LinkedHashMap<AEKey, BigInteger>();
         List<OrderedGraphInput> selectedInputs = executeCompiledBoundary
                 ? compiledCandidate.orderedInputs
                 : node.orderedInputs;
@@ -1728,6 +1730,15 @@ public final class AelisPlanner {
                 }
             } else {
                 GraphConsumableInput consumableInput = orderedInput.consumableInput;
+                if (consumableInput.remainderKey != null
+                        && (consumableInput.multiplier != consumableInput.input.getMultiplier()
+                                || !consumableInput.remainderKey.equals(AelisFixedRemainder.inspect(
+                                        consumableInput.input,
+                                        consumableInput.child.molecularmanipulator$getWhat(),
+                                        consumableInput.child.molecularmanipulator$getAmount(),
+                                        consumableInput.child.molecularmanipulator$getLevel())))) {
+                    throw new Fallback("fixed_remainder_semantics_changed");
+                }
                 BigInteger childRequests = AelisBigIntegerMath.multiply(
                         consumableInput.multiplier, patternTimes);
                 executeTransactionalNode(
@@ -1735,9 +1746,24 @@ public final class AelisPlanner {
                         childRequests, rootRequestedAmount, simulation,
                         stagedMissing, pauseCheckpoint,
                         progressSink, -1, null, consumableInput, false);
+                if (consumableInput.remainderKey != null) {
+                    returnedFixedInputs.merge(
+                            consumableInput.remainderKey, childRequests, BigInteger::add);
+                }
             }
         }
 
+        // Like AE2, container returns become visible only after every input
+        // request succeeds, including simulated requests for missing inputs.
+        for (var stack : returnedFixedInputs.entrySet()) {
+            long amount = exactNonNegativeLong(
+                    stack.getValue(), "fixed_remainder_amount_overflow");
+            long available = inventory.extract(
+                    stack.getKey(), Long.MAX_VALUE, Actionable.SIMULATE);
+            checkedAdd(available, amount, "fixed_remainder_inventory_overflow");
+            inventory.insert(stack.getKey(), amount, Actionable.MODULATE);
+            ExactCraftingBytes.addStackBytes(inventory, stack.getKey(), stack.getValue());
+        }
         for (var stack : returnedReusableInputs) {
             inventory.insert(stack.getKey(), stack.getLongValue(), Actionable.MODULATE);
             var logicalReturns = AelisBigIntegerMath.multiply(stack.getLongValue(), patternTimes);
@@ -5299,7 +5325,13 @@ public final class AelisPlanner {
 
     private record GraphConsumableInput(IPatternDetails.IInput input,
             AelisCraftingTreeNodeBridge child, int childIndex, long multiplier,
-            boolean substituteInput, boolean quantityFeedbackInput) {
+            boolean substituteInput, boolean quantityFeedbackInput, AEKey remainderKey) {
+        private GraphConsumableInput(IPatternDetails.IInput input,
+                AelisCraftingTreeNodeBridge child, int childIndex, long multiplier,
+                boolean substituteInput, boolean quantityFeedbackInput) {
+            this(input, child, childIndex, multiplier,
+                    substituteInput, quantityFeedbackInput, null);
+        }
     }
 
     /**
@@ -5857,6 +5889,7 @@ public final class AelisPlanner {
                 }
             }
 
+            validateFixedRemainderIsolation();
             validateReusableGraphConflicts();
             validateQuantityFeedbackIsolation();
 
@@ -5887,6 +5920,79 @@ public final class AelisPlanner {
             return graph;
         }
 
+        /** Reject feedback through any input subtree before delaying container returns. */
+        private void validateFixedRemainderIsolation()
+                throws Fallback, InterruptedException {
+            for (Node owner : nodes) {
+                if (!owner.reachable) {
+                    continue;
+                }
+                for (CompiledCandidate candidate : owner.compiledCandidates) {
+                    if (!candidate.hasFixedRemainders()) {
+                        continue;
+                    }
+                    var remainders = new HashSet<AEKey>();
+                    for (OrderedGraphInput input : candidate.orderedInputs) {
+                        if (!input.reusable() && input.consumableInput.remainderKey != null) {
+                            remainders.add(input.consumableInput.remainderKey);
+                        }
+                    }
+                    var pending = new ArrayDeque<Integer>();
+                    var visited = new HashSet<Integer>();
+                    var materialOccurrences = new HashMap<AEKey, Integer>();
+                    pending.add(owner.index);
+                    while (!pending.isEmpty()) {
+                        checkBudget();
+                        Node descendant = nodes.get(pending.removeFirst());
+                        if (!visited.add(descendant.index)) {
+                            continue;
+                        }
+                        Integer previous = materialOccurrences.putIfAbsent(
+                                descendant.key, descendant.index);
+                        if (previous != null && previous != descendant.index) {
+                            throw new Fallback("fixed_remainder_contextual_material");
+                        }
+                        if (remainders.contains(descendant.key) || descendant.barrier
+                                || !descendant.reusableInputs.isEmpty()) {
+                            throw new Fallback("fixed_remainder_feedback_or_native_input");
+                        }
+                        if (descendant.terminal || descendant.emitter) {
+                            continue;
+                        }
+                        if (!descendant.allCandidatesCompiled
+                                || descendant.compiledCandidates.size() != 1
+                                || descendant.candidatePatterns.size() != 1) {
+                            throw new Fallback("fixed_remainder_incomplete_input_subgraph");
+                        }
+                        for (CompiledCandidate nested : descendant.compiledCandidates) {
+                            if (!nested.secondaryOutputs.isEmpty()
+                                    || descendant != owner
+                                            && (nested.hasContainerItems || nested.limitsQuantity)) {
+                                throw new Fallback("fixed_remainder_stateful_input_subgraph");
+                            }
+                            for (OrderedGraphInput input : nested.orderedInputs) {
+                                if (input.reusable() || input.consumableInput.substituteInput
+                                        || input.consumableInput.quantityFeedbackInput) {
+                                    throw new Fallback("fixed_remainder_contextual_input_subgraph");
+                                }
+                                GraphConsumableInput consumable = input.consumableInput;
+                                try {
+                                    for (AEKey remainder : remainders) {
+                                        if (consumable.input.isValid(remainder, descendant.level)) {
+                                            throw new Fallback("fixed_remainder_input_feedback");
+                                        }
+                                    }
+                                } catch (RuntimeException exception) {
+                                    throw new Fallback("fixed_remainder_input_validation_error");
+                                }
+                                pending.addLast(consumable.childIndex);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         /**
          * Aggregating all repetitions of an earlier consumable input can change
          * the amount of its surplus that is visible to a later reusable slot.
@@ -5915,6 +6021,15 @@ public final class AelisPlanner {
                                 throw new Fallback("reusable_candidate_graph_conflict");
                             }
                             for (CompiledCandidate candidate : graphNode.compiledCandidates) {
+                                for (OrderedGraphInput input : candidate.orderedInputs) {
+                                    if (!input.reusable()
+                                            && input.consumableInput.remainderKey != null
+                                            && reusableInput.input.isValid(
+                                                    input.consumableInput.remainderKey,
+                                                    reusableInput.child.molecularmanipulator$getLevel())) {
+                                        throw new Fallback("reusable_candidate_graph_conflict");
+                                    }
+                                }
                                 for (GenericStack output : candidate.secondaryOutputs) {
                                     if (reusableInput.input.isValid(output.what(),
                                             reusableInput.child.molecularmanipulator$getLevel())) {
@@ -6262,6 +6377,7 @@ public final class AelisPlanner {
                     ? new ArrayList<AelisQuantityFeedbackBatch.InputShape>(inputs.length)
                     : null;
             boolean hasReusableInput = false;
+            boolean hasFixedRemainder = false;
             boolean candidateHasSubstituteInputs = false;
             boolean feedbackOccurrenceTerminal = true;
             int inputIndex = 0;
@@ -6294,6 +6410,18 @@ public final class AelisPlanner {
 
                 BoundaryInputMode inputMode = classifyRemainingKey(
                         input, selectedKey, node.level);
+                AEKey fixedRemainder = inputMode == BoundaryInputMode.UNSAFE
+                        ? AelisFixedRemainder.inspect(input, selectedKey, selectedAmount, node.level)
+                        : null;
+                if (fixedRemainder != null) {
+                    if (!fixedRemainder.equals(AelisFixedRemainder.inspect(
+                            childBridge.molecularmanipulator$getParentInput(),
+                            selectedKey, selectedAmount, node.level))) {
+                        throw new Barrier("dynamic_fixed_remainder_input");
+                    }
+                    inputMode = BoundaryInputMode.CONSUMABLE;
+                    hasFixedRemainder = true;
+                }
                 if (inputMode == BoundaryInputMode.UNSAFE) {
                     throw new Barrier("container_items");
                 }
@@ -6331,9 +6459,19 @@ public final class AelisPlanner {
                 }
                 validatedInputs.add(new ValidatedOccurrenceInput(
                         child, input, inputMode, multiplier, substituteInput,
-                        quantityFeedbackInput));
+                        quantityFeedbackInput, fixedRemainder));
             }
-            if (hasContainerItems && !hasReusableInput) {
+            if (hasFixedRemainder) {
+                if (!hasContainerItems || hasReusableInput || candidateHasSubstituteInputs
+                        || node.candidatePatterns.size() != 1) {
+                    throw new Barrier("unsupported_fixed_remainder_shape");
+                }
+                observedPatternSemantics = AelisObservedPatternSemantics.captureStable(details);
+                if (observedPatternSemantics == null) {
+                    throw new Barrier("unstable_fixed_remainder_pattern");
+                }
+            }
+            if (hasContainerItems && !hasReusableInput && !hasFixedRemainder) {
                 throw new Barrier("container_flag_without_supported_input");
             }
             if (!primary && hasReusableInput) {
@@ -6397,7 +6535,7 @@ public final class AelisPlanner {
                 var consumableInput = new GraphConsumableInput(
                         validatedInput.input, childBridge, childIndex,
                         validatedInput.multiplier, validatedInput.substituteInput,
-                        validatedInput.quantityFeedbackInput);
+                        validatedInput.quantityFeedbackInput, validatedInput.remainderKey);
                 orderedInputs.add(OrderedGraphInput.consumable(consumableInput));
                 var accumulator = accumulators.get(childIndex);
                 if (accumulator == null) {
@@ -6430,16 +6568,13 @@ public final class AelisPlanner {
                     List.copyOf(orderedInputs),
                     List.copyOf(edges), outputPerPattern,
                     hasContainerItems, limitsQuantity, quantityFeedbackBatch,
-                    structurallyStablePattern ? observedPatternSemantics : null,
+                    observedPatternSemantics,
                     quantityFeedbackProfile, List.of(), outputLayout.secondaryOutputs());
             hasSubstituteInputs |= candidateHasSubstituteInputs;
             hasReusableInputs |= hasReusableInput;
             if (primary) {
                 node.details = details;
-                node.observedPatternSemantics =
-                        structurallyStablePattern
-                                ? observedPatternSemantics
-                                : null;
+                node.observedPatternSemantics = observedPatternSemantics;
                 node.hasContainerItems = hasContainerItems;
                 node.limitsQuantity = limitsQuantity;
                 node.outputPerPattern = outputPerPattern;
@@ -6688,6 +6823,17 @@ public final class AelisPlanner {
 
                 BoundaryInputMode inputMode = classifyRemainingKey(
                         input, selectedKey, node.level);
+                AEKey fixedRemainder = inputMode == BoundaryInputMode.UNSAFE
+                        ? AelisFixedRemainder.inspect(input, selectedKey, selectedAmount, node.level)
+                        : null;
+                if (fixedRemainder != null) {
+                    if (!fixedRemainder.equals(AelisFixedRemainder.inspect(
+                            childBridge.molecularmanipulator$getParentInput(),
+                            selectedKey, selectedAmount, node.level))) {
+                        throw new Fallback("contextual_fixed_remainder_input");
+                    }
+                    inputMode = BoundaryInputMode.CONSUMABLE;
+                }
                 if (inputMode == BoundaryInputMode.UNSAFE) {
                     throw new Fallback("contextual_input_behavior");
                 }
@@ -6713,7 +6859,8 @@ public final class AelisPlanner {
                             || consumable == null
                             || !sameInputSemantics(consumable.input, input)
                             || consumable.multiplier != multiplier
-                            || consumable.substituteInput != substituteInput) {
+                            || consumable.substituteInput != substituteInput
+                            || !Objects.equals(consumable.remainderKey, fixedRemainder)) {
                         throw new Fallback("contextual_consumable_input");
                     }
                     Node expectedChild = nodes.get(consumable.childIndex);
@@ -7098,7 +7245,7 @@ public final class AelisPlanner {
 
     private record ValidatedOccurrenceInput(CraftingTreeNode child,
             IPatternDetails.IInput input, BoundaryInputMode mode, long multiplier,
-            boolean substituteInput, boolean quantityFeedbackInput) {
+            boolean substituteInput, boolean quantityFeedbackInput, AEKey remainderKey) {
     }
 
     private record ContextualChild(CraftingTreeNode child, int expectedIndex) {
@@ -7281,6 +7428,11 @@ public final class AelisPlanner {
             secondaryOutputs = List.copyOf(secondaryOutputs);
         }
 
+        private boolean hasFixedRemainders() {
+            return orderedInputs.stream().anyMatch(input -> !input.reusable()
+                    && input.consumableInput.remainderKey != null);
+        }
+
         private CompiledCandidate(int sourceIndex,
                 CraftingTreeProcess sourceProcess, IPatternDetails details,
                 List<OrderedGraphInput> orderedInputs, List<Edge> edges,
@@ -7355,6 +7507,7 @@ public final class AelisPlanner {
         private final boolean hasSubstituteInputs;
         private final boolean hasReusableInputs;
         private final boolean hasSecondaryOutputs;
+        private final boolean hasFixedRemainders;
         private final ICraftingService craftingService;
         private final List<LocalCyclicRegion> cyclicRegions;
         // Owned by one calculation session. Inventory and live pattern checks are never cached.
@@ -7390,6 +7543,11 @@ public final class AelisPlanner {
             this.hasSecondaryOutputs = nodes.stream().anyMatch(node -> node.reachable
                     && (!node.secondaryOutputs.isEmpty() || node.compiledCandidates.stream()
                             .anyMatch(candidate -> !candidate.secondaryOutputs.isEmpty())));
+            this.hasFixedRemainders = nodes.stream().anyMatch(node -> node.reachable
+                    && (node.orderedInputs.stream().anyMatch(input -> !input.reusable()
+                            && input.consumableInput.remainderKey != null)
+                            || node.compiledCandidates.stream()
+                                    .anyMatch(CompiledCandidate::hasFixedRemainders)));
             this.craftingService = craftingService;
             this.cyclicRegions = List.copyOf(cyclicRegions);
         }
@@ -7428,7 +7586,8 @@ public final class AelisPlanner {
 
         private AelisExecutionPolicy.Scope executionScope() {
             return AelisExecutionPolicy.select(
-                    contextSensitive || hasSecondaryOutputs, hasLocalBoundaries(),
+                    contextSensitive || hasSecondaryOutputs || hasFixedRemainders,
+                    hasLocalBoundaries(),
                     hasSubstituteInputs, hasReusableInputs);
         }
 
