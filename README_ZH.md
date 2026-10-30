@@ -2,7 +2,7 @@
 
 [English](README.md) · [接口文档](docs/API_INTEGRATION_ZH.md) · [配置参考](CONFIGURATION.md)
 
-当前 **1.1.4-forge** 为 Minecraft 1.20.1 / Forge 提供 AE2 规划、存储访问和样板终端
+当前 **1.1.5-forge** 为 Minecraft 1.20.1 / Forge 提供 AE2 规划、存储访问和样板终端
 增强。本版增加共享批量投料事务，让循环 CPU 的首份抽料、额外份数、回滚和原生
 Provider 钩子保持同一材料账本。
 
@@ -32,7 +32,7 @@ Provider 钩子保持同一材料账本。
 Applied Enhancements 使用相同文件。ExtendedAE、AE2WTLib、JEI、EMI、AdvancedAE 和其他
 附属兼容均为可选；新版附属的兼容性取决于其内部接口。
 
-构建 `build/libs/appliedenhancements-1.1.4-forge.jar` 后放入两端 mods，客户端和
+构建 `build/libs/appliedenhancements-1.1.5-forge.jar` 后放入两端 mods，客户端和
 服务端使用相同构建，内部载荷协议为 `1.1.4-forge-5`，升级时须同时更新两端。附属使用独立安装的公开 API，不嵌入本模组。
 
 ## 配置与操作
@@ -84,7 +84,7 @@ API 指南位于仓库的 `docs/` 目录；独立的 `apiJavadoc` 任务将 HTML
 .\gradlew.bat clean assemble apiJavadoc --no-configuration-cache
 ```
 
-发行包为 `build/libs/appliedenhancements-1.1.4-forge.jar`。
+发行包为 `build/libs/appliedenhancements-1.1.5-forge.jar`。
 CI 分别以标准 AE2 和 UELM 编译，只上传一个通用 JAR 和生成的 API 文档。
 
 ## 已知限制

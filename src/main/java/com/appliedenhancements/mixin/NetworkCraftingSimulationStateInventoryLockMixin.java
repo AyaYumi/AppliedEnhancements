@@ -27,15 +27,16 @@ public abstract class NetworkCraftingSimulationStateInventoryLockMixin {
             IActionSource source,
             CallbackInfo callback) {
         var infinite = (com.appliedenhancements.storage.InfinitePlanningInventory) this;
-        var sentinelKeys = new ArrayList<AEKey>();
+        var candidateKeys = new ArrayList<AEKey>();
         for (var entry : this.list) {
-            if (entry.getLongValue() == Long.MAX_VALUE) {
-                sentinelKeys.add(entry.getKey());
+            // Storage caches may report capped amounts even for explicitly infinite cells.
+            if (entry.getLongValue() > 0) {
+                candidateKeys.add(entry.getKey());
             }
         }
         infinite.appliedenhancements$infiniteKeys().addAll(
                 com.appliedenhancements.storage.InfiniteStorageSupport.snapshot(
-                        storage.getInventory(), source, sentinelKeys));
+                        storage.getInventory(), source, candidateKeys));
         com.appliedenhancements.storage.InfiniteStorageSupport.reconcilePlanningSnapshot(
                 this.list, storage.getInventory(), source, infinite.appliedenhancements$infiniteKeys());
         ManualCraftingInventoryLock.subtractReservations(

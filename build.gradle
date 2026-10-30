@@ -22,7 +22,6 @@ minecraft {
     runs {
         configureEach {
             workingDirectory project.file(findProperty('run_directory') ?: 'run')
-            property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'info'
 
             mods {

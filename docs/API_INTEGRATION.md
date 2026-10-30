@@ -4,14 +4,14 @@
 
 Exact CPU execution: see [EXACT_CRAFTING_API.md](EXACT_CRAFTING_API.md) for CPU-independent exact plans, output progress and persistence. Custom CPUs opt in through the public execution contracts.
 
-The current `1.1.4-forge` source defaults to AE2 `15.4.10` and retains
+The current `1.1.5-forge` source defaults to AE2 `15.4.10` and retains
 the `[15.4.10,16)` dependency range. A single universal JAR supports both standard
 AE2 15.4.10 and UELM 15.5.4; CI compiles against both dependencies and distributes
 the standard-compiled artifact once. Public API signatures use AE2 types; internal
 CPU display hooks are an isolated compatibility implementation that depends on
 matching dependency internals.
 
-This guide is intended for Forge mod authors integrating with Applied Enhancements `1.1.4-forge`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
+This guide is intended for Forge mod authors integrating with Applied Enhancements `1.1.5-forge`. It covers dependency declarations, stable APIs, registration lifecycles, client/server boundaries, transactional requirements, and safe planner fallback behavior.
 
 API guides live in the repository's `docs/` directory; `./gradlew apiJavadoc`
 generates separate HTML documentation under `build/docs/api/`.
@@ -24,9 +24,9 @@ generates separate HTML documentation under `build/docs/api/`.
 | Java | `17` | Compilation and runtime target |
 | Forge | `47.4.20` | Build baseline; currently declared range: `[47.4.10,)` |
 | Applied Energistics 2 | `15.4.10` | Declared range: `[15.4.10,16)`; public signatures directly reference AE2 types |
-| Applied Enhancements | `1.1.4-forge` | Version covered by this guide |
+| Applied Enhancements | `1.1.5-forge` | Version covered by this guide |
 
-Version `1.1.4-forge` retains `AelisBatchExecutionContext` for shared extraction/ownership and `AelisSmartDoublingApi` for native enabled-state queries from `1.1.0-forge`, and preserves recoverable planning and metadata fallbacks, exact cyclic counts, output totals and persistence. See [native smart doubling](#native-smart-doubling). Clients and servers use the same build; the internal payload protocol is `1.1.4-forge-5`. Require `1.1.4-forge` at compile time and runtime for the contracts documented here.
+Version `1.1.5-forge` retains `AelisBatchExecutionContext` for shared extraction/ownership and `AelisSmartDoublingApi` for native enabled-state queries from `1.1.0-forge`, and preserves recoverable planning and metadata fallbacks, exact cyclic counts, output totals and persistence. See [native smart doubling](#native-smart-doubling). Clients and servers use the same build; the internal payload protocol is `1.1.4-forge-5`. Require `1.1.4-forge` at compile time and runtime for the contracts documented here.
 
 BigInteger plans are submitted without a universal CPU capability precheck. A saturated long projection does not force `simulation()` or override the CPU's submission result. Server-side integrations should read exact quantities through `AelisExactCraftingPlanApi.read(plan)`; `AelisCycleExecutionApi.copyMetadata` preserves them. The legacy `isPreviewOnly` marker now only indicates a saturated projection. The standard long fields remain projections, so acceptance by an unadapted CPU does not establish exact BigInteger execution support.
 
@@ -48,7 +48,7 @@ The following are implementation details and do not carry source or binary compa
 - `com.github.appliedenhancements`;
 - bridges, payloads, constants, and other classes outside the public API packages.
 
-## Exact planning and metadata in 1.1.4-forge
+## Exact planning and metadata in 1.1.5-forge
 
 Call `AelisExactCraftingService.begin` on the server thread, then wait asynchronously for the result. There is no 256-digit API limit. Non-positive amounts become empty orders. `REPORT_MISSING_ITEMS` and `CRAFT_LESS` are accepted; reduced native attempts use their own exact request context.
 
@@ -66,7 +66,7 @@ The immutable snapshot exposes final output, bytes, crafted/missing/stored/infin
 
 When `Result.shouldFallback()` is true, `fallbackCategory()` supplies a stable `AelisFallbackReason` instead of requiring string parsing. Unknown details map to `OTHER`, errors to `INTERNAL_ERROR`, and success or branch failure to `NONE`. Both the AELIS and legacy MaxFast results expose this query; diagnostic text remains available.
 
-Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and explicit exact service calls work independently of `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.1.4-forge` build when using the new types.
+Disabling automatic AELIS leaves ordinary AE2 calculations native. Explicit planner API calls still enable the relevant extensions, and explicit exact service calls work independently of `enable_big_integer_planning`. Callers do not manage internal thread scopes. Existing service overloads and quantity getters remain available. Compile and run against this same `1.1.5-forge` build when using the new types.
 
 ## Development dependency
 
@@ -94,10 +94,10 @@ dependencies {
     compileOnly fg.deobf('maven.modrinth:ae2:15.4.10')
 
     // Compile against the API without embedding this mod in your own JAR.
-    compileOnly fg.deobf('com.appliedenhancements:appliedenhancements:1.1.4-forge')
+    compileOnly fg.deobf('com.appliedenhancements:appliedenhancements:1.1.5-forge')
 
     // Add this only when the development run needs the integration at runtime.
-    runtimeOnly fg.deobf('com.appliedenhancements:appliedenhancements:1.1.4-forge')
+    runtimeOnly fg.deobf('com.appliedenhancements:appliedenhancements:1.1.5-forge')
 }
 ```
 
@@ -167,7 +167,7 @@ The main integration types are listed below; exact request and metadata types ar
 | Batch movement | Register server handlers during Common Setup; call `requestMove` on the client or `execute` on the server | There is no public result callback or future. Observe authoritative menu updates, or provide your own result protocol |
 | Infinite-cell item tag | Load server data-pack tags and query after tags are available | Minecraft synchronizes item tags. The Java marker interface is a local type capability, not a synchronization mechanism |
 
-Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.4-forge` uses internal payload protocol `1.1.4-forge-5`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, plus an on-demand bounded dependency graph of the current AELIS plan (at most 512 material nodes, 2048 edges and 512 KiB per graph packet). The graph is for UI display only; these plan packets do not include server-only exact pattern counts, third-party registrations or CPU execution state. Graph models, bridges and payloads are internal implementation details; this adds no stable graph API.
+Use the same Applied Enhancements release build on client and server for its networked features; identical version strings alone do not establish matching development builds. Version `1.1.5-forge` uses internal payload protocol `1.1.4-forge-5`. Built-in packets synchronize selected server feature settings, calculation progress, planner-path display, and bounded exact BigInteger crafted, missing, supplied totals and storage byte estimates, plus an on-demand bounded dependency graph of the current AELIS plan (at most 512 material nodes, 2048 edges and 512 KiB per graph packet). The graph is for UI display only; these plan packets do not include server-only exact pattern counts, third-party registrations or CPU execution state. Graph models, bridges and payloads are internal implementation details; this adds no stable graph API.
 
 Registration APIs expose immutable snapshots but no unregister or replace operation. Do not register again on world load, screen opening, or every connection. Planner callbacks run in the calculation's context, possibly on worker threads; schedule UI or world work onto its owning thread.
 
