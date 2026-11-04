@@ -10,16 +10,12 @@ public final class NetworkHandler {
     }
 
     public static void register(PayloadRegistrar registrar) {
+        registrar.playBidirectional(ExactCraftingAmountPayload.TYPE, ExactCraftingAmountPayload.STREAM_CODEC,
+                ExactCraftingAmountPayload::handle);
         registrar.playToServer(AelisPlanGraphRequest.TYPE, AelisPlanGraphRequest.STREAM_CODEC, AelisPlanGraphRequest::handle);
         registrar.playToClient(AelisPlanGraphPayload.TYPE, AelisPlanGraphPayload.STREAM_CODEC, AelisPlanGraphPayload::handle);
         registrar.playToServer(ForceCraftingStartPayload.TYPE, ForceCraftingStartPayload.STREAM_CODEC,
                 ForceCraftingStartPayload::handle);
-        registrar.playBidirectional(ExactCraftingAmountPayload.TYPE, ExactCraftingAmountPayload.STREAM_CODEC, ExactCraftingAmountPayload::handle);
-        registrar.playToServer(
-                LongCraftingRequestPayload.TYPE,
-                LongCraftingRequestPayload.STREAM_CODEC,
-                LongCraftingRequestPayload::handle
-        );
         registrar.playToServer(
                 PatternBatchMovePayload.TYPE,
                 PatternBatchMovePayload.STREAM_CODEC,

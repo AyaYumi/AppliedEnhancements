@@ -57,8 +57,7 @@ class MixinOwnedPackageGuardTest {
                 "CraftingProgressTaskBinding",
                 "MolecularBalancedBatchScope",
                 "NativeCraftingLongSafety",
-                "NetworkStorageDetectionCache",
-                "TerminalAwareFuture");
+                "NetworkStorageDetectionCache");
         for (String helper : historicHelpers) {
             Files.writeString(
                     ownedPackage.resolve(helper + ".java"),

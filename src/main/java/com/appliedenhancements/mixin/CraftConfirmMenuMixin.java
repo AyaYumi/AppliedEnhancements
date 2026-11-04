@@ -12,22 +12,17 @@ import appeng.api.networking.crafting.ICraftingSubmitResult;
 import appeng.api.networking.security.IActionHost;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEKey;
-import appeng.crafting.CraftingPlan;
 import appeng.me.helpers.PlayerSource;
-import appeng.menu.MenuOpener;
-import appeng.menu.me.crafting.CraftAmountMenu;
 import appeng.menu.me.crafting.CraftConfirmMenu;
-import com.appliedenhancements.ae2.LongCraftingAmountMenuBridge;
-import com.appliedenhancements.ae2.LongCraftingConfirmMenuBridge;
+import com.appliedenhancements.api.AelisCraftingRequest;
+import com.appliedenhancements.api.AelisExactRequest;
+import com.appliedenhancements.runtime.CraftingSubmissionScope;
 import com.appliedenhancements.Config;
 import com.appliedenhancements.runtime.CraftingProgressSnapshotOrder;
 import com.appliedenhancements.runtime.CraftingProgressTaskBinding;
-import com.appliedenhancements.runtime.DataEnergisticsMenuCompat;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
-import com.appliedenhancements.runtime.TerminalAwareFuture;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressHandle;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
-import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressRequester;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
@@ -36,6 +31,7 @@ import com.github.appliedenhancements.integration.ae2.AelisCalculationPathMenuBr
 import com.github.appliedenhancements.integration.ae2.AelisCyclicCraftAmountsCarrier;
 import com.github.appliedenhancements.network.CraftingCalculationPathPayload;
 import com.github.appliedenhancements.network.CraftingCalculationProgressPayload;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.network.chat.Component;
@@ -53,13 +49,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.Objects;
 import java.util.Map;
 import java.math.BigInteger;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Mixin(value = CraftConfirmMenu.class, remap = false)
 public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgressMenuBridge,
-        LongCraftingConfirmMenuBridge, AelisCalculationPathMenuBridge, com.appliedenhancements.ae2.ExactCraftingMenuBridge,
+        AelisCalculationPathMenuBridge,
         com.appliedenhancements.ae2.ForceCraftingMenuBridge,
         com.appliedenhancements.ae2.AelisPlanGraphMenuBridge {
     @Unique private com.appliedenhancements.plan.AelisPlanGraph appliedenhancements$planGraph;
@@ -124,34 +119,16 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         PacketDistributor.sendToPlayer(player, new com.appliedenhancements.network.AelisPlanGraphPayload(
                 menu.containerId, request, appliedenhancements$cachedGraph));
     }
-    @Unique private BigInteger appliedenhancements$exactRequestedAmount;
-
-    @Override public boolean appliedenhancements$planExact(AEKey what, BigInteger requested) {
-        var request = new com.appliedenhancements.api.AelisExactRequest(requested);
-        if (!Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger()) return false;
-        return appliedenhancements$planRequested(what, request.projection(), CalculationStrategy.REPORT_MISSING_ITEMS, requested);
-    }
     @Unique
     private static final AtomicLong appliedenhancements$nextProgressGeneration = new AtomicLong();
-
-    /** How long a confirm menu may stay open without any planning job before it is closed. */
-    @Unique
-    private static final int APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS = 100;
 
     @Shadow
     private ICraftingPlan result;
 
     @Shadow
-    private AEKey whatToCraft;
-
-    @Shadow
-    private int amount;
-
-    @Shadow
-    private Future<ICraftingPlan> job;
-
-    @Shadow
     private appeng.menu.me.crafting.CraftingPlanSummary plan;
+
+    @Unique private AelisCraftingRequest appliedenhancements$submittedQuantity;
 
     @Unique
     private final CraftingProgressTaskBinding appliedenhancements$progressBinding =
@@ -211,13 +188,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     }
 
     @Unique
-    private long appliedenhancements$requestedAmount;
-
-    @Unique
-    private CalculationStrategy appliedenhancements$calculationStrategy =
-            CalculationStrategy.REPORT_MISSING_ITEMS;
-
-    @Unique
     private ManualCraftingInventoryLock.Reservation appliedenhancements$inventoryReservation;
 
     @Unique
@@ -228,10 +198,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
     @Unique
     private boolean appliedenhancements$replanningAfterReservationConflict;
-
-    /** Server ticks this menu spent without a planning job and without a plan. */
-    @Unique
-    private int appliedenhancements$idleTicksWithoutPlanning;
 
     @Override
     public AelisCalculationPath molecularmanipulator$getCalculationPath() {
@@ -300,10 +266,10 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     }
 
     @Unique
-    private CraftingProgressTaskBinding.Task appliedenhancements$startProgressTask(
+    private CraftingCalculationProgressHandle appliedenhancements$startProgressTask(
             boolean progressDisplayEnabled) {
         CraftingCalculationProgressHandle progress = null;
-        if (progressDisplayEnabled) {
+        if (progressDisplayEnabled && Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get()) {
             long generation = appliedenhancements$nextProgressGeneration.incrementAndGet();
             if (generation <= 0) {
                 appliedenhancements$nextProgressGeneration.set(1);
@@ -311,12 +277,12 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             }
             progress = new CraftingCalculationProgressHandle(generation);
         }
-        var task = appliedenhancements$progressBinding.begin(progress);
+        appliedenhancements$progressBinding.begin(progress);
         appliedenhancements$progressRevision = 0;
         appliedenhancements$lastProgressSyncTick = Long.MIN_VALUE;
         appliedenhancements$terminalProgressSentGeneration = -1;
         appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
-        return task;
+        return progress;
     }
 
     @Unique
@@ -351,12 +317,13 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             AEKey what, int amount, CalculationStrategy strategy,
             CallbackInfoReturnable<Boolean> callback) {
         if (!((CraftConfirmMenu) (Object) this).isClientSide()) {
+            var submitted = CraftingSubmissionScope.request();
+            appliedenhancements$submittedQuantity = submitted != null && submitted.output().equals(what)
+                    && submitted.amount().min(BigInteger.valueOf(Integer.MAX_VALUE)).intValueExact() == amount
+                    ? new AelisCraftingRequest(what, submitted.amount(), strategy) : null;
             if (!appliedenhancements$replanningAfterReservationConflict) {
                 appliedenhancements$reservationConflictReplans = 0;
             }
-            appliedenhancements$requestedAmount = amount;
-            appliedenhancements$exactRequestedAmount = null;
-            appliedenhancements$calculationStrategy = strategy;
             appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
             appliedenhancements$cyclicCraftAmounts = Map.of();
             appliedenhancements$bigIntegerCyclicCraftAmounts = Map.of();
@@ -365,154 +332,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             appliedenhancements$releaseInventoryReservation();
             appliedenhancements$cancelProgress();
         }
-    }
-
-    @Override
-    public boolean appliedenhancements$planLong(
-            AEKey what, long requestedAmount, CalculationStrategy strategy) {
-        return appliedenhancements$planRequested(what, requestedAmount, strategy, null);
-    }
-
-    @Unique private boolean appliedenhancements$planRequested(AEKey what, long requestedAmount,
-            CalculationStrategy strategy, BigInteger exact) {
-        var menu = (CraftConfirmMenu) (Object) this;
-        if (menu.isClientSide() || what == null || requestedAmount <= 0 || strategy == null
-                || !Config.MAX_CRAFTING_ORDER_AMOUNT.get().isEnabled()) {
-            return false;
-        }
-        if (!appliedenhancements$replanningAfterReservationConflict) {
-            appliedenhancements$reservationConflictReplans = 0;
-        }
-        appliedenhancements$cancelProgress();
-        appliedenhancements$releaseInventoryReservation();
-        appliedenhancements$calculationStrategy = strategy;
-        if (this.job != null) {
-            this.job.cancel(true);
-        }
-
-        var target = menu.getTarget();
-        if (!(target instanceof IActionHost actionHost)) {
-            return false;
-        }
-        IGridNode gridNode = actionHost.getActionableNode();
-        if (gridNode == null) {
-            return false;
-        }
-        IGrid grid = gridNode.getGrid();
-
-        this.result = null;
-        appliedenhancements$clearDisplayedPlan();
-        menu.clearError();
-        this.whatToCraft = what;
-        this.amount = (int) Math.min(requestedAmount, Integer.MAX_VALUE);
-        this.appliedenhancements$requestedAmount = requestedAmount;
-        this.appliedenhancements$exactRequestedAmount = exact;
-        this.appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
-        this.appliedenhancements$cyclicCraftAmounts = Map.of();
-        this.appliedenhancements$bigIntegerCyclicCraftAmounts = Map.of();
-
-        ICraftingSimulationRequester requester = new ICraftingSimulationRequester() {
-            @Override
-            public IActionSource getActionSource() {
-                return new PlayerSource(menu.getPlayer(), actionHost);
-            }
-
-            @Override
-            public IGridNode getGridNode() {
-                return gridNode;
-            }
-        };
-
-        var progressTask = appliedenhancements$startProgressTask(
-                Config.ENABLE_PROGRESS_DISPLAY.get());
-        var progress = progressTask.progress();
-        ICraftingSimulationRequester effectiveRequester = requester;
-        if (progress != null) {
-            effectiveRequester = new CraftingCalculationProgressRequester(requester, progress);
-        }
-        try {
-            Future<ICraftingPlan> rawJob = exact != null
-                    ? com.appliedenhancements.api.AelisExactCraftingService.begin(menu.getLevel(), effectiveRequester,
-                            new com.appliedenhancements.api.AelisCraftingRequest(what, exact, strategy))
-                    : grid.getCraftingService().beginCraftingCalculation(
-                    menu.getLevel(),
-                    effectiveRequester,
-                    what,
-                    requestedAmount,
-                    strategy);
-            this.job = appliedenhancements$observeCalculationJob(rawJob, progressTask);
-            return true;
-        } catch (RuntimeException | Error failure) {
-            appliedenhancements$finishFailedProgress(progressTask, failure);
-            throw failure;
-        }
-    }
-
-    @Inject(method = "replan", at = @At("HEAD"), cancellable = true)
-    private void appliedenhancements$replanLong(CallbackInfo callback) {
-        var menu = (CraftConfirmMenu) (Object) this;
-        if (!menu.isClientSide() && !appliedenhancements$replanningAfterReservationConflict) {
-            appliedenhancements$reservationConflictReplans = 0;
-        }
-        if (!menu.isClientSide() && appliedenhancements$exactRequestedAmount != null && whatToCraft != null) {
-            if (!appliedenhancements$planRequested(whatToCraft,
-                    new com.appliedenhancements.api.AelisExactRequest(appliedenhancements$exactRequestedAmount).projection(),
-                    CalculationStrategy.CRAFT_LESS, appliedenhancements$exactRequestedAmount)) menu.goBack();
-            callback.cancel(); return;
-        }
-        if (menu.isClientSide() || appliedenhancements$requestedAmount <= Integer.MAX_VALUE
-                || this.whatToCraft == null) {
-            return;
-        }
-        if (!appliedenhancements$planLong(
-                this.whatToCraft,
-                appliedenhancements$requestedAmount,
-                CalculationStrategy.CRAFT_LESS)) {
-            menu.goBack();
-        }
-        callback.cancel();
-    }
-
-    @Inject(method = "goBack", at = @At("HEAD"), cancellable = true)
-    private void appliedenhancements$returnToLongAmountScreen(CallbackInfo callback) {
-        var menu = (CraftConfirmMenu) (Object) this;
-        if (!menu.isClientSide()) {
-            appliedenhancements$releaseInventoryReservation();
-        }
-        long requestedAmount = appliedenhancements$effectiveRequestedAmount(menu);
-        if (!(menu.getPlayer() instanceof ServerPlayer player)
-                || requestedAmount <= Integer.MAX_VALUE
-                || this.whatToCraft == null
-                || menu.getLocator() == null) {
-            return;
-        }
-
-        menu.clearError();
-        MenuOpener.open(CraftAmountMenu.TYPE, player, menu.getLocator());
-        if (player.containerMenu instanceof CraftAmountMenu amountMenu
-                && amountMenu instanceof LongCraftingAmountMenuBridge bridge) {
-            bridge.appliedenhancements$setWhatToCraftLong(
-                    this.whatToCraft, requestedAmount);
-            DataEnergisticsMenuCompat.restoreAmountScreen(
-                    menu, amountMenu, requestedAmount);
-            amountMenu.broadcastChanges();
-            // The native amount widget initializes from an int-valued projection.
-            // Restore the original request for long orders as well as BigInteger orders.
-            BigInteger restoredAmount = appliedenhancements$exactRequestedAmount != null
-                    ? appliedenhancements$exactRequestedAmount : BigInteger.valueOf(requestedAmount);
-            PacketDistributor.sendToPlayer(player, new com.appliedenhancements.network.ExactCraftingAmountPayload(
-                    amountMenu.containerId, restoredAmount.toString(), false, false));
-        }
-        callback.cancel();
-    }
-
-    @Unique
-    private long appliedenhancements$effectiveRequestedAmount(CraftConfirmMenu menu) {
-        if (appliedenhancements$requestedAmount > 0) {
-            return appliedenhancements$requestedAmount;
-        }
-        return DataEnergisticsMenuCompat.requestedAmount(menu)
-                .orElse(this.amount > 0 ? this.amount : 0L);
     }
 
     @WrapOperation(method = "planJob", at = @At(value = "INVOKE",
@@ -525,87 +344,21 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             long amount,
             CalculationStrategy strategy,
             Operation<Future<ICraftingPlan>> original) {
-        var progressTask = appliedenhancements$startProgressTask(
+        var progress = appliedenhancements$startProgressTask(
                 Config.ENABLE_PROGRESS_DISPLAY.get());
-        var progress = progressTask.progress();
-        ICraftingSimulationRequester effectiveRequester = requester;
-        if (progress != null) {
-            effectiveRequester = new CraftingCalculationProgressRequester(requester, progress);
-        }
-        try {
-            Future<ICraftingPlan> rawJob = original.call(
-                    craftingService,
-                    level,
-                    effectiveRequester,
-                    what,
-                    amount,
-                    strategy);
-            return appliedenhancements$observeCalculationJob(rawJob, progressTask);
-        } catch (RuntimeException | Error failure) {
-            appliedenhancements$finishFailedProgress(progressTask, failure);
-            throw failure;
+        long submittedAmount = appliedenhancements$submittedQuantity == null ? amount
+                : new AelisExactRequest(appliedenhancements$submittedQuantity.amount()).projection();
+        try (var quantity = CraftingSubmissionScope.withRequest(appliedenhancements$submittedQuantity);
+                var tracking = CraftingSubmissionScope.withProgress(progress)) {
+            return original.call(craftingService, level, requester, what, submittedAmount, strategy);
         }
     }
 
-    @Unique
-    private Future<ICraftingPlan> appliedenhancements$observeCalculationJob(
-            Future<ICraftingPlan> rawJob,
-            CraftingProgressTaskBinding.Task progressTask) {
-        Objects.requireNonNull(rawJob, "Crafting service returned a null planning future");
-        return new TerminalAwareFuture<>(
-                rawJob,
-                plan -> {
-                    if (!appliedenhancements$progressBinding.isCurrent(progressTask)) {
-                        return;
-                    }
-                    var progress = progressTask.progress();
-                    AelisCalculationPath path = appliedenhancements$resolveCalculationPath(plan);
-                    appliedenhancements$calculationPath = path;
-                    if (progress != null) {
-                        progress.complete(path);
-                    }
-                },
-                failure -> {
-                    if (!appliedenhancements$progressBinding.isCurrent(progressTask)) {
-                        return;
-                    }
-                    appliedenhancements$finishFailedProgress(progressTask, failure);
-
-                },
-                () -> {
-                    if (appliedenhancements$progressBinding.isCurrent(progressTask)
-                            && progressTask.progress() != null) {
-                        progressTask.progress().cancel();
-                    }
-                });
-    }
-
-    @Unique
-    private void appliedenhancements$finishFailedProgress(
-            CraftingProgressTaskBinding.Task progressTask, Throwable failure) {
-        if (!appliedenhancements$progressBinding.isCurrent(progressTask)) {
-            return;
+    @WrapMethod(method = {"replan", "goBack"})
+    private void appliedenhancements$keepSubmittedQuantity(Operation<Void> original) {
+        try (var quantity = CraftingSubmissionScope.withRequest(appliedenhancements$submittedQuantity)) {
+            original.call();
         }
-        var progress = progressTask.progress();
-        if (progress == null) {
-            return;
-        }
-        if (appliedenhancements$isCancellation(failure)) {
-            progress.cancel();
-        } else {
-            progress.fail();
-        }
-    }
-
-    @Unique
-    private static boolean appliedenhancements$isCancellation(Throwable failure) {
-        for (Throwable current = failure; current != null; current = current.getCause()) {
-            if (current instanceof CancellationException
-                    || current instanceof InterruptedException) {
-                return true;
-            }
-        }
-        return false;
     }
 
     @Unique
@@ -613,13 +366,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         AelisCalculationPath carriedPath = plan instanceof AelisCalculationPathCarrier carrier
                 ? carrier.molecularmanipulator$getCalculationPath()
                 : null;
-        if (carriedPath != null && carriedPath != AelisCalculationPath.AE2_NATIVE) {
-            return carriedPath;
-        }
-        if (plan != null && !(plan instanceof CraftingPlan)) {
-            return AelisCalculationPath.EXTERNAL;
-        }
-        return appliedenhancements$calculationPath;
+        return carriedPath == AelisCalculationPath.AELIS
+                ? AelisCalculationPath.AELIS
+                : AelisCalculationPath.AE2_NATIVE;
     }
 
     @Inject(method = "broadcastChanges", at = @At(value = "INVOKE",
@@ -692,7 +441,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         if (menu.isClientSide()) {
             return;
         }
-        if (!ManualCraftingInventoryLock.enabled()) {
+        if (!ManualCraftingInventoryLock.enabled()
+                || this.result != null && appliedenhancements$resolveCalculationPath(this.result) != AelisCalculationPath.AELIS) {
             appliedenhancements$releaseInventoryReservation();
             return;
         }
@@ -808,26 +558,11 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
 
         this.result = null;
         appliedenhancements$clearDisplayedPlan();
-        boolean replanned;
         appliedenhancements$replanningAfterReservationConflict = true;
         try {
-            replanned = this.whatToCraft != null
-                    && (appliedenhancements$exactRequestedAmount != null
-                            ? appliedenhancements$planExact(this.whatToCraft, appliedenhancements$exactRequestedAmount)
-                            : appliedenhancements$requestedAmount > Integer.MAX_VALUE
-                            ? appliedenhancements$planLong(
-                                    this.whatToCraft,
-                                    appliedenhancements$requestedAmount,
-                                    appliedenhancements$calculationStrategy)
-                            : menu.planJob(
-                                    this.whatToCraft,
-                                    (int) appliedenhancements$requestedAmount,
-                                    appliedenhancements$calculationStrategy));
+            menu.replan();
         } finally {
             appliedenhancements$replanningAfterReservationConflict = false;
-        }
-        if (!replanned) {
-            menu.goBack();
         }
     }
 
@@ -862,48 +597,16 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             return;
         }
 
-        appliedenhancements$lastProgressSyncTick = player.serverLevel().getGameTime();
         var snapshot = progress.snapshot(++appliedenhancements$progressRevision);
+        if (snapshot.path() != AelisCalculationPath.AELIS) {
+            return;
+        }
+        appliedenhancements$lastProgressSyncTick = player.serverLevel().getGameTime();
         PacketDistributor.sendToPlayer(
                 player,
                 new CraftingCalculationProgressPayload(menu.containerId, snapshot));
         if (snapshot.phase().terminal()) {
             appliedenhancements$terminalProgressSentGeneration = snapshot.generation();
-        }
-    }
-
-    /**
-     * AE2 leaves the plan screen open forever when a confirmation menu never
-     * receives a planning job, for example when another mod mixes into the plan
-     * bookkeeping and fails. Close such a screen instead of showing an endless
-     * "calculating" dialog.
-     */
-    @Inject(method = "broadcastChanges", at = @At("RETURN"))
-    private void appliedenhancements$closeStalledPlanScreen(CallbackInfo callback) {
-        var menu = (CraftConfirmMenu) (Object) this;
-        if (menu.isClientSide()
-                || !(menu.getPlayer() instanceof ServerPlayer player)
-                || player.containerMenu != menu) {
-            return;
-        }
-        if (this.job != null || this.result != null || menu.getPlan() != null) {
-            appliedenhancements$idleTicksWithoutPlanning = 0;
-            return;
-        }
-        if (++appliedenhancements$idleTicksWithoutPlanning
-                < APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS) {
-            return;
-        }
-        appliedenhancements$idleTicksWithoutPlanning = 0;
-        com.appliedenhancements.runtime.AelisPlanningLog.warn(
-                "Crafting plan screen #{} had no planning job for {} ticks; closing it (what={}, amount={})",
-                menu.containerId, APPLIEDENHANCEMENTS_STALLED_PLAN_TICKS,
-                this.whatToCraft, this.amount);
-        player.sendSystemMessage(Component.translatable(
-                "message.appliedenhancements.crafting_plan_stalled"));
-        menu.goBack();
-        if (player.containerMenu == menu) {
-            player.closeContainer();
         }
     }
 

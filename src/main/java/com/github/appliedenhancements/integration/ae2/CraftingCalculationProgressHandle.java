@@ -65,20 +65,6 @@ public final class CraftingCalculationProgressHandle {
         this.phase = CraftingCalculationProgressPhase.AELIS_EXECUTING;
     }
 
-    public synchronized void beginAe2(AelisCalculationPath path) {
-        if (terminal.get()) {
-            return;
-        }
-        if (path != AelisCalculationPath.AE2_NATIVE
-                && path != AelisCalculationPath.AE2_FALLBACK) {
-            throw new IllegalArgumentException("AE2 progress requires a native or fallback path");
-        }
-        this.path = path;
-        this.completedUnits.set(0);
-        this.totalUnits = -1;
-        this.phase = CraftingCalculationProgressPhase.AE2_CALCULATING;
-    }
-
     public synchronized void beginBuildingPlan() {
         setPhase(CraftingCalculationProgressPhase.BUILDING_PLAN);
     }
@@ -112,6 +98,11 @@ public final class CraftingCalculationProgressHandle {
             this.finishedElapsedNanos = elapsedNanos();
             this.phase = CraftingCalculationProgressPhase.COMPLETED;
         }
+    }
+
+    /** Ends AELIS progress when the request continues through the host planner. */
+    public synchronized void stopTracking() {
+        finishTerminal(CraftingCalculationProgressPhase.IDLE);
     }
 
     public synchronized void cancel() {

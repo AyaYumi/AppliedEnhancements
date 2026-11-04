@@ -45,14 +45,10 @@ public final class Config {
 
         MAX_CRAFTING_ORDER_AMOUNT = builder
                 .comment(
-                        "Select the crafting order handling mode.",
-                        "DISABLED leaves AE2's native handling untouched.",
-                        "LONG_MAX enables the long-valued path up to Long.MAX_VALUE.",
-                        "BIG_INTEGER also enables exact orders above Long.MAX_VALUE.",
-                        "选择合成订单处理模式。",
-                        "DISABLED 保持 AE2 原生处理，不接管合成数量。",
-                        "LONG_MAX 启用 long 数值路径，最大为 Long.MAX_VALUE。",
-                        "BIG_INTEGER 额外启用超过 Long.MAX_VALUE 的精确大整数订单。",
+                        "Quantity input limit: DISABLED leaves host input unchanged, LONG_MAX allows long, BIG_INTEGER allows exact input.",
+                        "Submission continues through the host confirmation menu and does not select a planner.",
+                        "数量输入上限：DISABLED 沿用宿主输入，LONG_MAX 扩展至 long，BIG_INTEGER 允许任意精度输入。",
+                        "提交后沿用宿主确认菜单，不根据数量选择规划器。",
                         "Allowed values / 可选值: DISABLED, LONG_MAX, BIG_INTEGER",
                         "Default / 默认值: DISABLED")
                 .translation("appliedenhancements.config.max_crafting_order_amount")

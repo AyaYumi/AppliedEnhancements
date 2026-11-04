@@ -6,7 +6,7 @@
 
 [中文](README_ZH.md) · [API documentation](docs/API_INTEGRATION.md) · [Configuration](CONFIGURATION.md)
 
-Applied Enhancements **1.1.4** enhances AE2 crafting, storage access and pattern
+Applied Enhancements **1.1.6** enhances AE2 crafting, storage access and pattern
 terminals for Minecraft 1.21.1 / NeoForge. It provides exact planning, cycle-aware
 CPU execution, shared batch extraction/ownership transactions and terminal tools.
 
@@ -14,7 +14,7 @@ CPU execution, shared batch extraction/ownership transactions and terminal tools
 
 | Area | Behavior |
 | --- | --- |
-| Crafting orders | Native, large-quantity long or exact BigInteger input modes; exact quantities with a 1,048,576-character transport limit |
+| Crafting orders | Native, long and BigInteger quantity input; submission continues through the host confirmation menu |
 | AELIS | Session-local planner, exact material/byte metadata, cycle solving and safe supported fallback |
 | Plan review | Compact AELIS screen, exact material columns, cyclic quantities, filters/search, optional JEI bookmarks and a compact recipe dependency tree with draggable nodes |
 | Cycle execution | One protected inventory view for initial/batch extraction, phase limits, rollback and pending returns |
@@ -32,7 +32,7 @@ The default build uses AE2 19.2.18. ExtendedAE, AE2WTLib, JEI, AdvancedAE,
 Data Energistics and other integrations remain optional. New addon versions need
 runtime verification when they change internal hooks.
 
-Build `build/libs/appliedenhancements-1.1.4.jar` and install the same build on
+Build `build/libs/appliedenhancements-1.1.6.jar` and install the same build on
 client and server. Internal network protocol is 11, replacing protocol 10 in 1.1.3;
 update both sides together. Addons use the separate public API; this mod is not
 embedded in their JARs.
@@ -40,8 +40,9 @@ embedded in their JARs.
 ## Configuration and use
 
 The active instance generates `config/appliedenhancements-common.toml`.
-Order interception, progress display, enhanced material preview and automatic
-AELIS default off; cache/storage optimizations default on. See the complete
+Progress display, enhanced material preview and automatic AELIS default off;
+cache/storage optimizations default on. Order modes control quantity input only;
+submitted requests retain the host's planner selection and confirmation flow. See the complete
 [18-option reference](CONFIGURATION.md) before enabling a planner mode.
 
 Pattern Quick Move defaults to right-click; item actions default to Alt +
@@ -49,9 +50,9 @@ right-click. Both are GUI-only, independently configurable NeoForge key bindings
 Server movement/extraction revalidates permissions, source items and destination
 capacity. JEI give actions retain JEI's synchronized cheat permissions.
 
-When enabled and the layout is usable, the AELIS plan screen opens directly after
-quantity selection and keeps calculation and replanning in its waiting view.
-Completed AE2 or external-planner results use the original confirmation view.
+When enabled and the layout is usable, the AELIS plan screen opens for confirmed
+AELIS results and keeps replanning in its waiting view. Native AE2 and external
+planners use the original confirmation view without added planner labels.
 Missing materials are highlighted and can be bookmarked through JEI. Hold Shift
 when Start is disabled to submit a waiting-input order; an available CPU with enough
 storage is still required. This does not create missing ingredients or bypass
@@ -65,7 +66,9 @@ cyclic-group headers to fold or unfold them. Search and filters highlight matchi
 materials and retain related branches. Each node fits its own content: long names
 wrap, demand and crafting quantities use separate lines, and cyclic quantities add
 a row only when present. Instructions wrap below the canvas; compact layouts show
-the complete instructions in the Graph Help tooltip.
+the complete instructions in the Graph Help tooltip. Use Fullscreen beside the zoom
+controls to expand the tree across the game window. Click Exit fullscreen or press
+Esc to return, keeping the zoom, node positions and folded groups.
 
 The graph shows dependencies from scheduled recipes, with dashed links for
 alternative inputs. It is limited to 512 material nodes and 2048 edges; switch to

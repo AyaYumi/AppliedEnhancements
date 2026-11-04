@@ -8,7 +8,6 @@ import org.jetbrains.annotations.ApiStatus;
 @ApiStatus.Internal
 public final class ServerConfigSyncState {
     private static volatile Values synchronizedValues;
-    private static volatile Boolean exactEnabled;
     public static boolean isBigIntegerEnabled() {
         return current().craftingOrderMode().supportsBigInteger();
     }
@@ -33,22 +32,15 @@ public final class ServerConfigSyncState {
     }
 
     static void accept(CraftingOrderMode craftingOrderMode,
-            boolean progressDisplayEnabled, boolean infiniteStorageLimitBypassEnabled,
-            boolean bigIntegerEnabled) {
+            boolean progressDisplayEnabled, boolean infiniteStorageLimitBypassEnabled) {
         synchronizedValues = new Values(
                 craftingOrderMode,
                 progressDisplayEnabled,
                 infiniteStorageLimitBypassEnabled);
-        exactEnabled = bigIntegerEnabled;
-    }
-
-    static void acceptExact(boolean enabled) {
-        exactEnabled = enabled;
     }
 
     static void reset() {
         synchronizedValues = null;
-        exactEnabled = null;
     }
 
     static Values currentOr(Values fallback) {

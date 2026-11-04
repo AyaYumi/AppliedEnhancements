@@ -40,6 +40,28 @@ class AelisPlanLayoutTest {
     }
 
     @Test
+    void fullscreenUsesTheWholeWindowAndReclaimsHeaderAndFooterSpaceForTheGraph() {
+        for (int[] size : new int[][] {{1920, 1080}, {640, 360}, {480, 270}, {427, 240}, {320, 240}}) {
+            var compact = AelisPlanLayout.fit(size[0], size[1]);
+            var fullscreen = AelisPlanLayout.fullscreen(size[0], size[1]);
+            assertEquals(size[0], fullscreen.width());
+            assertEquals(size[1], fullscreen.height());
+            for (int lines = 1; lines <= 6; lines++) {
+                var area = fullscreen.graphArea(36, lines, 9, true);
+                var compactArea = compact.graphArea(122, lines, 9);
+                assertTrue(area.bottom() - area.top() > compactArea.bottom() - compactArea.top());
+                assertTrue(area.bottom() <= fullscreen.height() - 8);
+                if (area.inlineHint()) {
+                    assertEquals(5, area.hintTop() - area.bottom());
+                    assertEquals(fullscreen.height() - 12, area.hintTop() + lines * 10);
+                }
+            }
+            assertTrue(fullscreen.graphArea(36, 2, 9, true).bottom() > fullscreen.footerTop(),
+                    "The fullscreen canvas must use the space normally reserved for footer controls");
+        }
+    }
+
+    @Test
     void tinyViewportsFallBackToAe2() {
         assertFalse(AelisPlanLayout.fit(300, 200).usable());
     }

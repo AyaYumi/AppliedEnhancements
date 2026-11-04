@@ -36,9 +36,14 @@ public abstract class CraftAmountScreenMixin {
     @WrapMethod(method = "confirm")
     private void appliedenhancements$confirmExact(Operation<Void> original) {
         if (!ServerConfigSyncState.isLongRangeCraftingEnabled()) { original.call(); return; }
-        ((LongNumberEntryWidgetBridge) amountToCraft).appliedenhancements$getExactValue().ifPresent(amount ->
-            PacketDistributor.sendToServer(new ExactCraftingAmountPayload(
-                ((CraftAmountScreen) (Object) this).getMenu().containerId, amount.toString(),
-                amountToCraft.startsWithEquals(), CraftAmountScreen.hasShiftDown())));
+        var amount = ((LongNumberEntryWidgetBridge) amountToCraft).appliedenhancements$getExactValue();
+        if (amount.isEmpty()) return;
+        if (amount.get().compareTo(java.math.BigInteger.valueOf(Integer.MAX_VALUE)) <= 0) {
+            original.call();
+            return;
+        }
+        PacketDistributor.sendToServer(new ExactCraftingAmountPayload(
+                ((CraftAmountScreen) (Object) this).getMenu().containerId, amount.get().toString(),
+                amountToCraft.startsWithEquals(), CraftAmountScreen.hasShiftDown()));
     }
 }

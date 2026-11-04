@@ -418,11 +418,6 @@ public final class AelisPlanner {
 
             long effectiveOutputPerPattern = node.outputPerPattern;
             if (effectiveOutputPerPattern <= 0) {
-                com.appliedenhancements.runtime.AelisPlanningLog.warning(
-                        "invalid_output_per_pattern",
-                        "AELIS rejected invalid outputPerPattern: key={}, amount={}, barrier={}, executionMode={}, logicalOccurrences={}",
-                        node.key, node.amount, node.barrier,
-                        node.executionMode, node.logicalOccurrences);
                 throw new Fallback("invalid_output_per_pattern");
             }
             long patternTimes = ceilDiv(totalRequestedItems, effectiveOutputPerPattern);
@@ -1692,11 +1687,6 @@ public final class AelisPlanner {
                 ? compiledCandidate.outputPerPattern
                 : node.outputPerPattern;
         if (effectiveOutputPerPattern <= 0) {
-            com.appliedenhancements.runtime.AelisPlanningLog.warning(
-                    "invalid_transactional_output_per_pattern",
-                    "AELIS rejected invalid transactional outputPerPattern: key={}, amount={}, barrier={}, barrierReason={}, executionMode={}, logicalOccurrences={}",
-                    node.key, node.amount, node.barrier, node.barrierReason,
-                    node.executionMode, node.logicalOccurrences);
             throw new Fallback("invalid_output_per_pattern");
         }
         BigInteger patternTimes = AelisBigIntegerMath.ceilDiv(totalRequestedItems, effectiveOutputPerPattern);

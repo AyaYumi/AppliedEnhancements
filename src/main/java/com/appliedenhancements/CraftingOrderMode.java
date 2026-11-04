@@ -3,13 +3,13 @@ package com.appliedenhancements;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.common.TranslatableEnum;
 
-/** Controls whether Applied Enhancements takes over AE2 crafting order entry. */
+/** Quantity input modes; submission does not choose or manage a planner. */
 public enum CraftingOrderMode implements TranslatableEnum {
     /** Leave AE2's native crafting order handling untouched. */
     DISABLED(false),
-    /** Enable the long-valued path up to {@link Long#MAX_VALUE}. */
+    /** Former long-valued mode up to {@link Long#MAX_VALUE}. */
     LONG_MAX(true),
-    /** Enable the exact BigInteger path in addition to the long-valued path. */
+    /** Former exact BigInteger order-entry mode. */
     BIG_INTEGER(true);
 
     private final boolean enabled;

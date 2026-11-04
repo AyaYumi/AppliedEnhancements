@@ -2,13 +2,13 @@
 
 Minecraft 1.21.1 / NeoForge.
 
-Applied Enhancements **1.1.4** generates `config/appliedenhancements-common.toml`
+Applied Enhancements **1.1.6** generates `config/appliedenhancements-common.toml`
 in the active instance. Edit existing sections and restart both sides.
 API integration: [English](docs/API_INTEGRATION.md) · [中文](docs/API_INTEGRATION_ZH.md)
 
 | Path | Default | Behavior / range |
 | --- | --- | --- |
-| `crafting.max_crafting_order_amount` | DISABLED | DISABLED native; LONG_MAX long input; BIG_INTEGER exact input without the former 256-digit order limit |
+| `crafting.max_crafting_order_amount` | DISABLED | Host input, long input or BigInteger input; submitted requests keep the host planning flow |
 | `crafting.enable_progress_display` | false | Calculation progress and planner-path display |
 | `crafting.enable_enhanced_material_calculation` | false | Enhanced preview stock/crafting/missing statistics |
 | `crafting.aelis.enable_automatic_planner` | false | Automatic AELIS interception and manual-plan stock reservations |
@@ -47,11 +47,11 @@ The new AELIS plan screen defaults on. To disable it, set
 `enable_plan_screen = false` in the existing `[crafting.aelis]` section on the
 client. Once the changed configuration is loaded, an open AELIS plan screen also
 returns to the original AE2 view. This is a local presentation preference, not a
-server-controlled planner or crafting switch. With the screen enabled, confirmation
-opens directly in the custom view and shows calculation progress there, including
-while replanning. Completed non-AELIS results use AE2's original view; the original
-view button remains available during calculation. Detailed phases and measured
-progress follow `crafting.enable_progress_display`; the waiting animation also
+server-controlled planner or crafting switch. With the screen enabled, confirmed
+AELIS results open in the custom view, which shows a waiting state while replanning.
+Native AE2 and external planners use AE2's original view without added planner
+labels. Detailed AELIS phases and measured progress follow
+`crafting.enable_progress_display`; the custom view's waiting animation also
 works when that setting is disabled.
 
 Materials and Craft Tree are views of the same plan. The graph loads on demand;
@@ -62,14 +62,20 @@ use Materials for the complete summary when the graph is limited. Layout and
 node-position changes do not change recipes or execution.
 
 Automatic AELIS defaults off. Explicit planner API calls remain available under
-their own contracts. BIG_INTEGER input selects explicit exact requests; the
-automatic arithmetic preference does not block that service. An exact plan alone
-does not give an arbitrary CPU exact execution capability.
+their own contracts, including exact BigInteger requests. `DISABLED` leaves host
+quantity input unchanged, `LONG_MAX` extends it to signed 64-bit quantities, and
+`BIG_INTEGER` permits arbitrary-precision input. Submission calls the host's
+`confirm` and `planJob` methods, preserving its requester and returned Future.
+The quantity mode does not enable AELIS or choose an external planner. Replanning
+and Back preserve the submitted quantity through the same host methods.
+The standard crafting-service boundary accepts long; a BigInteger submission is
+exact when handled by AELIS, while other planners retain their own numeric limits.
+An exact plan alone does not give an arbitrary CPU exact execution capability.
 Long fields are compatibility projections, not proof of exact physical supply.
 
-Manual confirmation reservations follow the automatic planner switch. Finite
-stock reserved by other open confirmations is excluded from new plans and
-extraction. Current explicitly infinite sources are excluded from finite locks;
+Manual confirmation reservations apply to AELIS results while the automatic
+planner switch is enabled. Finite stock reserved by other open AELIS confirmations
+is excluded from new plans and extraction. Current explicitly infinite sources are excluded from finite locks;
 marking is determined by the current cell and access, not by a Long.MAX_VALUE count.
 
 ## Native arithmetic and remaining checks
@@ -97,16 +103,19 @@ retry, cancellation or material ownership.
 上表覆盖当前全部 18 项配置，分为 9 个配置节。配置名称、悬浮说明、分组和枚举选项
 均支持中英文，包含 Configured 2.6.3 适配；生成的 TOML 注释同时说明双语含义、数值范围
 和可选值。界面显示名称采用翻译，直接编辑配置文件时仍使用上表中的原始枚举标识。
-订单模式为三选一：AE2 原生处理、64 位整数上限、任意精度数量。自动 AELIS 与大整数
-规划分别控制自动介入和精确算术偏好；显式精确请求不受偏好开关阻止，不能把 long
-投影当作完整订单或无限来源。
+订单模式的三个档位控制数量输入：`DISABLED` 沿用宿主输入，`LONG_MAX` 扩展至有符号
+64 位上限，`BIG_INTEGER` 允许任意精度输入。提交调用宿主的 `confirm → planJob`，保留
+原 requester 和 Future；重新规划与返回也通过宿主方法保留已提交的数量。数量模式不会
+开启 AELIS 或选择外部规划器。标准合成服务边界为 long；AELIS 可读取完整 BigInteger
+请求，其他规划器仍遵循其自身的数量能力。自动 AELIS 与大整数规划分别控制自动介入和
+精确算术偏好；显式精确 API 请求继续可用，不能把 long 投影当作完整订单或无限来源。
 
 新界面默认启用。客户端配置文件已有的 `[crafting.aelis]` 节中，设置
 `enable_plan_screen = false` 即可关闭；配置重新加载后，已经打开的新界面也会切回
 AE2 原版确认界面。此项只控制当前客户端的界面，不影响服务端规划和合成执行。
-启用时，点击“下一页”会直接进入新界面，计算和重新规划均在新界面内显示等待状态；
-最终结果若来自 AE2 或外部规划器则切回原版视图，计算期间也可手动选择原版视图。
-详细阶段和实际进度受 `crafting.enable_progress_display` 控制，关闭时仍显示等待动画。
+启用时，确认由 AELIS 生成的结果会进入新界面，重新规划在其中显示等待状态。
+AE2 原生和外部规划器使用原版确认视图，不添加规划器标签。
+AELIS 的详细阶段和实际进度受 `crafting.enable_progress_display` 控制，关闭时新界面仍显示等待动画。
 
 材料列表和合成树使用同一计划。依赖图按需加载，节点尺寸随自身文本调整，只有存在
 循环合成量时才增加对应行。操作提示自动换行，紧凑布局使用“图示说明”悬浮提示。

@@ -24,7 +24,7 @@ class ServerConfigSyncStateTest {
     void serverHandshakeOverridesLocalValues() {
         var local = new ServerConfigSyncState.Values(CraftingOrderMode.DISABLED, false, false);
 
-        ServerConfigSyncState.accept(CraftingOrderMode.LONG_MAX, true, true, false);
+        ServerConfigSyncState.accept(CraftingOrderMode.LONG_MAX, true, true);
 
         assertEquals(
                 new ServerConfigSyncState.Values(CraftingOrderMode.LONG_MAX, true, true),
@@ -35,7 +35,7 @@ class ServerConfigSyncStateTest {
     @Test
     void disconnectRestoresTheLocalFallback() {
         var local = new ServerConfigSyncState.Values(CraftingOrderMode.DISABLED, true, false);
-        ServerConfigSyncState.accept(CraftingOrderMode.BIG_INTEGER, false, true, true);
+        ServerConfigSyncState.accept(CraftingOrderMode.BIG_INTEGER, false, true);
 
         ServerConfigSyncState.reset();
 
@@ -45,6 +45,6 @@ class ServerConfigSyncStateTest {
     @Test
     void rejectsAnInvalidServerMaximum() {
         assertThrows(IllegalArgumentException.class,
-                () -> ServerConfigSyncState.accept(null, true, true, false));
+                () -> ServerConfigSyncState.accept(null, true, true));
     }
 }

@@ -31,7 +31,8 @@ public abstract class CraftConfirmScreenMixin {
                 && plan == null
                 && screen.getMenu() instanceof CraftingCalculationProgressMenuBridge progressBridge) {
             var progress = progressBridge.molecularmanipulator$getCalculationProgress();
-            if (progress.phase() != CraftingCalculationProgressPhase.IDLE) {
+            if (progress.phase() != CraftingCalculationProgressPhase.IDLE
+                    && progress.path() == AelisCalculationPath.AELIS) {
                 return appliedenhancements$progressTitle(progress);
             }
         }
@@ -41,16 +42,12 @@ public abstract class CraftConfirmScreenMixin {
         }
 
         var path = bridge.molecularmanipulator$getCalculationPath();
-        String translationKey = switch (path) {
-            case AELIS -> "gui.appliedenhancements.calculation_result.path.aelis";
-            case AE2_FALLBACK ->
-                    "gui.appliedenhancements.calculation_result.path.ae2_fallback";
-            case EXTERNAL -> "gui.appliedenhancements.calculation_result.path.external";
-            case AE2_NATIVE -> "gui.appliedenhancements.calculation_result.path.ae2_native";
-        };
-
-        Component pathLabel = Component.translatable(translationKey)
-                .withStyle(CraftingPathPresentation.titleStyle(path));
+        if (path != AelisCalculationPath.AELIS) {
+            return title;
+        }
+        Component pathLabel = Component.translatable(
+                "gui.appliedenhancements.calculation_result.path.aelis")
+                .withStyle(CraftingPathPresentation.titleStyle());
         if (ServerConfigSyncState.isProgressDisplayEnabled()
                 && screen.getMenu() instanceof CraftingCalculationProgressMenuBridge progressBridge) {
             var progress = progressBridge.molecularmanipulator$getCalculationProgress();
@@ -89,7 +86,8 @@ public abstract class CraftConfirmScreenMixin {
             return;
         }
         var progress = bridge.molecularmanipulator$getCalculationProgress();
-        if (progress.phase() == CraftingCalculationProgressPhase.IDLE) {
+        if (progress.phase() == CraftingCalculationProgressPhase.IDLE
+                || progress.path() != AelisCalculationPath.AELIS) {
             return;
         }
 
@@ -131,7 +129,9 @@ public abstract class CraftConfirmScreenMixin {
 
     private static Component appliedenhancements$progressTitle(
             CraftingCalculationProgressSnapshot progress) {
-        Component engine = appliedenhancements$engineLabel(progress);
+        Component engine = Component.translatable(
+                "gui.appliedenhancements.calculation_progress.engine.aelis")
+                .withStyle(ChatFormatting.GREEN);
         Component phase = Component.translatable(
                 "gui.appliedenhancements.calculation_progress.phase."
                         + appliedenhancements$phaseKey(progress.phase()));
@@ -153,31 +153,6 @@ public abstract class CraftConfirmScreenMixin {
                 appliedenhancements$formatCompact(Math.max(
                         progress.processedSteps(), progress.discoveredNodes())),
                 elapsed);
-    }
-
-    private static Component appliedenhancements$engineLabel(
-            CraftingCalculationProgressSnapshot progress) {
-        if (progress.phase() == CraftingCalculationProgressPhase.QUEUED
-                || progress.phase() == CraftingCalculationProgressPhase.WAITING_SLOT
-                || progress.phase() == CraftingCalculationProgressPhase.PREPARING) {
-            return Component.translatable(
-                    "gui.appliedenhancements.calculation_progress.engine.selecting")
-                    .withStyle(ChatFormatting.AQUA);
-        }
-        return switch (progress.path()) {
-            case AELIS -> Component.translatable(
-                    "gui.appliedenhancements.calculation_progress.engine.aelis")
-                    .withStyle(ChatFormatting.GREEN);
-            case AE2_FALLBACK -> Component.translatable(
-                    "gui.appliedenhancements.calculation_progress.engine.ae2_fallback")
-                    .withStyle(ChatFormatting.GOLD);
-            case EXTERNAL -> Component.translatable(
-                    "gui.appliedenhancements.calculation_progress.engine.external")
-                    .withStyle(ChatFormatting.AQUA);
-            case AE2_NATIVE -> Component.translatable(
-                    "gui.appliedenhancements.calculation_progress.engine.ae2_native")
-                    .withStyle(ChatFormatting.GRAY);
-        };
     }
 
     private static String appliedenhancements$phaseKey(
@@ -205,12 +180,7 @@ public abstract class CraftConfirmScreenMixin {
         if (progress.phase() == CraftingCalculationProgressPhase.CANCELLED) {
             return 0xFF777777;
         }
-        return switch (progress.path()) {
-            case AELIS -> 0xFF55FF55;
-            case AE2_FALLBACK -> 0xFFFFAA00;
-            case EXTERNAL -> 0xFF55FFFF;
-            case AE2_NATIVE -> 0xFF55FFFF;
-        };
+        return 0xFF55FF55;
     }
 
     private static String appliedenhancements$formatCompact(long value) {

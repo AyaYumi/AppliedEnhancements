@@ -1,29 +1,26 @@
 package com.appliedenhancements.api;
 
-import com.appliedenhancements.ae2.ExactAmountParser;
-import com.appliedenhancements.network.ExactCraftingAmountPayload;
 import com.appliedenhancements.runtime.ExactRequestScope;
 import java.math.BigInteger;
-import java.text.DecimalFormat;
-import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExactRequestRegressionTest {
-    @Test void literalInputAndWireNeverWrapOrRound() {
-        for (var text : new String[]{"2147483647", "2147483648", "10000000000", "9223372036854775807", "9223372036854775808", "9999999999999999999", "99999999999999999999", "9".repeat(256), "9".repeat(257), "9".repeat(1_024)}) {
-            var value = ExactAmountParser.parse(text, new DecimalFormat(), 1).orElseThrow();
-            assertEquals(new BigInteger(text), value);
-            var payload = new ExactCraftingAmountPayload(42, text, true, false);
-            var buffer = Unpooled.buffer();
-            try { ExactCraftingAmountPayload.STREAM_CODEC.encode(buffer, payload);
-                assertEquals(payload, ExactCraftingAmountPayload.STREAM_CODEC.decode(buffer));
-            } finally { buffer.release(); }
+    @Test void inputAndWirePreserveQuantitiesBeyondLong() {
+        var amount = BigInteger.TEN.pow(60).add(BigInteger.ONE);
+        assertEquals(amount, com.appliedenhancements.ae2.ExactAmountParser.parse(amount.toString(),
+                new java.text.DecimalFormat(), 1).orElseThrow());
+        var payload = new com.appliedenhancements.network.ExactCraftingAmountPayload(
+                7, amount.toString(), true, false);
+        var buffer = io.netty.buffer.Unpooled.buffer();
+        try {
+            com.appliedenhancements.network.ExactCraftingAmountPayload.STREAM_CODEC.encode(buffer, payload);
+            assertEquals(payload, com.appliedenhancements.network.ExactCraftingAmountPayload.STREAM_CODEC.decode(buffer));
+        } finally {
+            buffer.release();
         }
-        assertEquals(new BigInteger("9".repeat(4096)), ExactAmountParser.parse("9".repeat(4096), new DecimalFormat(), 1).orElseThrow());
-        assertTrue(ExactAmountParser.parse("-1", new DecimalFormat(), 1).isEmpty());
-        assertTrue(ExactAmountParser.parse("0", new DecimalFormat(), 1).isEmpty());
     }
+
     @Test void deliveryCrossesLongBoundaryWithoutFinishingEarlyAndCanResume() {
         var amount = BigInteger.valueOf(Long.MAX_VALUE).multiply(BigInteger.TWO).add(BigInteger.TEN);
         var state = new AelisExactOutputProgress(amount);

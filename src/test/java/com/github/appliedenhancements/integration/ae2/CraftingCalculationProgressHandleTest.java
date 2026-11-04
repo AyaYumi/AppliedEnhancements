@@ -37,17 +37,31 @@ class CraftingCalculationProgressHandleTest {
     void terminalStateCannotBeOverwritten() {
         var handle = new CraftingCalculationProgressHandle(1);
         handle.cancel();
-        handle.beginAe2(AelisCalculationPath.AE2_NATIVE);
+        handle.beginAelisCompilation();
         handle.fail();
         assertEquals(CraftingCalculationProgressPhase.CANCELLED, handle.snapshot(1).phase());
     }
 
     @Test
-    void ae2PhaseRejectsNonAe2Paths() {
-        var handle = new CraftingCalculationProgressHandle(1);
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> handle.beginAe2(AelisCalculationPath.AELIS));
+    void handingBackToHostStopsProgressWithoutReportingItsOutcome() {
+        var handle = new CraftingCalculationProgressHandle(2);
+        handle.beginAttempt(false);
+        handle.beginAelisExecution(10);
+        handle.executionStep();
+        handle.stopTracking();
+
+        var stopped = handle.snapshot(1);
+        assertTrue(handle.terminal());
+        assertEquals(CraftingCalculationProgressPhase.IDLE, stopped.phase());
+        assertEquals(AelisCalculationPath.AELIS, stopped.path());
+
+        // Later host-planner activity must not become AELIS progress or a completed AELIS result.
+        handle.beginBuildingPlan();
+        handle.executionStep();
+        handle.complete(AelisCalculationPath.AE2_NATIVE);
+        handle.fail();
+        var later = handle.snapshot(2);
+        assertEquals(stopped.withRevision(2), later);
     }
 
     @Test

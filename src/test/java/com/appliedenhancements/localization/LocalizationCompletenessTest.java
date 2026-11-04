@@ -62,9 +62,7 @@ class LocalizationCompletenessTest {
 
     private static final Set<String> INTENTIONALLY_LANGUAGE_NEUTRAL = Set.of(
             "gui.appliedenhancements.calculation_result.path.aelis",
-            "gui.appliedenhancements.calculation_result.path.ae2_native",
             "gui.appliedenhancements.calculation_progress.engine.aelis",
-            "gui.appliedenhancements.calculation_progress.engine.ae2_native",
             "key.categories.appliedenhancements");
 
     @Test

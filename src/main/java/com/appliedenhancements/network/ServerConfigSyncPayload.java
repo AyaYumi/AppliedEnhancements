@@ -11,7 +11,10 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import org.jetbrains.annotations.ApiStatus;
 
-/** Server-authoritative feature settings needed by client-side crafting screens. */
+/**
+ * Server-authoritative settings for client menus. Protocol 11 retains its final
+ * boolean field; the order mode alone determines the quantity input range.
+ */
 @ApiStatus.Internal
 public record ServerConfigSyncPayload(
         int craftingOrderModeId,
@@ -21,10 +24,6 @@ public record ServerConfigSyncPayload(
         this(mode.id(), progress, infinite, mode.supportsBigInteger());
     }
 
-    public ServerConfigSyncPayload(CraftingOrderMode mode, boolean progress, boolean infinite,
-            boolean bigIntegerEnabled) {
-        this(mode.id(), progress, infinite, bigIntegerEnabled);
-    }
     public static final Type<ServerConfigSyncPayload> TYPE =
             new Type<>(AppliedEnhancements.id("server_config"));
 
@@ -48,8 +47,7 @@ public record ServerConfigSyncPayload(
         return new ServerConfigSyncPayload(
                 Config.MAX_CRAFTING_ORDER_AMOUNT.get(),
                 Config.ENABLE_PROGRESS_DISPLAY.get(),
-                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get(),
-                Config.MAX_CRAFTING_ORDER_AMOUNT.get().supportsBigInteger());
+                Config.ENABLE_INFINITE_STORAGE_LIMIT_BYPASS.get());
     }
 
     public static void register(PayloadRegistrar registrar) {
@@ -58,12 +56,10 @@ public record ServerConfigSyncPayload(
 
     private static void handle(ServerConfigSyncPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
-            ServerConfigSyncState.acceptExact(payload.bigIntegerEnabled);
             ServerConfigSyncState.accept(
                     payload.craftingOrderMode(),
                     payload.progressDisplayEnabled,
-                    payload.infiniteStorageLimitBypassEnabled,
-                    payload.bigIntegerEnabled);
+                    payload.infiniteStorageLimitBypassEnabled);
             ClientCraftingProgressReset.resetIfDisabled(
                     payload.progressDisplayEnabled,
                     context.player().containerMenu);

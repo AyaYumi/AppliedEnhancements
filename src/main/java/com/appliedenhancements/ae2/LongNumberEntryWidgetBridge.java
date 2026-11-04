@@ -1,22 +1,11 @@
 package com.appliedenhancements.ae2;
 
-import java.util.OptionalLong;
+import java.math.BigInteger;
+import java.util.Optional;
 
-/**
- * Runtime bridge for AE2's NumberEntryWidget to support long value input.
- *
- * This interface allows the text field to accept more characters for long values.
- */
+/** Exact quantity access for AE2's number entry widget. */
 public interface LongNumberEntryWidgetBridge {
-    /**
-     * Sets the maximum length of the input text field.
-     *
-     * @param maxLength Maximum number of characters (20 for Long.MAX_VALUE)
-     */
-    void appliedenhancements$setInputMaxLength(int maxLength);
-
-    OptionalLong appliedenhancements$getExactLongValue();
-    java.util.Optional<java.math.BigInteger> appliedenhancements$getExactValue();
-    void appliedenhancements$setExactValue(java.math.BigInteger value);
+    Optional<BigInteger> appliedenhancements$getExactValue();
+    void appliedenhancements$setExactValue(BigInteger value);
     void appliedenhancements$enableExactInput();
 }

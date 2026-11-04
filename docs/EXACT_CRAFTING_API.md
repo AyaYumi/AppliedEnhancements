@@ -1,8 +1,8 @@
-# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.21.1 / 1.1.4）
+# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.21.1 / 1.1.6）
 
 ## English API contract
 
-For Applied Enhancements **1.1.4**, Minecraft **1.21.1**, Java 21 and NeoForge.
+For Applied Enhancements **1.1.6**, Minecraft **1.21.1**, Java 21 and NeoForge.
 Call `AelisExactCraftingService.begin(level, requester, request)` on the owning
 server thread with a connected requester. Construction snapshots network state;
 await the returned `Future<ICraftingPlan>` asynchronously. Both
@@ -56,7 +56,7 @@ Clients and servers must use the same build with payload protocol 11.
 ## 中文 API 契约
 
 此 API 通过公开执行契约接入独立 CPU。
-客户端与服务端须使用本次同一构建（网络协议 11）；接入方须使用匹配当前构建的 1.1.4 JAR 编译和运行。
+客户端与服务端须使用本次同一构建（网络协议 11）；接入方须使用匹配当前构建的 1.1.6 JAR 编译和运行。
 
 ## 稳定的计划元数据 API
 
@@ -111,9 +111,9 @@ Future<ICraftingPlan> pending = AelisExactCraftingService.begin(
 没有统一的 CPU 能力预检、强制仅选 Omni、或“先执行 long 上限这么多就算成功”的降单逻辑。
 原生/其他 CPU 不会因为安装 API 就自动获得大整数执行能力；其实现需要读取下列接口。
 
-自动 AELIS 的大整数算术偏好由 `crafting.aelis.enable_big_integer_planning` 控制，默认开启；显式精确请求不受该开关阻止。终端输入仍按所选订单模式。
-`crafting.max_crafting_order_amount` 选择 `BIG_INTEGER` 才接管超 long 订单；`LONG_MAX` 仅接管 long 范围，`DISABLED` 保持原生处理。
-已移除 256 位订单限制，输入和网络接受更长数字；网络传输仍有 1,048,576 字符的载荷边界，不属于 CPU 能力拒绝。
+自动 AELIS 的大整数算术偏好由 `crafting.aelis.enable_big_integer_planning` 控制，默认开启；显式精确请求不受该开关阻止。
+`crafting.max_crafting_order_amount` 控制原生、long、BigInteger 三档输入。数量提交仍调用宿主的 `confirm → planJob`，不强制选择 AELIS；重新规划和返回继续使用宿主方法。标准服务边界为 long；AELIS 读取完整精确请求，外部规划器使用其自身的数量能力。
+精确规划 API 接受 BigInteger 请求，没有原来的 256 位数字限制。
 优化失败后允许回到原生 AE 继续计算。原生仅接受 long 投影，回退结果按实际计算数量记录；不能把接受提交当成任意精度执行保证。
 
 ## CPU 获取精确计划

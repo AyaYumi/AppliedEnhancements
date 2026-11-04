@@ -54,8 +54,8 @@ public final class AelisPlanScreenEvents {
                 || !AelisPlanLayout.fit(width, height).usable()) return false;
         var menu = ((CraftConfirmScreen) screen).getMenu();
         return menu instanceof AelisCalculationPathMenuBridge bridge
-                && (menu.getPlan() == null
-                        || bridge.molecularmanipulator$getCalculationPath() == AelisCalculationPath.AELIS);
+                && menu.getPlan() != null
+                && bridge.molecularmanipulator$getCalculationPath() == AelisCalculationPath.AELIS;
     }
 
     static void showOriginal(AelisCraftConfirmScreen current, CraftConfirmScreen original) {
