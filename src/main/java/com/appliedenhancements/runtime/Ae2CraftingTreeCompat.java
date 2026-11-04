@@ -4,6 +4,7 @@ import appeng.api.networking.crafting.ICraftingPlan;
 import appeng.crafting.CraftingPlan;
 import appeng.menu.me.crafting.CraftingPlanSummary;
 import java.lang.reflect.Method;
+import java.util.LinkedHashMap;
 import java.util.Optional;
 
 /** Optional AE2: Crafting Tree metadata for summaries that bypass native fromJob. */
@@ -40,7 +41,8 @@ public final class Ae2CraftingTreeCompat {
             // AE2CT's factory accepts CraftingPlan, while AELIS also exposes wrapped plans.
             CraftingPlan nativeView = plan instanceof CraftingPlan nativePlan ? nativePlan
                     : new CraftingPlan(plan.finalOutput(), plan.bytes(), plan.simulation(), plan.multiplePaths(),
-                            plan.usedItems(), plan.emittedItems(), plan.missingItems(), plan.patternTimes());
+                            plan.usedItems(), plan.emittedItems(), plan.missingItems(),
+                            new LinkedHashMap<>(plan.patternTimes()));
             Object tree = api.factory.invoke(null, nativeView);
             api.setter.invoke(summary, tree);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {

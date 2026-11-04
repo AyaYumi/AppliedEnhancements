@@ -45,6 +45,6 @@ public final class AelisCraftingPlanRewrite {
     private static CraftingPlan copy(ICraftingPlan plan, Map<IPatternDetails, Long> patterns) {
         return new CraftingPlan(plan.finalOutput(), plan.bytes(), plan.simulation(),
                 plan.multiplePaths(), plan.usedItems(), plan.emittedItems(),
-                plan.missingItems(), Map.copyOf(patterns));
+                plan.missingItems(), new LinkedHashMap<>(patterns));
     }
 }

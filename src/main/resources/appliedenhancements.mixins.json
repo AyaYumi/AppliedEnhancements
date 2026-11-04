@@ -33,6 +33,7 @@
     "ItemHandlerStrategyMixin",
     "MEStorageMenuContextMixin",
     "NetworkStorageMixin",
+    "NetworkCraftingPatternCacheMixin",
     "InfiniteCraftingSimulationMixin",
     "DelegatingMEInventoryAccessor",
     "NetworkCraftingSimulationStateInventoryLockMixin",

@@ -6,7 +6,7 @@
 
 [中文](README_ZH.md) · [API documentation](docs/API_INTEGRATION.md) · [Configuration](CONFIGURATION.md)
 
-**1.1.5-forge** extends AE2 crafting, storage access and pattern terminals on Minecraft
+**1.1.6-forge** extends AE2 crafting, storage access and pattern terminals on Minecraft
 1.20.1 / Forge. It adds shared batch extraction/ownership transactions used by
 cycle-aware CPUs, while retaining existing planner and terminal APIs.
 
@@ -21,8 +21,8 @@ construction. Genuine shortages retain AE2's normal missing-material result.
 | Area | Behavior |
 | --- | --- |
 | Crafting orders | Native, long-range or exact BigInteger input modes; exact quantities with a 1,048,576-character transport limit |
-| AELIS | Session-local planner, exact material/byte metadata, cycle solving and safe supported fallback |
-| Plan review | Exact material columns, cyclic quantities, filters/search, interactive dependency graphs and optional EMI favorites / JEI missing-material bookmarks |
+| AELIS | Session-local planner, exact material/byte metadata, fixed crafting remainders, cycle solving and safe supported fallback |
+| Plan review | Exact material columns, cyclic quantities, filters/search, interactive dependency graphs with fullscreen viewing and optional EMI favorites / JEI missing-material bookmarks |
 | Cycle execution | One protected inventory view for initial/batch extraction, phase limits, rollback and pending returns |
 | Manual confirmation | Finite stock reservations across open confirmations; explicitly infinite sources remain available |
 | Storage | Pattern/container caches, storage-bus candidate index and validated import/export slot hints |
@@ -40,7 +40,7 @@ ExtendedAE, AE2WTLib, JEI, EMI, AdvancedAE,
 Data Energistics and other integrations remain optional. Compatibility with newer
 addon versions depends on their internal hooks.
 
-Build `build/libs/appliedenhancements-1.1.5-forge.jar` and install the same build on
+Build `build/libs/appliedenhancements-1.1.6-forge.jar` and install the same build on
 client and server. Internal network protocol is `1.1.4-forge-5`; update both sides together. Addons use the separate public API; this
 mod is not embedded in their JARs.
 
@@ -72,12 +72,19 @@ changing planning or execution. Its UI translation key is `enable_aelis_plan_scr
 Switch between Materials and Craft Tree to inspect the same plan. Drag nodes to move
 them, drag the background to pan, scroll or use zoom buttons, and click cyclic-group
 headers to fold or expand. Filters/search retain related branches. Node text wraps;
-compact layouts place instructions in Graph Help. The on-demand graph is bounded
+compact layouts place instructions in Graph Help. Use Fullscreen beside the zoom
+controls to expand the tree across the game window. Click Exit fullscreen or press
+Esc to return, keeping the zoom, node positions and folded groups. The on-demand graph is bounded
 to 512 materials and 2048 edges; use Materials for the full summary if truncated.
 Moving nodes affects only the local view, not recipes or execution. Recipe alternatives
 without summary quantities show their icon and name with “No summary amount”; they do
 not add material demand. The All (`ALL`) filter searches these candidate nodes too,
 while quantity filters match only materials with the corresponding summary amounts.
+
+AELIS batches supported fixed crafting remainders, such as dragon breath returning
+glass bottles, and makes the returned items available after all recipe inputs succeed.
+Network pattern candidates reuse their sorted cache until a provider changes;
+duplicate recipes retain every machine and their existing priority order.
 
 Configuration names, tooltips and enum labels support English and Simplified Chinese,
 including Configured Forge 2.2.3. TOML enum identifiers remain unchanged.
@@ -107,7 +114,7 @@ MaxFast facade remains for existing 1.0.3 Java integrations.
 .\gradlew.bat clean assemble apiJavadoc --no-configuration-cache
 ```
 
-The runtime distribution is `build/libs/appliedenhancements-1.1.5-forge.jar`.
+The runtime distribution is `build/libs/appliedenhancements-1.1.6-forge.jar`.
 CI compiles against standard AE2 and UELM, then uploads one universal JAR and
 the generated API documentation.
 

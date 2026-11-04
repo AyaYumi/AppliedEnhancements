@@ -1,10 +1,10 @@
-# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.20.1 / 1.1.5-forge）
+# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.20.1 / 1.1.6-forge）
 
 ## English API contract
 
-For Applied Enhancements **1.1.5-forge**, Java 17, Minecraft **1.20.1** and
+For Applied Enhancements **1.1.6-forge**, Java 17, Minecraft **1.20.1** and
 Forge 47.4.10+ (build baseline: 47.4.20). AE2 15.4.10 and UELM 15.5.4 use the
-same `appliedenhancements-1.1.5-forge.jar`.
+same `appliedenhancements-1.1.6-forge.jar`.
 Call `AelisExactCraftingService.begin(level, requester, request)` on the owning
 server thread with a connected requester. Construction snapshots network state;
 await the returned `Future<ICraftingPlan>` asynchronously. Both
@@ -58,7 +58,7 @@ Clients and servers must use the same build with payload protocol `1.1.4-forge-5
 ## 中文 API 契约
 
 此 API 通过公开执行契约接入独立 CPU。
-客户端与服务端须使用本次同一构建（网络协议 `1.1.4-forge-5`）；接入方须使用匹配当前构建的 1.1.5-forge JAR 编译和运行。
+客户端与服务端须使用本次同一构建（网络协议 `1.1.4-forge-5`）；接入方须使用匹配当前构建的 1.1.6-forge JAR 编译和运行。
 
 ## 稳定的计划元数据 API
 

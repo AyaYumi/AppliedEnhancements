@@ -2,7 +2,7 @@
 
 Java 17 / Minecraft 1.20.1 / Forge 47.
 
-Applied Enhancements **1.1.5-forge** generates `config/appliedenhancements-common.toml`
+Applied Enhancements **1.1.6-forge** generates `config/appliedenhancements-common.toml`
 in the active instance. Edit existing sections and restart both sides.
 API integration: [English](docs/API_INTEGRATION.md) · [中文](docs/API_INTEGRATION_ZH.md)
 

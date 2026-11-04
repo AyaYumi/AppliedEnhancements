@@ -34,6 +34,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.renderer.Rect2i;
@@ -89,6 +90,8 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
     private double graphLastX;
     private double graphLastY;
     private Button viewToggle;
+    private Button fullscreenToggle;
+    private boolean graphFullscreen;
 
     private enum View { LIST, TREE }
 
@@ -154,8 +157,73 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
         start = button(imageWidth - 110, actions, 96, AelisPlanLayout.FOOTER_BUTTON_HEIGHT, tr("start"), this::startSafely);
         start.active = cpu.active = bookmark.active = viewToggle.active = false;
         refreshFilter();
+        fullscreenToggle = button(0, 0, 40, 16, tr("tree.fullscreen"),
+                () -> setGraphFullscreen(!graphFullscreen));
+        updateGraphLayout();
         fitGraphToSmallCanvas();
     }
+
+    private void setGraphFullscreen(boolean fullscreen) {
+        stopGraphDrag();
+        draggingScroll = false;
+        setFocused(null);
+        setDragging(false);
+        search.setFocused(false);
+        graphFullscreen = fullscreen;
+        if (fullscreen) {
+            updateGraphLayout();
+        } else {
+            double zoom = graphViewport.zoom();
+            double x = graphViewport.x(), y = graphViewport.y();
+            int previousScroll = scroll;
+            // Run Screen's init hooks so addons restore their widgets at the current window size.
+            init(minecraft, width, height);
+            graphViewport.zoom(zoom / graphViewport.zoom(), 0, 0);
+            graphViewport.pan(x - graphViewport.x(), y - graphViewport.y());
+            scroll = previousScroll;
+        }
+    }
+
+    public boolean isGraphFullscreen() {
+        return graphFullscreen;
+    }
+
+    private void updateGraphLayout() {
+        layout = graphFullscreen ? AelisPlanLayout.fullscreen(width, height) : AelisPlanLayout.fit(width, height);
+        imageWidth = layout.width();
+        imageHeight = layout.height();
+        leftPos = (width - imageWidth) / 2;
+        topPos = (height - imageHeight) / 2;
+        updateGraphHint();
+        if (graphFullscreen) hideControlsForFullscreen();
+        Component label = tr(graphFullscreen ? "tree.exit_fullscreen" : "tree.fullscreen");
+        fullscreenToggle.setMessage(label);
+        fullscreenToggle.setTooltip(Tooltip.create(tr(graphFullscreen ? "tree.exit_fullscreen_tip" : "tree.fullscreen_tip")));
+        fullscreenToggle.setWidth(Math.max(40, font.width(label) + 12));
+        fullscreenToggle.setPosition(leftPos + layout.tableRight() - 2 - fullscreenToggle.getWidth(),
+                topPos + graphControlsTop());
+        fullscreenToggle.visible = view == View.TREE;
+    }
+
+    private void hideControlsForFullscreen() {
+        // FTB's sidebar and other addons add widgets after this screen's init() has returned.
+        // Some custom widgets draw even when visible is false, so detach their rendering,
+        // input and narration. Exiting fullscreen rebuilds the controls through Screen's init hooks.
+        for (var child : new ArrayList<>(children())) {
+            if (child instanceof AbstractWidget widget && widget != fullscreenToggle) {
+                widget.visible = false;
+                removeWidget(widget);
+            }
+        }
+    }
+
+    private int graphCanvasTop() { return graphFullscreen ? 36 : GRAPH_TOP; }
+
+    private int graphControlsTop() { return graphFullscreen ? 10 : GRAPH_ZOOM_TOP; }
+
+    private int graphPanelBottom() { return graphFullscreen ? imageHeight - 8 : layout.footerTop() - 4; }
+
+    private int graphZoomRight() { return fullscreenToggle.getX() - leftPos - 4; }
 
     private void setView(View next) {
         stopGraphDrag();
@@ -175,6 +243,7 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
     }
 
     private void updateViewToggle() {
+        if (fullscreenToggle != null) fullscreenToggle.visible = view == View.TREE;
         if (viewToggle == null) return;
         viewToggle.setMessage(tr(view == View.LIST ? "view.tree" : "view.list"));
         viewToggle.setTooltip(Tooltip.create(tr(view == View.LIST ? "view.tree_tip" : "view.list_tip")));
@@ -211,6 +280,7 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
         }
         super.updateBeforeRender(); // Includes AE2's CraftErrorScreen and retry/replan behavior.
         if (minecraft.screen != this || start == null) return;
+        if (graphFullscreen) hideControlsForFullscreen();
         var plan = menu.getPlan();
         var bridge = (AelisCalculationPathMenuBridge) menu;
         // Keep the same view while the initial plan or a replan is being calculated.
@@ -334,7 +404,7 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
     private void updateGraphHint() {
         graphHintLines = font.split(tr(graph != null && !graph.complete() ? "tree.truncated" : "tree.hint"),
                 Math.max(1, layout.tableRight() - 26));
-        graphArea = layout.graphArea(GRAPH_TOP, graphHintLines.size(), font.lineHeight);
+        graphArea = layout.graphArea(graphCanvasTop(), graphHintLines.size(), font.lineHeight, graphFullscreen);
     }
 
     private int graphHintTop() { return graphArea.hintTop(); }
@@ -342,12 +412,12 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
     private int graphCanvasBottom() { return graphArea.bottom(); }
 
     private void fitGraphToSmallCanvas() {
-        if (graphDrawing == null || graphArea.inlineHint()) return;
+        if (graphFullscreen || graphDrawing == null || graphArea.inlineHint()) return;
         var root = graphInteraction.boxes(graphDrawing).stream()
                 .filter(box -> box.node() == graph.root()).findFirst().orElse(null);
         if (root == null) return;
         double scale = Math.min(graphViewport.zoom(),
-                (double) (graphCanvasBottom() - GRAPH_TOP - 4) / root.height());
+                (double) (graphCanvasBottom() - graphCanvasTop() - 4) / root.height());
         graphViewport.zoom(scale / graphViewport.zoom(), 0, 0);
         graphViewport.pan(20 - root.x() * graphViewport.zoom() - graphViewport.x(),
                 2 - root.y() * graphViewport.zoom() - graphViewport.y());
@@ -356,39 +426,31 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
     private boolean inGraphHelp(double mx, double my) {
         return !graphArea.inlineHint() && mx >= leftPos + 18
                 && mx < leftPos + 18 + font.width(tr("tree.help"))
-                && my >= topPos + GRAPH_ZOOM_TOP && my < topPos + GRAPH_ZOOM_TOP + 16;
+                && my >= topPos + graphControlsTop() && my < topPos + graphControlsTop() + 16;
     }
 
     private void drawTree(GuiGraphics g) {
         int canvasRight = layout.tableRight() - 2;
         int canvasBottom = graphCanvasBottom();
-        g.fill(14, 98, canvasRight, layout.footerTop() - 4, 0xFFB0AFBF);
-        if (graphArea.inlineHint()) {
-            for (int i = 0; i < graphHintLines.size(); i++) {
-                g.drawString(font, graphHintLines.get(i), 18, graphHintTop() + i * (font.lineHeight + 1),
-                        graph != null && !graph.complete() ? RED : MUTED, false);
-            }
-        } else {
-            text(g, tr("tree.help"), 18, GRAPH_ZOOM_TOP + 4,
-                    graph != null && !graph.complete() ? RED : MUTED);
-        }
+        drawZoomControls(g, graphZoomRight());
         if (graph == null || graphDrawing == null) {
-            int y = GRAPH_TOP + 4;
+            int y = graphCanvasTop() + 4;
             for (var line : font.split(tr("tree.loading"), canvasRight - 38)) {
                 if (y + font.lineHeight > canvasBottom) break;
                 g.drawString(font, line, 20, y, MUTED, false);
                 y += font.lineHeight + 1;
             }
+            drawGraphHint(g, canvasRight);
             return;
         }
         if (graphDrawing.boxes().isEmpty() && graphDrawing.groups().isEmpty()) {
-            text(g, tr("tree.empty"), 20, GRAPH_TOP + 4, MUTED);
-            drawZoomControls(g, canvasRight);
+            text(g, tr("tree.empty"), 20, graphCanvasTop() + 4, MUTED);
+            drawGraphHint(g, canvasRight);
             return;
         }
-        g.enableScissor(leftPos + 14, topPos + GRAPH_TOP, leftPos + canvasRight, topPos + canvasBottom);
+        g.enableScissor(leftPos + 14, topPos + graphCanvasTop(), leftPos + canvasRight, topPos + canvasBottom);
         g.pose().pushPose();
-        g.pose().translate(graphViewport.x(), GRAPH_TOP + graphViewport.y(), 0);
+        g.pose().translate(graphViewport.x(), graphCanvasTop() + graphViewport.y(), 0);
         g.pose().scale((float) graphViewport.zoom(), (float) graphViewport.zoom(), 1);
         var orderedBoxes = graphInteraction.boxes(graphDrawing);
         var boxes = new HashMap<Integer, AelisGraphLayout.Box>();
@@ -443,12 +505,30 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
         }
         g.pose().popPose();
         g.disableScissor();
-        drawZoomControls(g, canvasRight);
+        drawGraphHint(g, canvasRight);
+    }
+
+    private void drawGraphHint(GuiGraphics g, int canvasRight) {
+        if (graphArea.inlineHint()) {
+            // Keep the instructions above any node that reaches the lower canvas edge.
+            g.fill(14, graphHintTop() - 3, canvasRight, graphPanelBottom(), 0xFFB0AFBF);
+            if (graphFullscreen) {
+                text(g, tr("view.tree"), 18, graphControlsTop() + 4, INK);
+            }
+            for (int i = 0; i < graphHintLines.size(); i++) {
+                g.drawString(font, graphHintLines.get(i), 18,
+                        graphHintTop() + i * (font.lineHeight + 1),
+                        graph != null && !graph.complete() ? RED : MUTED, false);
+            }
+        } else {
+            text(g, tr("tree.help"), 18, graphControlsTop() + 4,
+                    graph != null && !graph.complete() ? RED : MUTED);
+        }
     }
 
     private void drawZoomControls(GuiGraphics g, int right) {
         int x = right - GRAPH_ZOOM_WIDTH;
-        int y = GRAPH_ZOOM_TOP;
+        int y = graphControlsTop();
         buttonFace(g, x, y, 23, 16);
         buttonFace(g, x + 27, y, 40, 16);
         buttonFace(g, x + 71, y, 20, 16);
@@ -533,6 +613,12 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
     public void drawBG(GuiGraphics g, int ox, int oy, int mx, int my, float partialTicks) {
         g.pose().pushPose();
         g.pose().translate(ox, oy, 0);
+        if (graphFullscreen) {
+            bevel(g, 0, 0, imageWidth, imageHeight, 0xFFC3C2D1, false);
+            g.fill(14, graphControlsTop() - 3, layout.tableRight() - 2, graphPanelBottom(), 0xFFB0AFBF);
+            g.pose().popPose();
+            return;
+        }
         g.fill(2, 3, imageWidth + 2, imageHeight + 3, 0x70000000);
         bevel(g, 0, 0, imageWidth, imageHeight, 0xFFC3C2D1, false);
         g.fill(4, 4, imageWidth - 4, 37, 0xFFCDCCDA);
@@ -541,11 +627,18 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
         bevel(g, 10, 74, layout.tableRight() - 10, layout.footerTop() - 78, 0xFFAEADBF, true);
         g.fill(13, 97, layout.tableRight() - 3, 108, 0xFF9897AB);
         bevel(g, 10, layout.footerTop(), imageWidth - 20, AelisPlanLayout.FOOTER_HEIGHT, 0xFFB6B5C7, true);
+        if (view == View.TREE) {
+            g.fill(14, graphControlsTop() - 3, layout.tableRight() - 2, graphPanelBottom(), 0xFFB0AFBF);
+        }
         g.pose().popPose();
     }
 
     @Override
     public void drawFG(GuiGraphics g, int ox, int oy, int mx, int my) {
+        if (graphFullscreen) {
+            drawTree(g);
+            return;
+        }
         drawMark(g, 14, 10);
         text(g, tr("title"), 46, 11, INK);
         text(g, tr("subtitle"), 46, 24, MUTED);
@@ -696,9 +789,9 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
             if (box == null) return null;
             var node = graphNodes.get(box.node());
             double x = leftPos + graphViewport.x() + box.x() * graphViewport.zoom();
-            double y = topPos + GRAPH_TOP + graphViewport.y() + box.y() * graphViewport.zoom();
+            double y = topPos + graphCanvasTop() + graphViewport.y() + box.y() * graphViewport.zoom();
             int left = (int) Math.max(leftPos + 14, Math.floor(x));
-            int top = (int) Math.max(topPos + GRAPH_TOP, Math.floor(y));
+            int top = (int) Math.max(topPos + graphCanvasTop(), Math.floor(y));
             int right = (int) Math.min(leftPos + layout.tableRight() - 2,
                     Math.ceil(x + box.width() * graphViewport.zoom()));
             int bottom = (int) Math.min(topPos + graphCanvasBottom(),
@@ -717,21 +810,21 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
     private AelisGraphLayout.Box treeNodeUnderMouse(double mx, double my) {
         if (graph == null || graphDrawing == null || !inGraphCanvas(mx, my)) return null;
         return graphInteraction.nodeAt(graphDrawing, graphViewport.worldX(mx - leftPos),
-                graphViewport.worldY(my - topPos - GRAPH_TOP));
+                graphViewport.worldY(my - topPos - graphCanvasTop()));
     }
 
     private boolean inGraphCanvas(double mx, double my) {
         return mx >= leftPos + 14 && mx < leftPos + layout.tableRight() - 2
-                && my >= topPos + GRAPH_TOP && my < topPos + graphCanvasBottom();
+                && my >= topPos + graphCanvasTop() && my < topPos + graphCanvasBottom();
     }
 
     @Override
     public boolean mouseScrolled(double mx, double my, double dy) {
         if (view == View.TREE && mx >= leftPos + 14 && mx < leftPos + layout.tableRight()
-                && my >= topPos + 98 && my < topPos + layout.footerTop()) {
+                && my >= topPos + graphControlsTop() - 3 && my < topPos + graphPanelBottom() + 4) {
             if (dy == 0) return true;
             if (!graphInteraction.dragging()) graphViewport.zoom(dy > 0 ? 1.1 : 0.9,
-                    mx - leftPos, my - topPos - GRAPH_TOP);
+                    mx - leftPos, my - topPos - graphCanvasTop());
             return true;
         }
         if (mx >= leftPos + 10 && mx < leftPos + layout.tableRight()
@@ -744,23 +837,28 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        if ((button == 0 || button == 1) && fullscreenToggle.mouseClicked(mx, my, 0)) {
+            // Exiting fullscreen replaces the button; focus the current control after its callback.
+            setFocused(fullscreenToggle);
+            return true;
+        }
         if (view == View.TREE && button == 0) {
-            int zoomX = leftPos + layout.tableRight() - 2 - GRAPH_ZOOM_WIDTH;
-            int zoomY = topPos + GRAPH_ZOOM_TOP;
+            int zoomX = leftPos + graphZoomRight() - GRAPH_ZOOM_WIDTH;
+            int zoomY = topPos + graphControlsTop();
             if (my >= zoomY && my < zoomY + 16 && mx >= zoomX && mx < zoomX + 23) {
                 graphViewport.zoom(0.9, layout.tableRight() / 2.0,
-                        (graphCanvasBottom() - GRAPH_TOP) / 2.0);
+                        (graphCanvasBottom() - graphCanvasTop()) / 2.0);
                 return true;
             }
             if (my >= zoomY && my < zoomY + 16 && mx >= zoomX + 71 && mx < zoomX + 91) {
                 graphViewport.zoom(1.1, layout.tableRight() / 2.0,
-                        (graphCanvasBottom() - GRAPH_TOP) / 2.0);
+                        (graphCanvasBottom() - graphCanvasTop()) / 2.0);
                 return true;
             }
         }
         if (view == View.TREE && button == 0 && graphDrawing != null && inGraphCanvas(mx, my)) {
             double wx = graphViewport.worldX(mx - leftPos);
-            double wy = graphViewport.worldY(my - topPos - GRAPH_TOP);
+            double wy = graphViewport.worldY(my - topPos - graphCanvasTop());
             if (graphInteraction.beginDrag(graphDrawing, wx, wy)) {
                 draggingGraph = false;
                 return true;
@@ -798,7 +896,7 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
         if (view == View.TREE && graphInteraction.dragging() && button == 0) {
             graphInteraction.dragTo(graphViewport.worldX(mx - leftPos),
-                    graphViewport.worldY(my - topPos - GRAPH_TOP));
+                    graphViewport.worldY(my - topPos - graphCanvasTop()));
             return true;
         }
         if (view == View.TREE && draggingGraph && button == 0) {
@@ -828,7 +926,11 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
 
     @Override
     public boolean keyPressed(int key, int scanCode, int modifiers) {
-        if (search != null && search.isFocused()) {
+        if (graphFullscreen && key == GLFW.GLFW_KEY_ESCAPE) {
+            setGraphFullscreen(false);
+            return true;
+        }
+        if (search != null && search.visible && search.isFocused()) {
             if (key == GLFW.GLFW_KEY_ESCAPE) {
                 setFocused(null);
                 search.setFocused(false);
@@ -840,7 +942,7 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
         }
         if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
             // Keyboard and mouse share the same readiness gate.
-            startSafely();
+            if (!graphFullscreen) startSafely();
             return true;
         }
         return super.keyPressed(key, scanCode, modifiers);

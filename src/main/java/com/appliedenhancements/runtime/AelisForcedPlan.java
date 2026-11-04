@@ -30,7 +30,7 @@ public final class AelisForcedPlan {
             }
         });
         var nativePlan = new CraftingPlan(source.finalOutput(), source.bytes(), false, source.multiplePaths(),
-                source.usedItems(), emitted, new KeyCounter(), source.patternTimes());
+                source.usedItems(), emitted, new KeyCounter(), new LinkedHashMap<>(source.patternTimes()));
         var forced = AelisCycleExecutionApi.copyMetadata(source, nativePlan);
         ((AelisBigIntegerCraftAmountsCarrier) forced).appliedenhancements$setBigIntegerMissingAmounts(Map.of());
         return forced;

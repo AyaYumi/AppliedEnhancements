@@ -223,9 +223,10 @@ public final class AelisCycleExecutionApi {
         var patterns = reconciled.projected();
         cycle = AelisCyclePhaseAnalysis.prepare(cycle, patterns);
         if (target instanceof CraftingPlan && patterns != target.patternTimes()) {
+            // Constructor mixins may rewrite the task map in place.
             target = new CraftingPlan(target.finalOutput(), target.bytes(), target.simulation(),
                     target.multiplePaths(), target.usedItems(), target.emittedItems(),
-                    target.missingItems(), patterns);
+                    target.missingItems(), new LinkedHashMap<>(patterns));
         }
         if (target instanceof CraftingPlan
                 && target instanceof AelisCycleExecutionPlanCarrier cycles
