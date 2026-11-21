@@ -22,17 +22,32 @@ public final class CraftingPlannerIntervention {
                 || enabled();
     }
 
+    /** A native subrequest is contributing to a disposable AELIS simulation state. */
+    public static boolean stagesMissing() {
+        var scope = EXPLICIT.get();
+        return scope != null && scope.stageMissing;
+    }
+
+    /** The planner publishes missing items only after its inventory transaction commits. */
+    public static Scope openPlanning() {
+        return new Scope(true);
+    }
+
     /** Internal scope owned by public API entry points, never by callers. */
     public static Scope openExplicit() {
-        return new Scope();
+        return new Scope(stagesMissing());
     }
 
     public static final class Scope implements AutoCloseable {
         private final Scope previous = EXPLICIT.get();
         private final Thread owner = Thread.currentThread();
+        private final boolean stageMissing;
         private boolean closed;
 
-        private Scope() { EXPLICIT.set(this); }
+        private Scope(boolean stageMissing) {
+            this.stageMissing = stageMissing;
+            EXPLICIT.set(this);
+        }
 
         @Override public void close() {
             if (closed) return;

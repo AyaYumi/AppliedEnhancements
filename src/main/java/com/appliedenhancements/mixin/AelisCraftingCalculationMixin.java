@@ -5,6 +5,7 @@ import appeng.api.networking.crafting.CalculationStrategy;
 import appeng.api.networking.crafting.ICraftingPlan;
 import appeng.api.networking.crafting.ICraftingService;
 import appeng.api.networking.crafting.ICraftingSimulationRequester;
+import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.crafting.CraftBranchFailure;
@@ -13,17 +14,22 @@ import appeng.crafting.CraftingPlan;
 import appeng.crafting.CraftingTreeNode;
 import appeng.crafting.inv.CraftingSimulationState;
 import com.appliedenhancements.api.AelisCraftingPlanner;
+import com.appliedenhancements.api.AelisExactCraftingPlanApi;
+import com.appliedenhancements.api.AelisExactRequest;
+import com.appliedenhancements.runtime.ExactRequestScope;
 import com.appliedenhancements.Config;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressCarrier;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressHandle;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressRequester;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
+import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier;
 import com.appliedenhancements.runtime.CraftingPlannerIntervention;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.world.level.Level;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -32,6 +38,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.math.BigInteger;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Semaphore;
 
@@ -47,7 +54,11 @@ public abstract class AelisCraftingCalculationMixin
     @Unique
     private static final Semaphore MOLECULARMANIPULATOR_INTERACTIVE_SLOT = new Semaphore(1, true);
 
-    @Shadow private long requestedAmount;
+    @Shadow @Final private long requestedAmount;
+    @Shadow @Final private CalculationStrategy strategy;
+
+    @Shadow
+    public abstract AEKey getOutput();
 
     @Shadow
     abstract void handlePausing() throws InterruptedException;
@@ -73,6 +84,10 @@ public abstract class AelisCraftingCalculationMixin
     private CraftingCalculationProgressHandle molecularmanipulator$calculationProgress;
     @Unique
     private ICraftingService molecularmanipulator$craftingService;
+    @Unique
+    private boolean appliedenhancements$probingExactPartial;
+    @Unique
+    private boolean appliedenhancements$exactProbeShortage;
 
     @Override
     public CraftingCalculationProgressHandle
@@ -120,7 +135,7 @@ public abstract class AelisCraftingCalculationMixin
     @WrapMethod(method = "run")
     private ICraftingPlan molecularmanipulator$trackAelisCalculation(
             Operation<ICraftingPlan> original) {
-        var aelisEnabled = molecularmanipulator$aelisEnabled || com.appliedenhancements.runtime.ExactRequestScope.current() != null;
+        var aelisEnabled = molecularmanipulator$aelisEnabled || ExactRequestScope.current() != null;
         var progress = molecularmanipulator$calculationProgress;
         if (!aelisEnabled) {
             return original.call();
@@ -233,12 +248,98 @@ public abstract class AelisCraftingCalculationMixin
     }
 
 
+    @WrapOperation(method = "computePlan", at = @At(value = "INVOKE", ordinal = 0,
+            target = "Lappeng/crafting/CraftingCalculation;runCraftAttempt(ZJ)Lappeng/crafting/CraftingPlan;"))
+    private CraftingPlan appliedenhancements$searchExactPartial(CraftingCalculation calculation,
+            boolean simulation, long amount, Operation<CraftingPlan> original) throws InterruptedException {
+        var request = ExactRequestScope.current();
+        if (strategy != CalculationStrategy.CRAFT_LESS || request == null || request.amount().bitLength() <= 63) {
+            return original.call(calculation, simulation, amount);
+        }
+
+        appliedenhancements$probingExactPartial = true;
+        try {
+            var full = appliedenhancements$probeExactAmount(calculation, amount, request, original);
+            if (full != null) {
+                return full;
+            }
+
+            // Bracket the attainable quantity from below before bisecting. A huge
+            // request with little stock should not cost one attempt per input bit.
+            BigInteger lower = BigInteger.valueOf(Long.MAX_VALUE);
+            BigInteger upper = request.amount();
+            CraftingPlan best = null;
+            BigInteger step = BigInteger.ONE;
+            boolean expanding = true;
+            while (lower.add(BigInteger.ONE).compareTo(upper) < 0) {
+                if (Thread.interrupted()) {
+                    throw new InterruptedException();
+                }
+                BigInteger trial = expanding ? lower.add(step) : lower.add(upper).shiftRight(1);
+                if (trial.compareTo(upper) >= 0) {
+                    expanding = false;
+                    continue;
+                }
+                var plan = appliedenhancements$probeExactAmount(
+                        calculation, amount, new AelisExactRequest(trial), original);
+                if (plan != null) {
+                    lower = trial;
+                    best = plan;
+                    if (expanding) {
+                        step = step.shiftLeft(1);
+                    }
+                } else if (appliedenhancements$exactProbeShortage) {
+                    upper = trial;
+                    expanding = false;
+                } else {
+                    // A fallback or an inexact result cannot shrink the search range.
+                    break;
+                }
+            }
+            if (best != null) {
+                return best;
+            }
+        } finally {
+            appliedenhancements$probingExactPartial = false;
+            appliedenhancements$exactProbeShortage = false;
+        }
+
+        // The host searches strictly below its original amount. Try the boundary
+        // itself before handing back to its long search and full missing report.
+        try (var scope = new ExactRequestScope(new AelisExactRequest(BigInteger.valueOf(amount)))) {
+            return original.call(calculation, simulation, amount);
+        }
+    }
+
+    @Unique
+    private CraftingPlan appliedenhancements$probeExactAmount(CraftingCalculation calculation,
+            long projection, AelisExactRequest request, Operation<CraftingPlan> original)
+            throws InterruptedException {
+        appliedenhancements$exactProbeShortage = false;
+        if (Thread.interrupted()) {
+            throw new InterruptedException();
+        }
+        try (var scope = new ExactRequestScope(request)) {
+            var plan = original.call(calculation, false, projection);
+            if (Thread.interrupted()) {
+                throw new InterruptedException();
+            }
+            if (plan != null && (plan.simulation()
+                    || !getOutput().equals(plan.finalOutput().what())
+                    || !request.amount().equals(AelisExactCraftingPlanApi.getFinalOutputAmount(plan)))) {
+                appliedenhancements$exactProbeShortage = false;
+                return null;
+            }
+            return plan;
+        }
+    }
+
     @WrapMethod(method = "runCraftAttempt")
     private CraftingPlan appliedenhancements$exactAttempt(boolean simulation, long amount,
             Operation<CraftingPlan> original) throws InterruptedException {
-        var request = com.appliedenhancements.runtime.ExactRequestScope.current();
+        var request = ExactRequestScope.current();
         if (request == null) return original.call(simulation, amount);
-        try (var scope = new com.appliedenhancements.runtime.ExactRequestScope(
+        try (var scope = new ExactRequestScope(
                 request.attempt(amount, requestedAmount))) {
             return original.call(simulation, amount);
         }
@@ -252,7 +353,7 @@ public abstract class AelisCraftingCalculationMixin
         molecularmanipulator$aelisNodeCount = -1;
         molecularmanipulator$calculationPath = AelisCalculationPath.AE2_NATIVE;
         var progress = molecularmanipulator$calculationProgress;
-        var aelisEnabled = molecularmanipulator$aelisEnabled || com.appliedenhancements.runtime.ExactRequestScope.current() != null;
+        var aelisEnabled = molecularmanipulator$aelisEnabled || ExactRequestScope.current() != null;
 
         if (!aelisEnabled || containerItems != null) {
             original.call(tree, inventory, requestedAmount, containerItems);
@@ -275,7 +376,13 @@ public abstract class AelisCraftingCalculationMixin
         KeyCounter missingItems = getMissingItems();
         var result = session.tryExecute(
                 tree, inventory, requestedAmount, isSimulation(), missingItems);
+        if (!result.applied() && Thread.interrupted()) {
+            throw new InterruptedException();
+        }
         if (result.branchFailure() != null) {
+            if (appliedenhancements$probingExactPartial) {
+                appliedenhancements$exactProbeShortage = true;
+            }
             throw result.branchFailure();
         }
         if (result.applied()) {
@@ -287,6 +394,10 @@ public abstract class AelisCraftingCalculationMixin
             return;
         }
 
+        if (appliedenhancements$probingExactPartial) {
+            // Let AE2 end the attempt without treating its long projection as exact.
+            throw new CraftBranchFailure(getOutput(), requestedAmount);
+        }
         if (result.error() != null) {
             com.appliedenhancements.runtime.AelisPlanningLog.warning(
                     "internal_compatibility_error",
@@ -340,11 +451,18 @@ public abstract class AelisCraftingCalculationMixin
             boolean simulation, long amount,
             CallbackInfoReturnable<CraftingPlan> callback) {
         if (!CraftingPlannerIntervention.enabled()) return;
-        if ((Object) callback.getReturnValue() instanceof AelisCalculationPathCarrier carrier) {
+        var plan = callback.getReturnValue();
+        if ((Object) plan instanceof AelisCalculationPathCarrier carrier) {
             // An external API caller may already have attached the actual path.
             if (carrier.molecularmanipulator$getCalculationPath() != AelisCalculationPath.AELIS) {
                 carrier.molecularmanipulator$setCalculationPath(molecularmanipulator$calculationPath);
             }
+        }
+        var exact = ExactRequestScope.current();
+        if (molecularmanipulator$calculationPath == AelisCalculationPath.AELIS
+                && exact != null && plan != null && plan.finalOutput().amount() == exact.projection()
+                && (Object) plan instanceof AelisBigIntegerCraftAmountsCarrier carrier) {
+            carrier.appliedenhancements$setBigIntegerFinalAmount(exact.amount());
         }
     }
 

@@ -24,6 +24,7 @@ import com.appliedenhancements.api.AelisCycleExecutionPlan;
 import com.appliedenhancements.api.AelisCycleSeedPolicy;
 import com.appliedenhancements.mixin.AelisChildSimulationStateAccessor;
 import com.appliedenhancements.mixin.CraftingSimulationStateLongSafetyAccessor;
+import com.appliedenhancements.storage.InfiniteStorageSupport;
 import com.github.appliedenhancements.crafting.MolecularReusableInputAdapters;
 import com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftingTracker;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
@@ -91,7 +92,6 @@ public final class AelisPlanner {
         private CraftingTreeNode root;
         private Graph graph;
         private String structuralFailure;
-        private String transactionalRuntimeFailure;
         private Throwable structuralError;
         private long compileNanos;
 
@@ -130,6 +130,7 @@ public final class AelisPlanner {
         private Result tryExecuteWithSeeds(CraftingTreeNode requestedRoot, CraftingSimulationState inventory,
                 long requestedAmount, boolean simulation, KeyCounter missingItems)
                 throws InterruptedException {
+            checkInterrupted();
             if (requestedAmount <= 0) {
                 return Result.fallback("invalid_request_amount", 0, 0, 0, 0, 0, null);
             }
@@ -137,11 +138,6 @@ public final class AelisPlanner {
                 return Result.fallback("calculation_root_changed", 0, 0, 0, 0, 0, null);
             }
             root = requestedRoot;
-
-            if (transactionalRuntimeFailure != null) {
-                return Result.fallback(transactionalRuntimeFailure, 0, 0,
-                        0, compileNanos, 0, null);
-            }
 
             if (graph == null && structuralFailure == null) {
                 long startedAt = System.nanoTime();
@@ -199,13 +195,6 @@ public final class AelisPlanner {
                 return Result.fallback(structuralFailure, 0, 0, 0,
                         compileNanos, 0, structuralError);
             }
-            String executionSafetyFailure = graph.executionSafetyFailure();
-            if (executionSafetyFailure != null) {
-                transactionalRuntimeFailure = executionSafetyFailure;
-                return Result.fallback(transactionalRuntimeFailure, graph.nodes.size(),
-                        graph.mergedOccurrences, graph.barrierCount,
-                        compileNanos, 0, null);
-            }
 
             long startedAt = System.nanoTime();
             try {
@@ -232,19 +221,12 @@ public final class AelisPlanner {
                 return Result.branchFailure(graph.nodes.size(), graph.mergedOccurrences,
                         graph.barrierCount, compileNanos, System.nanoTime() - startedAt, failure);
             } catch (Fallback fallback) {
-                if (graph.executionScope()
-                        == AelisExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL) {
-                    transactionalRuntimeFailure = "transactional_graph_" + fallback.reason;
-                }
+                // A later attempt can have a different quantity or inventory.
+                // Keep the compiled graph, not this attempt's execution failure.
                 return Result.fallback(fallback.reason, graph.nodes.size(), graph.mergedOccurrences,
                         graph.barrierCount,
                         compileNanos, System.nanoTime() - startedAt, null);
             } catch (RuntimeException | LinkageError exception) {
-                if (graph.executionScope()
-                        == AelisExecutionPolicy.Scope.CONTEXTUAL_TRANSACTIONAL) {
-                    transactionalRuntimeFailure =
-                            "transactional_graph_internal_execution_exception";
-                }
                 return Result.fallback("internal_execution_exception", graph.nodes.size(),
                         graph.mergedOccurrences, graph.barrierCount,
                         compileNanos, System.nanoTime() - startedAt, exception);
@@ -283,13 +265,17 @@ public final class AelisPlanner {
             throws Fallback, CraftBranchFailure, InterruptedException {
         var inventory = new ChildCraftingSimulationState(parent);
         var cyclicMissing = new KeyCounter();
-        if (tryExecuteGlobalCyclicPlan(
-                graph, inventory, requestedAmount, simulation,
-                cyclicMissing, pauseCheckpoint)) {
-            inventory.applyDiff(parent);
-            mergeMissingAmounts(missingItems, cyclicMissing);
-            return;
+        try {
+            if (tryExecuteGlobalCyclicPlan(
+                    graph, inventory, requestedAmount, simulation,
+                    cyclicMissing, pauseCheckpoint)) {
+                commitExecution(inventory, parent, missingItems);
+                return;
+            }
+        } catch (Fallback rejected) {
+            // An unrepresentable whole-graph plan doesn't rule out local execution.
         }
+        checkInterrupted();
         var exactRequest = com.appliedenhancements.runtime.ExactRequestScope.current();
         if (exactRequest != null && exactRequest.amount().bitLength() > 63) {
             var stagedMissing = new KeyCounter();
@@ -301,8 +287,7 @@ public final class AelisPlanner {
                 executeBigIntegerTopological(graph, inventory, requestedAmount, simulation, stagedMissing,
                         pauseCheckpoint, progressSink);
             }
-            inventory.applyDiff(parent);
-            mergeMissingAmounts(missingItems, stagedMissing);
+            commitExecution(inventory, parent, missingItems);
             return;
         }
         if (graph.executionScope()
@@ -312,8 +297,7 @@ public final class AelisPlanner {
                     graph, graph.rootIndex, inventory, requestedAmount,
                     requestedAmount, simulation, stagedMissing,
                     pauseCheckpoint, progressSink);
-            inventory.applyDiff(parent);
-            mergeMissingAmounts(missingItems, stagedMissing);
+            commitExecution(inventory, parent, missingItems);
             return;
         }
         if ((Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)) {
@@ -321,8 +305,7 @@ public final class AelisPlanner {
             executeBigIntegerTopological(
                     graph, inventory, requestedAmount, simulation, stagedMissing,
                     pauseCheckpoint, progressSink);
-            inventory.applyDiff(parent);
-            mergeMissingAmounts(missingItems, stagedMissing);
+            commitExecution(inventory, parent, missingItems);
             return;
         }
         var requests = new long[graph.nodes.size()];
@@ -338,6 +321,13 @@ public final class AelisPlanner {
             }
 
             Node node = graph.nodes.get(nodeIndex);
+            if (node.localCyclicRegion != null
+                    && tryExecuteLocalCyclicRegion(graph, node, inventory,
+                            BigInteger.valueOf(requestMultipliers), requestedAmount,
+                            simulation, stagedMissing, pauseCheckpoint, ProgressSink.NONE, null)) {
+                progressSink.executionStep();
+                continue;
+            }
 
             // Hybrid barrier execution: upstream nodes aggregate, barrier node calls AE2
             if (node.executionMode == ExecutionMode.HYBRID_BARRIER) {
@@ -412,6 +402,7 @@ public final class AelisPlanner {
                 // plan. Stage it until the entire aggregated graph succeeds so
                 // a later fallback cannot leak or duplicate missing entries.
                 stagedMissing.add(node.key, totalRequestedItems);
+                recordBigIntegerMissing(inventory, node.key, BigInteger.valueOf(totalRequestedItems));
                 progressSink.executionStep();
                 continue;
             }
@@ -446,8 +437,18 @@ public final class AelisPlanner {
             progressSink.executionStep();
         }
 
+        commitExecution(inventory, parent, missingItems);
+    }
+
+    private static void commitExecution(CraftingSimulationState inventory,
+            CraftingSimulationState parent, KeyCounter missingItems) throws InterruptedException {
+        checkInterrupted();
+        // The child ledger includes native and AELIS shortfalls. Publish its
+        // long projection once, after applying the exact ledger and stock diff.
+        var exactMissing = inventory instanceof AelisBigIntegerCraftingTracker tracker
+                ? tracker.appliedenhancements$getBigIntegerMissingAmounts() : Map.<AEKey, BigInteger>of();
         inventory.applyDiff(parent);
-        mergeMissingAmounts(missingItems, stagedMissing);
+        exactMissing.forEach((key, amount) -> addSaturated(missingItems, key, AelisBigIntegerMath.saturatingLong(amount)));
     }
 
     private static void executeBigIntegerTopological(
@@ -470,6 +471,13 @@ public final class AelisPlanner {
             }
 
             Node node = graph.nodes.get(nodeIndex);
+            if (node.localCyclicRegion != null
+                    && tryExecuteLocalCyclicRegion(graph, node, inventory,
+                            requestMultipliers.toBigInteger(), requestedAmount,
+                            simulation, stagedMissing, pauseCheckpoint, ProgressSink.NONE, null)) {
+                progressSink.executionStep();
+                continue;
+            }
             if (node.executionMode == ExecutionMode.HYBRID_BARRIER || node.barrier) {
                 long nativeRequest = exactNonNegativeLong(
                         requestMultipliers.toBigInteger(), "big_integer_native_boundary_overflow");
@@ -630,18 +638,22 @@ public final class AelisPlanner {
     private static Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>
             buildGlobalCyclicVariants(Graph graph, CraftingSimulationState parent,
                     PauseCheckpoint pauseCheckpoint) throws InterruptedException, Fallback {
-        prepareGlobalCyclicModel(graph);
-        if (graph.cyclicVariants == null) {
+        checkInterrupted();
+        prepareGlobalCyclicModel(graph, () -> checkpoint(pauseCheckpoint));
+        if (graph.cyclicModel == null) {
             return null;
         }
         for (Node node : graph.nodes) {
+            checkInterrupted();
             if (!node.reachable) continue;
             for (CompiledCandidate candidate : node.compiledCandidates) {
+                checkInterrupted();
                 if (candidate.observedPatternSemantics != null
                         && !candidate.observedPatternSemantics.matches(candidate.details)) {
                     return null;
                 }
                 for (OrderedGraphInput input : candidate.orderedInputs) {
+                    checkInterrupted();
                     GraphConsumableInput consumable = input.consumableInput;
                     if (!validateSparseConsumableTemplates(
                             graph.nodes.get(consumable.childIndex), consumable.child,
@@ -650,8 +662,11 @@ public final class AelisPlanner {
             }
         }
         for (LocalCyclicRegion local : graph.cyclicRegions) {
+            checkInterrupted();
             for (var variants : local.model.variants().values()) {
+                checkInterrupted();
                 for (var variant : variants) {
+                    checkInterrupted();
                     CompiledCandidate candidate = variant.id();
                     if (candidate.sourceProcess != null) continue;
                     if (!rawCyclePatternStillAvailable(graph.craftingService, candidate.details)
@@ -660,9 +675,11 @@ public final class AelisPlanner {
                         return null;
                     }
                     for (RawCycleInput rawInput : candidate.rawCycleInputs) {
+                        checkInterrupted();
                         if (!validateRawCycleInput(rawInput)) return null;
                     }
                     for (OrderedGraphInput input : candidate.orderedInputs) {
+                        checkInterrupted();
                         GraphConsumableInput consumable = input.consumableInput;
                         if (!validateSparseConsumableTemplates(
                                 graph.nodes.get(consumable.childIndex), consumable.child,
@@ -671,25 +688,49 @@ public final class AelisPlanner {
                 }
             }
         }
-        return graph.cyclicVariants;
+        return graph.cyclicModel.solver.variants();
     }
 
-    private static void prepareGlobalCyclicModel(Graph graph) throws Fallback {
+    private static void prepareGlobalCyclicModel(Graph graph,
+            AelisCyclicRegionDetector.Checkpoint<Fallback, InterruptedException> checkpoint)
+            throws Fallback, InterruptedException {
         if (graph.cyclicModelPrepared) return;
-        var variants = compileGlobalCyclicVariants(graph);
-        graph.cyclicVariants = variants != null && containsKeyLevelCycle(variants)
-                ? java.util.Collections.unmodifiableMap(variants) : null;
+        var variants = compileGlobalCyclicVariants(graph, checkpoint);
+        if (variants != null && containsKeyLevelCycle(variants, checkpoint)) {
+            var inventoryKeys = new LinkedHashSet<AEKey>();
+            for (Node node : graph.nodes) {
+                checkpoint.check();
+                if (node.reachable) inventoryKeys.add(node.key);
+            }
+            for (var entry : variants.entrySet()) {
+                checkpoint.check();
+                inventoryKeys.add(entry.getKey());
+                for (var variant : entry.getValue()) {
+                    checkpoint.check();
+                    for (var input : variant.inputs()) {
+                        checkpoint.check();
+                        inventoryKeys.add(input.key());
+                    }
+                }
+            }
+            graph.cyclicModel = new GlobalCyclicModel(
+                    AelisCyclicDemandSolver.Model.copyOf(variants, checkpoint),
+                    List.copyOf(inventoryKeys));
+        }
         graph.cyclicModelPrepared = true;
     }
 
     /** Compile immutable quantities once; runtime validation stays in the method above. */
     private static Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>
-            compileGlobalCyclicVariants(Graph graph) throws Fallback {
+            compileGlobalCyclicVariants(Graph graph,
+                    AelisCyclicRegionDetector.Checkpoint<Fallback, InterruptedException> checkpoint)
+                    throws Fallback, InterruptedException {
         var variants = new LinkedHashMap<AEKey,
                 List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>();
         var canonicalCandidates = new LinkedHashMap<AEKey, List<CompiledCandidate>>();
 
         for (Node node : graph.nodes) {
+            checkpoint.check();
             if (!node.reachable) {
                 continue;
             }
@@ -716,6 +757,7 @@ public final class AelisPlanner {
                     AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>(
                             node.compiledCandidates.size());
             for (CompiledCandidate candidate : node.compiledCandidates) {
+                checkpoint.check();
                 if (candidate == null || !candidate.secondaryOutputs.isEmpty()
                         || candidate.outputPerPattern <= 0
                         || candidate.hasContainerItems) {
@@ -723,6 +765,7 @@ public final class AelisPlanner {
                 }
                 var inputs = new LinkedHashMap<AEKey, BigInteger>();
                 for (OrderedGraphInput orderedInput : candidate.orderedInputs) {
+                    checkpoint.check();
                     if (orderedInput.reusable()) {
                         return null;
                     }
@@ -743,6 +786,7 @@ public final class AelisPlanner {
                 var modelInputs = new ArrayList<
                         AelisCyclicDemandSolver.Input<AEKey>>(inputs.size());
                 for (var input : inputs.entrySet()) {
+                    checkpoint.check();
                     modelInputs.add(new AelisCyclicDemandSolver.Input<>(
                             input.getKey(), input.getValue()));
                 }
@@ -758,6 +802,7 @@ public final class AelisPlanner {
 
         var rawRegions = new IdentityHashMap<LocalCyclicRegion, Boolean>();
         for (LocalCyclicRegion local : graph.cyclicRegions) {
+            checkpoint.check();
             if (local != null) {
                 rawRegions.put(local, Boolean.TRUE);
             }
@@ -767,13 +812,17 @@ public final class AelisPlanner {
                     AelisCyclicRegionDetector.Region<AEKey, CompiledCandidate>>(
                             rawRegions.size());
             for (LocalCyclicRegion local : rawRegions.keySet()) {
+                checkpoint.check();
                 for (var regionEntry : local.model.variants().entrySet()) {
+                    checkpoint.check();
                     for (var variant : regionEntry.getValue()) {
+                        checkpoint.check();
                         CompiledCandidate candidate = variant.id();
                         if (candidate.sourceProcess != null) {
                             continue;
                         }
                         for (OrderedGraphInput orderedInput : candidate.orderedInputs) {
+                            checkpoint.check();
                             GraphConsumableInput consumable =
                                     orderedInput.consumableInput;
                             if (orderedInput.reusable() || consumable == null
@@ -806,25 +855,13 @@ public final class AelisPlanner {
         if (variants == null) {
             return false;
         }
-        var modelKeys = new LinkedHashMap<AEKey, Boolean>();
-        for (Node node : graph.nodes) {
-            if (node.reachable) modelKeys.put(node.key, Boolean.TRUE);
-        }
-        for (var entry : variants.entrySet()) {
-            modelKeys.put(entry.getKey(), Boolean.TRUE);
-            for (var variant : entry.getValue()) {
-                for (var input : variant.inputs()) modelKeys.put(input.key(), Boolean.TRUE);
-            }
-        }
-
-        Set<CompiledCandidate> cyclicCraftingCandidates =
-                AelisCyclicCraftingMembership.find(variants);
-
+        var model = graph.cyclicModel;
         Node root = graph.nodes.get(graph.rootIndex);
         var exactRequest = com.appliedenhancements.runtime.ExactRequestScope.current();
         BigInteger rootItems = cyclicRequestedItems(root.amount, requestedAmount);
         var available = new LinkedHashMap<AEKey, BigInteger>();
-        for (AEKey key : modelKeys.keySet()) {
+        for (AEKey key : model.inventoryKeys) {
+            checkInterrupted();
             long amount = parent.extract(key, Long.MAX_VALUE, Actionable.SIMULATE);
             if (amount > 0) {
                 available.put(key, BigInteger.valueOf(amount));
@@ -840,17 +877,20 @@ public final class AelisPlanner {
                 Config.CYCLE_SOLVER_MAX_SEARCH_STATES.get(),
                 deadline, Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || exactRequest != null);
         PreservedGlobalCyclePlan preserved = solveGlobalCyclePlan(
-                variants, root.key, rootItems,
-                available, limits);
+                model.solver, root.key, rootItems, available, limits, Map.of());
         var result = preserved.result();
-        if (result != null && result.solved() && value(available, root.key).signum() == 0
+        if (result == null || !result.solved()) {
+            return false;
+        }
+        Set<CompiledCandidate> cyclicCraftingCandidates = model.solver.cyclicMembers();
+        if (value(available, root.key).signum() == 0
                 && variants.getOrDefault(root.key, List.of()).stream().anyMatch(v -> cyclicCraftingCandidates.contains(v.id()))) {
             BigInteger missingSeed = value(result.plan().missing(), root.key);
             if (missingSeed.signum() > 0 && missingSeed.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
                 long borrowed = seedLease.expose(root.key, missingSeed.longValue());
                 if (borrowed > 0) {
                     available.put(root.key, BigInteger.valueOf(parent.extract(root.key, Long.MAX_VALUE, Actionable.SIMULATE)));
-                    preserved = solveGlobalCyclePlan(variants, root.key, rootItems, available, limits,
+                    preserved = solveGlobalCyclePlan(model.solver, root.key, rootItems, available, limits,
                             Map.of(root.key, BigInteger.valueOf(borrowed)));
                     result = preserved.result();
                 }
@@ -869,6 +909,7 @@ public final class AelisPlanner {
         var attempt = new ChildCraftingSimulationState(parent);
         var attemptMissing = new KeyCounter();
         for (var entry : plan.requiredAvailable().entrySet()) {
+            checkInterrupted();
             long amount = exactPositiveLong(
                     entry.getValue(), "cyclic_required_available_overflow");
             long extracted = attempt.extract(
@@ -878,6 +919,7 @@ public final class AelisPlanner {
             }
         }
         for (var entry : plan.missing().entrySet()) {
+            checkInterrupted();
             long amount = (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)
                     ? AelisBigIntegerMath.saturatingLong(entry.getValue())
                     : exactPositiveLong(entry.getValue(), "cyclic_missing_overflow");
@@ -885,6 +927,7 @@ public final class AelisPlanner {
             recordBigIntegerMissing(attempt, entry.getKey(), entry.getValue());
         }
         for (var entry : plan.demands().entrySet()) {
+            checkInterrupted();
             if (entry.getValue().signum() <= 0) {
                 continue;
             }
@@ -898,6 +941,7 @@ public final class AelisPlanner {
             }
         }
         for (var entry : plan.firings().entrySet()) {
+            checkInterrupted();
             long times = cycleProjection(entry.getValue(), "cyclic_firing_overflow");
             CompiledCandidate candidate = entry.getKey();
             if (candidate.observedPatternSemantics != null
@@ -910,6 +954,7 @@ public final class AelisPlanner {
                     return false;
                 }
                 for (RawCycleInput rawInput : candidate.rawCycleInputs) {
+                    checkInterrupted();
                     if (!validateRawCycleInput(rawInput)) {
                         return false;
                     }
@@ -929,6 +974,7 @@ public final class AelisPlanner {
             ExactCraftingBytes.addBytes(attempt, entry.getValue());
         }
         for (var entry : plan.surplus().entrySet()) {
+            checkInterrupted();
             BigInteger unusedInitial = value(available, entry.getKey())
                     .subtract(value(plan.requiredAvailable(), entry.getKey()));
             BigInteger insert = entry.getValue().subtract(unusedInitial.max(BigInteger.ZERO));
@@ -940,6 +986,7 @@ public final class AelisPlanner {
             }
         }
         for (var entry : preserved.retainedSeeds().entrySet()) {
+            checkInterrupted();
             attempt.insert(
                     entry.getKey(),
                     cycleProjection(
@@ -950,6 +997,7 @@ public final class AelisPlanner {
         ((AelisCyclicCraftingTracker) attempt)
                 .appliedenhancements$recordCycleExecutionPlan(cycleExecutionPlan);
 
+        checkInterrupted();
         attempt.applyDiff(parent);
         mergeMissingAmounts(stagedMissing, attemptMissing);
         seedLease.commit();
@@ -963,23 +1011,35 @@ public final class AelisPlanner {
             long rootRequestedAmount, boolean simulation,
             KeyCounter stagedMissing, PauseCheckpoint pauseCheckpoint,
             ProgressSink progressSink, GraphConsumableInput requestInput)
-            throws CraftBranchFailure, InterruptedException {
-        try {
-            var attempt = new ChildCraftingSimulationState(parent);
-            try (var seedLease = AelisIgnoredSeedScope.lease(attempt)) {
+            throws InterruptedException {
+        checkInterrupted();
+        var candidateRoot = graph.nodes.get(graph.rootIndex).occurrences.get(0);
+        IdentityHashMap<CraftingTreeProcess, Boolean> possibleSnapshot = null;
+        boolean committed = false;
+        var attempt = new ChildCraftingSimulationState(parent);
+        try (var seedLease = AelisIgnoredSeedScope.lease(attempt)) {
             var attemptMissing = new KeyCounter();
             BigInteger requestedItems = cycleProduct(
                     requestedNode.amount, requestMultipliers,
                     "local_cyclic_request_amount_overflow");
             ExactCraftingBytes.addStackBytes(attempt, requestedNode.key, requestedItems);
-            if (!validateSparseRootTemplates(
+            if (requestInput == null) {
+                validateTemplates(requestedNode, attempt, pauseCheckpoint);
+            } else if (!validateSparseRootTemplates(
                     requestedNode, attempt, requestInput, pauseCheckpoint)) {
                 throw new Fallback("local_cyclic_root_template_changed");
+            }
+            if (com.appliedenhancements.storage.InfiniteStorageSupport.consume(
+                    attempt, requestedNode.key, requestedItems)) {
+                checkInterrupted();
+                attempt.applyDiff(parent);
+                return true;
             }
 
             LocalCyclicRegion local = requestedNode.localCyclicRegion;
             var available = new LinkedHashMap<AEKey, BigInteger>();
             for (AEKey key : local.model.keys()) {
+                checkInterrupted();
                 long amount = attempt.extract(key, Long.MAX_VALUE, Actionable.SIMULATE);
                 if (amount > 0) {
                     available.put(key, BigInteger.valueOf(amount));
@@ -994,9 +1054,7 @@ public final class AelisPlanner {
                     Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
                             || com.appliedenhancements.runtime.ExactRequestScope.current() != null);
             PreservedLocalCyclePlan preserved = solveLocalCyclePlan(
-                    local.model, requestedNode.key,
-                    requestedItems,
-                    available, limits);
+                    local, requestedNode.key, requestedItems, available, limits, Map.of());
             var result = preserved.result();
             if (result != null && result.solved() && value(available, requestedNode.key).signum() == 0) {
                 BigInteger missingSeed = value(result.plan().missingSeeds(), requestedNode.key);
@@ -1004,7 +1062,7 @@ public final class AelisPlanner {
                     long borrowed = seedLease.expose(requestedNode.key, missingSeed.longValue());
                     if (borrowed > 0) {
                         available.put(requestedNode.key, BigInteger.valueOf(attempt.extract(requestedNode.key, Long.MAX_VALUE, Actionable.SIMULATE)));
-                        preserved = solveLocalCyclePlan(local.model, requestedNode.key, requestedItems, available, limits,
+                        preserved = solveLocalCyclePlan(local, requestedNode.key, requestedItems, available, limits,
                                 Map.of(requestedNode.key, BigInteger.valueOf(borrowed)));
                         result = preserved.result();
                     }
@@ -1021,17 +1079,14 @@ public final class AelisPlanner {
             AelisCyclicRegionSolver.Plan<AEKey, CompiledCandidate> plan = result.plan();
             AelisCycleExecutionPlan cycleExecutionPlan = preserved.executionPlan();
             if (!simulation && !plan.missingSeeds().isEmpty()) {
-                var missing = plan.missingSeeds().entrySet().iterator().next();
-                throw new CraftBranchFailure(
-                        missing.getKey(), cycleProjection(
-                                missing.getValue(),
-                                "local_cyclic_missing_seed_overflow"));
+                return false;
             }
             if (stagedMissing == null && !plan.missingSeeds().isEmpty()) {
                 throw new Fallback("local_cyclic_missing_sink_unavailable");
             }
 
             for (var entry : plan.requiredAvailable().entrySet()) {
+                checkInterrupted();
                 long amount = exactPositiveLong(
                         entry.getValue(),
                         "local_cyclic_required_available_overflow");
@@ -1042,6 +1097,7 @@ public final class AelisPlanner {
                 }
             }
             for (var entry : plan.missingSeeds().entrySet()) {
+                checkInterrupted();
                 long amount = cycleProjection(
                         entry.getValue(), "local_cyclic_missing_overflow");
                 addSaturated(attemptMissing, entry.getKey(), amount);
@@ -1052,6 +1108,7 @@ public final class AelisPlanner {
             var rawExternalRequests = new ArrayList<RawExternalCyclicRequest>();
             var externalDemands = new LinkedHashMap<AEKey, BigInteger>();
             for (var entry : plan.firings().entrySet()) {
+                checkInterrupted();
                 BigInteger times = entry.getValue();
                 CompiledCandidate candidate = entry.getKey();
                 if (candidate.observedPatternSemantics != null
@@ -1065,6 +1122,7 @@ public final class AelisPlanner {
                     throw new Fallback("local_cyclic_raw_pattern_unavailable");
                 }
                 for (OrderedGraphInput orderedInput : candidate.orderedInputs) {
+                    checkInterrupted();
                     if (orderedInput.reusable()) {
                         throw new Fallback("local_cyclic_reusable_input");
                     }
@@ -1097,6 +1155,7 @@ public final class AelisPlanner {
                             consumable, childRequests));
                 }
                 for (RawCycleInput rawInput : candidate.rawCycleInputs) {
+                    checkInterrupted();
                     if (!validateRawCycleInput(rawInput)) {
                         throw new Fallback("local_cyclic_raw_input_changed");
                     }
@@ -1125,7 +1184,12 @@ public final class AelisPlanner {
                 throw new Fallback("local_cyclic_external_demand_mismatch");
             }
 
+            if (!externalRequests.isEmpty()) {
+                // External requests can enter AE2 through a merged occurrence.
+                possibleSnapshot = snapshotPossibleStates(candidateRoot);
+            }
             for (ExternalCyclicRequest external : externalRequests) {
+                checkInterrupted();
                 executeTransactionalNode(
                         graph, external.input.childIndex, attempt,
                         external.requests, rootRequestedAmount, simulation,
@@ -1133,6 +1197,7 @@ public final class AelisPlanner {
                         -1, null, external.input, false);
             }
             for (RawExternalCyclicRequest external : rawExternalRequests) {
+                checkInterrupted();
                 RawCycleInput input = external.input;
                 BigInteger requested = cycleProduct(
                         input.amount, external.requests,
@@ -1146,14 +1211,14 @@ public final class AelisPlanner {
                 BigInteger shortage = requested.subtract(BigInteger.valueOf(extracted));
                 if (shortage.signum() > 0) {
                     if (!simulation) {
-                        throw new CraftBranchFailure(input.key,
-                                AelisBigIntegerMath.saturatingLong(shortage));
+                        return false;
                     }
                     addSaturated(attemptMissing, input.key, cycleProjection(shortage, "local_cyclic_raw_missing_overflow"));
                     recordBigIntegerMissing(attempt, input.key, shortage);
                 }
             }
             for (var entry : plan.firings().entrySet()) {
+                checkInterrupted();
                 long times = cycleProjection(
                         entry.getValue(), "local_cyclic_firing_overflow");
                 if (Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get()
@@ -1169,6 +1234,7 @@ public final class AelisPlanner {
                 ExactCraftingBytes.addBytes(attempt, entry.getValue());
             }
             for (var entry : plan.surplus().entrySet()) {
+                checkInterrupted();
                 BigInteger unusedInitial = value(available, entry.getKey())
                         .subtract(value(plan.requiredAvailable(), entry.getKey()));
                 BigInteger insert = entry.getValue()
@@ -1182,6 +1248,7 @@ public final class AelisPlanner {
                 }
             }
             for (var entry : preserved.retainedSeeds().entrySet()) {
+                checkInterrupted();
                 attempt.insert(
                         entry.getKey(),
                         cycleProjection(
@@ -1193,15 +1260,21 @@ public final class AelisPlanner {
             ((AelisCyclicCraftingTracker) attempt)
                     .appliedenhancements$recordCycleExecutionPlan(cycleExecutionPlan);
 
+            checkInterrupted();
             attempt.applyDiff(parent);
             if (stagedMissing != null) {
                 mergeMissingAmounts(stagedMissing, attemptMissing);
             }
             seedLease.commit();
+            committed = true;
             return true;
-            }
-        } catch (Fallback fallback) {
+        } catch (Fallback | CraftBranchFailure rejected) {
+            checkInterrupted();
             return false;
+        } finally {
+            if (!committed && possibleSnapshot != null) {
+                restorePossibleStates(candidateRoot, possibleSnapshot);
+            }
         }
     }
 
@@ -1282,17 +1355,23 @@ public final class AelisPlanner {
 
     private static boolean containsKeyLevelCycle(
             Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>
-                    variants) {
+                    variants,
+            AelisCyclicRegionDetector.Checkpoint<Fallback, InterruptedException> checkpoint)
+            throws Fallback, InterruptedException {
         var indegrees = new LinkedHashMap<AEKey, Integer>();
         var adjacency = new LinkedHashMap<AEKey, Set<AEKey>>();
         for (AEKey key : variants.keySet()) {
+            checkpoint.check();
             indegrees.put(key, 0);
             adjacency.put(key, new LinkedHashSet<>());
         }
         for (var entry : variants.entrySet()) {
+            checkpoint.check();
             Set<AEKey> edges = adjacency.get(entry.getKey());
             for (var variant : entry.getValue()) {
+                checkpoint.check();
                 for (var input : variant.inputs()) {
+                    checkpoint.check();
                     if (variants.containsKey(input.key())
                             && edges.add(input.key())) {
                         indegrees.merge(input.key(), 1, Integer::sum);
@@ -1302,15 +1381,18 @@ public final class AelisPlanner {
         }
         var queue = new ArrayDeque<AEKey>();
         for (var entry : indegrees.entrySet()) {
+            checkpoint.check();
             if (entry.getValue() == 0) {
                 queue.addLast(entry.getKey());
             }
         }
         int visited = 0;
         while (!queue.isEmpty()) {
+            checkpoint.check();
             AEKey key = queue.removeFirst();
             visited++;
             for (AEKey target : adjacency.get(key)) {
+                checkpoint.check();
                 int remaining = indegrees.merge(target, -1, Integer::sum);
                 if (remaining == 0) {
                     queue.addLast(target);
@@ -1372,13 +1454,14 @@ public final class AelisPlanner {
 
     private static AelisCycleExecutionPlan cycleExecutionPlan(
             List<AelisCyclicDemandSolver.ScheduleStep<AEKey, CompiledCandidate>> schedule,
-            Map<AEKey, BigInteger> requiredAvailable) throws Fallback {
+            Map<AEKey, BigInteger> requiredAvailable) throws Fallback, InterruptedException {
         if (schedule == null || schedule.isEmpty()) {
             return null;
         }
         var steps = new ArrayList<AelisCycleExecutionPlan.Step>(schedule.size());
         var protectedKeys = new LinkedHashSet<AEKey>();
         for (var scheduled : schedule) {
+            checkInterrupted();
             var inputs = new LinkedHashMap<AEKey, Long>();
             for (var entry : scheduled.inputsPerCraft().entrySet()) {
                 inputs.put(
@@ -1396,6 +1479,7 @@ public final class AelisPlanner {
         }
         var minimumSeeds = new LinkedHashMap<AEKey, Long>();
         for (var entry : requiredAvailable.entrySet()) {
+            checkInterrupted();
             if (protectedKeys.contains(entry.getKey())
                     && entry.getValue().signum() > 0) {
                 minimumSeeds.put(
@@ -1416,28 +1500,28 @@ public final class AelisPlanner {
             AEKey rootKey,
             BigInteger rootDemand,
             Map<AEKey, BigInteger> available,
-            AelisCyclicDemandSolver.Limits limits) throws Fallback {
-        return solveGlobalCyclePlan(variants, rootKey, rootDemand, available, limits, Map.of());
+            AelisCyclicDemandSolver.Limits limits) throws Fallback, InterruptedException {
+        var model = AelisCyclicDemandSolver.Model.copyOf(variants, AelisPlanner::checkInterrupted);
+        return solveGlobalCyclePlan(model, rootKey, rootDemand, available, limits, Map.of());
     }
 
     private static PreservedGlobalCyclePlan solveGlobalCyclePlan(
-            Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>> variants,
+            AelisCyclicDemandSolver.Model<AEKey, CompiledCandidate> model,
             AEKey rootKey, BigInteger rootDemand, Map<AEKey, BigInteger> available,
-            AelisCyclicDemandSolver.Limits limits, Map<AEKey, BigInteger> borrowedRootSeeds) throws Fallback {
+            AelisCyclicDemandSolver.Limits limits, Map<AEKey, BigInteger> borrowedRootSeeds)
+            throws Fallback, InterruptedException {
         // Borrowed final-output stock must be returned, not credited toward the new order.
         var retainedSeeds = new LinkedHashMap<AEKey, BigInteger>(borrowedRootSeeds);
         AelisCyclicDemandSolver.Result<AEKey, CompiledCandidate> result = null;
         AelisCycleExecutionPlan executionPlan = null;
         for (int pass = 0; pass < 8; pass++) {
+            checkInterrupted();
             var demands = new LinkedHashMap<AEKey, BigInteger>();
             demands.put(rootKey, rootDemand);
             for (var entry : retainedSeeds.entrySet()) {
                 demands.merge(entry.getKey(), entry.getValue(), BigInteger::add);
             }
-            result = AelisCyclicDemandSolver.solve(
-                    new AelisCyclicDemandSolver.Problem<>(
-                            variants, demands, available),
-                    limits);
+            result = AelisCyclicDemandSolver.solve(model, demands, available, limits);
             if (!result.solved()) {
                 return new PreservedGlobalCyclePlan(
                         result, null, Map.copyOf(retainedSeeds), true);
@@ -1471,20 +1555,24 @@ public final class AelisPlanner {
             AEKey demandKey,
             BigInteger demand,
             Map<AEKey, BigInteger> available,
-            AelisCyclicDemandSolver.Limits limits) throws Fallback {
-        return solveLocalCyclePlan(region, demandKey, demand, available, limits, Map.of());
+            AelisCyclicDemandSolver.Limits limits) throws Fallback, InterruptedException {
+        var model = AelisCyclicDemandSolver.Model.copyOf(region.variants(), AelisPlanner::checkInterrupted);
+        return solveLocalCyclePlan(new LocalCyclicRegion(region, model),
+                demandKey, demand, available, limits, Map.of());
     }
 
     private static PreservedLocalCyclePlan solveLocalCyclePlan(
-            AelisCyclicRegionDetector.Region<AEKey, CompiledCandidate> region,
+            LocalCyclicRegion local,
             AEKey demandKey, BigInteger demand, Map<AEKey, BigInteger> available,
-            AelisCyclicDemandSolver.Limits limits, Map<AEKey, BigInteger> borrowedRootSeeds) throws Fallback {
+            AelisCyclicDemandSolver.Limits limits, Map<AEKey, BigInteger> borrowedRootSeeds)
+            throws Fallback, InterruptedException {
         var retainedSeeds = new LinkedHashMap<AEKey, BigInteger>(borrowedRootSeeds);
         AelisCyclicRegionSolver.Result<AEKey, CompiledCandidate> result = null;
         AelisCycleExecutionPlan executionPlan = null;
         for (int pass = 0; pass < 8; pass++) {
+            checkInterrupted();
             result = AelisCyclicRegionSolver.solve(
-                    region, demandKey, demand,
+                    local.model, local.solver, demandKey, demand,
                     retainedSeeds, available, limits);
             if (!result.solved()) {
                 return new PreservedLocalCyclePlan(
@@ -1577,7 +1665,8 @@ public final class AelisPlanner {
         progressSink.executionStep();
 
         Node node = graph.nodes.get(nodeIndex);
-        if (!validateQuantityStock
+        boolean executeCompiledBoundary = nodeIndex == compiledBoundaryIndex;
+        if (!executeCompiledBoundary && !validateQuantityStock
                 && node.localCyclicRegion != null
                 && (requestInput == null || !requestInput.substituteInput)
                 && tryExecuteLocalCyclicRegion(
@@ -1586,7 +1675,6 @@ public final class AelisPlanner {
                         pauseCheckpoint, progressSink, requestInput)) {
             return;
         }
-        boolean executeCompiledBoundary = nodeIndex == compiledBoundaryIndex;
         if (!executeCompiledBoundary
                 && (node.barrier || node.executionMode == ExecutionMode.HYBRID_BARRIER)) {
             long nativeRequest = exactNonNegativeLong(
@@ -1756,12 +1844,8 @@ public final class AelisPlanner {
         // Like AE2, container returns become visible only after every input
         // request succeeds, including simulated requests for missing inputs.
         for (var stack : returnedFixedInputs.entrySet()) {
-            long amount = exactNonNegativeLong(
-                    stack.getValue(), "fixed_remainder_amount_overflow");
-            long available = inventory.extract(
-                    stack.getKey(), Long.MAX_VALUE, Actionable.SIMULATE);
-            checkedAdd(available, amount, "fixed_remainder_inventory_overflow");
-            inventory.insert(stack.getKey(), amount, Actionable.MODULATE);
+            insertFiniteReturn(inventory, stack.getKey(), stack.getValue(),
+                    "fixed_remainder_amount_overflow", "fixed_remainder_inventory_overflow");
             ExactCraftingBytes.addStackBytes(inventory, stack.getKey(), stack.getValue());
         }
         for (var stack : returnedReusableInputs) {
@@ -1780,12 +1864,9 @@ public final class AelisPlanner {
         List<GenericStack> secondaryOutputs = executeCompiledBoundary
                 ? compiledCandidate.secondaryOutputs : node.secondaryOutputs;
         for (GenericStack output : secondaryOutputs) {
-            long amount = exactNonNegativeLong(
+            insertFiniteReturn(inventory, output.what(),
                     AelisBigIntegerMath.multiply(output.amount(), patternTimes),
-                    "big_integer_secondary_output_overflow");
-            long available = inventory.extract(output.what(), Long.MAX_VALUE, Actionable.SIMULATE);
-            checkedAdd(available, amount, "secondary_output_inventory_overflow");
-            inventory.insert(output.what(), amount, Actionable.MODULATE);
+                    "big_integer_secondary_output_overflow", "secondary_output_inventory_overflow");
         }
         IPatternDetails pattern = executeCompiledBoundary ? compiledCandidate.details : node.details;
         if ((Config.ENABLE_AELIS_BIG_INTEGER_PLANNING.get() || com.appliedenhancements.runtime.ExactRequestScope.current() != null)) {
@@ -1797,6 +1878,18 @@ public final class AelisPlanner {
         ExactCraftingBytes.addBytes(inventory, patternTimes);
         } finally {
             AelisRecursionGuard.exitTransactional();
+        }
+    }
+
+    private static void insertFiniteReturn(CraftingSimulationState inventory, AEKey key,
+            BigInteger amount, String amountOverflow, String inventoryOverflow) throws Fallback {
+        // Infinite inserts are ignored by the simulation; only finite caches
+        // need a long quantity and an overflow check.
+        if (!InfiniteStorageSupport.isInfinite(inventory, key)) {
+            long count = exactNonNegativeLong(amount, amountOverflow);
+            long available = inventory.extract(key, Long.MAX_VALUE, Actionable.SIMULATE);
+            checkedAdd(available, count, inventoryOverflow);
+            inventory.insert(key, count, Actionable.MODULATE);
         }
     }
 
@@ -4280,12 +4373,13 @@ public final class AelisPlanner {
     }
 
     private static IdentityHashMap<CraftingTreeProcess, Boolean> snapshotPossibleStates(
-            CraftingTreeNode root) {
+            CraftingTreeNode root) throws InterruptedException {
         var result = new IdentityHashMap<CraftingTreeProcess, Boolean>();
-        visitBuiltProcesses(root, process -> result.put(
-                process,
-                ((AelisCraftingTreeProcessBridge) process)
-                        .molecularmanipulator$isPossible()));
+        visitBuiltProcesses(root, process -> {
+            checkInterrupted();
+            result.put(process, ((AelisCraftingTreeProcessBridge) process)
+                    .molecularmanipulator$isPossible());
+        });
         return result;
     }
 
@@ -4341,8 +4435,13 @@ public final class AelisPlanner {
         }
     }
 
-    private static void visitBuiltProcesses(CraftingTreeNode root,
-            java.util.function.Consumer<CraftingTreeProcess> visitor) {
+    @FunctionalInterface
+    private interface ProcessVisitor<E extends Exception> {
+        void accept(CraftingTreeProcess process) throws E;
+    }
+
+    private static <E extends Exception> void visitBuiltProcesses(CraftingTreeNode root,
+            ProcessVisitor<E> visitor) throws E {
         var pending = new ArrayDeque<CraftingTreeNode>();
         var visited = new IdentityHashMap<CraftingTreeNode, Boolean>();
         pending.addLast(root);
@@ -5402,13 +5501,17 @@ public final class AelisPlanner {
     }
 
     private static List<LocalCyclicRegion> assignLocalCyclicRegions(
-            List<Node> nodes, ICraftingService craftingService) throws Fallback {
+            List<Node> nodes, ICraftingService craftingService, Compiler compiler)
+            throws Fallback, InterruptedException {
         var models = new LinkedHashMap<AEKey,
                 AelisCyclicRegionDetector.KeyModel<AEKey, CompiledCandidate>>();
         var canonicalCandidates = new LinkedHashMap<AEKey, List<CompiledCandidate>>();
         var exactNodes = new LinkedHashMap<NodeKey, Node>();
         var terminalNodes = new LinkedHashMap<AEKey, Node>();
+        var analyzedKeys = new HashSet<AEKey>();
         for (Node node : nodes) {
+            compiler.checkBudget();
+            analyzedKeys.add(node.key);
             if (!node.reachable) {
                 continue;
             }
@@ -5433,7 +5536,7 @@ public final class AelisPlanner {
                 }
                 continue;
             }
-            CycleKeyModel built = buildCycleKeyModel(nodes, node);
+            CycleKeyModel built = buildCycleKeyModel(nodes, node, compiler);
             var existing = models.get(node.key);
             List<CompiledCandidate> canonical = canonicalCandidates.get(node.key);
             if (existing == null) {
@@ -5459,25 +5562,35 @@ public final class AelisPlanner {
 
         if (craftingService != null && !terminalNodes.isEmpty()) {
             restoreConnectedRawCycleCandidates(
-                    models, exactNodes, terminalNodes, craftingService);
+                    models, exactNodes, terminalNodes, craftingService, compiler, analyzedKeys);
         }
 
-        var analysis = AelisCyclicRegionDetector.analyze(models);
+        var analysis = AelisCyclicRegionDetector
+                .<AEKey, CompiledCandidate, Fallback, InterruptedException>analyze(models, compiler::checkBudget);
         var assignedRegions = new ArrayList<LocalCyclicRegion>();
+        var regionsByKey = new HashMap<AEKey, LocalCyclicRegion>();
         for (var region : analysis.regions()) {
-            var local = new LocalCyclicRegion(region);
+            var local = new LocalCyclicRegion(region,
+                    AelisCyclicDemandSolver.Model
+                            .<AEKey, CompiledCandidate, Fallback, InterruptedException>copyOf(
+                                    region.variants(), compiler::checkBudget));
             assignedRegions.add(local);
+            for (AEKey key : region.keys()) {
+                compiler.checkBudget();
+                regionsByKey.put(key, local);
+            }
+        }
+        if (!regionsByKey.isEmpty()) {
             for (Node node : nodes) {
-                if (region.keys().contains(node.key)) {
-                    node.localCyclicRegion = local;
-                }
+                compiler.checkBudget();
+                node.localCyclicRegion = regionsByKey.get(node.key);
             }
         }
         return List.copyOf(assignedRegions);
     }
 
-    private static CycleKeyModel buildCycleKeyModel(List<Node> nodes, Node node)
-            throws Fallback {
+    private static CycleKeyModel buildCycleKeyModel(List<Node> nodes, Node node, Compiler compiler)
+            throws Fallback, InterruptedException {
         var rejectionReasons = new LinkedHashSet<String>();
         boolean supported = !node.emitter && !node.barrier
                 && (node.executionMode == ExecutionMode.PURE_FAST
@@ -5508,6 +5621,7 @@ public final class AelisPlanner {
                 AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>(
                         node.compiledCandidates.size());
         for (CompiledCandidate candidate : node.compiledCandidates) {
+            compiler.checkBudget();
             if (candidate == null || candidate.outputPerPattern <= 0) {
                 supported = false;
                 rejectionReasons.add("invalid candidate output");
@@ -5523,6 +5637,7 @@ public final class AelisPlanner {
             }
             var inputs = new LinkedHashMap<AEKey, BigInteger>();
             for (OrderedGraphInput orderedInput : candidate.orderedInputs) {
+                compiler.checkBudget();
                 if (orderedInput.reusable()) {
                     supported = false;
                     rejectionReasons.add("reusable input");
@@ -5568,27 +5683,19 @@ public final class AelisPlanner {
     private static List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>
             buildRawCycleVariants(
                     Map<NodeKey, Node> exactNodes,
-                    Map<AEKey, Node> terminalNodes,
-                    AEKey outputKey, ICraftingService craftingService) {
-        Node outputNode = terminalNodes.get(outputKey);
-        if (outputNode == null) {
-            return List.of();
-        }
-        return buildRawCycleVariants(
-                exactNodes, outputNode.level, outputKey, craftingService);
-    }
-
-    private static List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>
-            buildRawCycleVariants(
-                    Map<NodeKey, Node> exactNodes,
                     net.minecraft.world.level.Level outputLevel,
-                    AEKey outputKey, ICraftingService craftingService) {
+                    AEKey outputKey, ICraftingService craftingService,
+                    Compiler compiler, Set<AEKey> analyzedKeys)
+                    throws Fallback, InterruptedException {
+        compiler.checkBudget();
+        compiler.countRawCycleKey(analyzedKeys, outputKey);
         var variants = new ArrayList<
                 AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>();
         int sourceIndex = 0;
         boolean allCandidatesSafe = true;
         try {
             for (IPatternDetails details : craftingService.getCraftingFor(outputKey)) {
+                compiler.checkBudget();
                 if (details == null) {
                     allCandidatesSafe = false;
                     sourceIndex++;
@@ -5597,6 +5704,7 @@ public final class AelisPlanner {
                 long outputPerPattern = 0;
                 boolean outputSafe = true;
                 for (GenericStack output : details.getOutputs()) {
+                    compiler.checkBudget();
                     if (output == null || output.what() == null || output.amount() <= 0
                             || !outputKey.equals(output.what())) {
                         outputSafe = false;
@@ -5628,6 +5736,7 @@ public final class AelisPlanner {
                 var modelInputAmounts = new LinkedHashMap<AEKey, BigInteger>();
                 boolean inputSafe = true;
                 for (IPatternDetails.IInput input : details.getInputs()) {
+                    compiler.checkBudget();
                     GenericStack exact = getSingleExactInputChoice(input);
                     if (exact == null || exact.what() == null || exact.amount() <= 0
                             || input.getMultiplier() <= 0
@@ -5636,6 +5745,7 @@ public final class AelisPlanner {
                         inputSafe = false;
                         break;
                     }
+                    compiler.countRawCycleKey(analyzedKeys, exact.what());
                     long multiplier = input.getMultiplier();
                     BigInteger totalAmount = BigInteger.valueOf(exact.amount())
                             .multiply(BigInteger.valueOf(multiplier));
@@ -5698,17 +5808,20 @@ public final class AelisPlanner {
             Map<AEKey, AelisCyclicRegionDetector.KeyModel<AEKey, CompiledCandidate>> models,
             Map<NodeKey, Node> exactNodes,
             Map<AEKey, Node> terminalNodes,
-            ICraftingService craftingService) {
-        var initial = AelisCyclicPatternOverlay.merge(
-                models, terminalNodes.keySet(),
-                key -> buildRawCycleVariants(
-                        exactNodes, terminalNodes, key, craftingService));
+            ICraftingService craftingService, Compiler compiler, Set<AEKey> analyzedKeys)
+            throws Fallback, InterruptedException {
+        var initial = AelisCyclicPatternOverlay
+                .<AEKey, CompiledCandidate, Fallback, InterruptedException>merge(
+                        models, terminalNodes.keySet(),
+                        key -> buildRawCycleVariants(exactNodes, terminalNodes.get(key).level,
+                                key, craftingService, compiler, analyzedKeys));
         models.clear();
         models.putAll(initial.models());
 
         Set<AEKey> restored = initial.restoredKeys();
         var knownProducers = new LinkedHashSet<AEKey>();
         for (var entry : models.entrySet()) {
+            compiler.checkBudget();
             if (!entry.getValue().variants().isEmpty()) {
                 knownProducers.add(entry.getKey());
             }
@@ -5725,96 +5838,117 @@ public final class AelisPlanner {
         }
 
         while (!pending.isEmpty()) {
+            compiler.checkBudget();
             AEKey owner = pending.removeFirst();
             var ownerModel = models.get(owner);
             if (ownerModel == null) {
                 continue;
             }
             for (var variant : ownerModel.variants()) {
+                compiler.checkBudget();
                 CompiledCandidate candidate = variant.id();
                 for (RawCycleInput rawInput : candidate.rawCycleInputs) {
+                    compiler.checkBudget();
                     if (rawInput.childIndex >= 0
                             || knownProducers.contains(rawInput.key)) {
                         continue;
                     }
-                    var expansion = findConnectedRawCycleExpansion(
+                    var expansions = findConnectedRawCycleExpansion(
                             rawInput.key, rawInput.level, knownProducers,
-                            cachedCandidates, new HashSet<>(), exactNodes,
-                            craftingService);
-                    if (!expansion.connected()) {
-                        continue;
-                    }
-                    for (var discovered : expansion.expansions()) {
-                        if (!knownProducers.add(discovered.key())) {
+                            cachedCandidates, exactNodes, craftingService, compiler, analyzedKeys);
+                    for (var discovered : expansions) {
+                        compiler.checkBudget();
+                        if (!knownProducers.add(discovered.key)) {
                             continue;
                         }
-                        models.put(discovered.key(),
+                        models.put(discovered.key,
                                 new AelisCyclicRegionDetector.KeyModel<>(
-                                        discovered.variants(), true));
-                        pending.addLast(discovered.key());
+                                        discovered.variants, true));
+                        pending.addLast(discovered.key);
                     }
                 }
             }
         }
     }
 
-    private static RawCycleSearch findConnectedRawCycleExpansion(
-            AEKey key, net.minecraft.world.level.Level level,
-            Set<AEKey> knownProducers,
+    private static List<RawCycleFrame> findConnectedRawCycleExpansion(
+            AEKey key, net.minecraft.world.level.Level level, Set<AEKey> knownProducers,
             Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>> cache,
-            Set<AEKey> visiting,
-            Map<NodeKey, Node> exactNodes,
-            ICraftingService craftingService) {
-        if (knownProducers.contains(key)) {
-            return new RawCycleSearch(true, List.of());
+            Map<NodeKey, Node> exactNodes, ICraftingService craftingService,
+            Compiler compiler, Set<AEKey> analyzedKeys) throws Fallback, InterruptedException {
+        var variants = cachedRawCycleVariants(
+                key, level, cache, exactNodes, craftingService, compiler, analyzedKeys);
+        if (variants.isEmpty()) {
+            return List.of();
         }
-        if (!visiting.add(key)) {
-            return new RawCycleSearch(true, List.of());
-        }
-        try {
-            var variants = cache.computeIfAbsent(key,
-                    ignored -> buildRawCycleVariants(
-                            exactNodes, level, key, craftingService));
-            if (variants.isEmpty()) {
-                return new RawCycleSearch(false, List.of());
+
+        // Keep the original preorder. Only frames which reach a known producer
+        // or an active ancestor are restored; completed frames need no rewalk.
+        var visited = new HashMap<AEKey, RawCycleFrame>();
+        var discoveryOrder = new ArrayList<RawCycleFrame>();
+        var pending = new ArrayDeque<RawCycleFrame>();
+        var root = new RawCycleFrame(key, variants);
+        visited.put(key, root);
+        discoveryOrder.add(root);
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            compiler.checkBudget();
+            var frame = pending.peek();
+            if (frame.variantIndex == frame.variants.size()) {
+                pending.pop();
+                frame.finished = true;
+                if (frame.connected && !pending.isEmpty()) {
+                    pending.peek().connected = true;
+                }
+                continue;
             }
 
-            var discovered = new LinkedHashMap<AEKey, RawCycleExpansion>();
-            boolean connected = false;
-            for (var variant : variants) {
-                CompiledCandidate candidate = variant.id();
-                for (RawCycleInput rawInput : candidate.rawCycleInputs) {
-                    if (rawInput.childIndex >= 0) {
-                        if (knownProducers.contains(rawInput.key)) {
-                            connected = true;
-                        }
-                        continue;
-                    }
-                    if (knownProducers.contains(rawInput.key)) {
-                        connected = true;
-                        continue;
-                    }
-                    var nested = findConnectedRawCycleExpansion(
-                            rawInput.key, rawInput.level, knownProducers,
-                            cache, visiting, exactNodes, craftingService);
-                    if (nested.connected()) {
-                        connected = true;
-                        for (var entry : nested.expansions()) {
-                            discovered.putIfAbsent(entry.key(), entry);
-                        }
-                    }
+            var inputs = frame.variants.get(frame.variantIndex).id().rawCycleInputs;
+            if (frame.inputIndex == inputs.size()) {
+                frame.variantIndex++;
+                frame.inputIndex = 0;
+                continue;
+            }
+            var input = inputs.get(frame.inputIndex++);
+            if (knownProducers.contains(input.key)) {
+                frame.connected = true;
+            } else if (input.childIndex < 0) {
+                var previous = visited.get(input.key);
+                if (previous != null) {
+                    frame.connected |= !previous.finished || previous.connected;
+                    continue;
+                }
+                var childVariants = cachedRawCycleVariants(input.key, input.level, cache,
+                        exactNodes, craftingService, compiler, analyzedKeys);
+                if (!childVariants.isEmpty()) {
+                    var child = new RawCycleFrame(input.key, childVariants);
+                    visited.put(input.key, child);
+                    discoveryOrder.add(child);
+                    pending.push(child);
                 }
             }
-            if (!connected) {
-                return new RawCycleSearch(false, List.of());
-            }
-            var result = new ArrayList<RawCycleExpansion>(discovered.size() + 1);
-            result.add(new RawCycleExpansion(key, variants));
-            result.addAll(discovered.values());
-            return new RawCycleSearch(true, result);
-        } finally {
-            visiting.remove(key);
         }
+        var expansions = new ArrayList<RawCycleFrame>();
+        for (var frame : discoveryOrder) {
+            compiler.checkBudget();
+            if (frame.connected) {
+                expansions.add(frame);
+            }
+        }
+        return expansions;
+    }
+
+    private static List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>> cachedRawCycleVariants(
+            AEKey key, net.minecraft.world.level.Level level,
+            Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>> cache,
+            Map<NodeKey, Node> exactNodes, ICraftingService craftingService,
+            Compiler compiler, Set<AEKey> analyzedKeys) throws Fallback, InterruptedException {
+        var variants = cache.get(key);
+        if (variants == null) {
+            variants = buildRawCycleVariants(exactNodes, level, key, craftingService, compiler, analyzedKeys);
+            cache.put(key, variants);
+        }
+        return variants;
     }
 
     private static String joinCycleRejection(String... reasons) {
@@ -5847,6 +5981,7 @@ public final class AelisPlanner {
         private long mergedOccurrences;
         private long pausedNanos;
         private int orderedChoiceCount;
+        private int rawCycleNodes;
         private boolean hasSubstituteInputs;
         private boolean hasReusableInputs;
 
@@ -5909,13 +6044,13 @@ public final class AelisPlanner {
                     }
                 }
             }
-            var cyclicRegions = assignLocalCyclicRegions(nodes, craftingService);
+            var cyclicRegions = assignLocalCyclicRegions(nodes, craftingService, this);
             var graph = new Graph(List.copyOf(nodes), topologicalOrder, rootIndex,
                     logicalNodeCount, mergedOccurrences, barrierCount, orderedChoiceCount,
                     !contextSplitKeys.isEmpty()
                             || !crossAmountContextSensitiveKeys.isEmpty(),
                     hasSubstituteInputs, hasReusableInputs, craftingService, cyclicRegions);
-            prepareGlobalCyclicModel(graph);
+            prepareGlobalCyclicModel(graph, this::checkBudget);
             checkBudget();
             return graph;
         }
@@ -7007,6 +7142,12 @@ public final class AelisPlanner {
             return total;
         }
 
+        private void countRawCycleKey(Set<AEKey> analyzedKeys, AEKey key) throws Fallback {
+            if (analyzedKeys.add(key) && ++rawCycleNodes > maxNodes - nodes.size()) {
+                throw new Fallback("node_limit");
+            }
+        }
+
         private void checkBudget() throws InterruptedException, Fallback {
             long beforePause = System.nanoTime();
             checkpoint(pauseCheckpoint);
@@ -7456,17 +7597,29 @@ public final class AelisPlanner {
             net.minecraft.world.level.Level level) {
     }
 
-    private record RawCycleExpansion(
-            AEKey key,
-            List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>> variants) {
-    }
+    private static final class RawCycleFrame {
+        private final AEKey key;
+        private final List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>> variants;
+        private int variantIndex;
+        private int inputIndex;
+        private boolean connected;
+        private boolean finished;
 
-    private record RawCycleSearch(
-            boolean connected, List<RawCycleExpansion> expansions) {
+        private RawCycleFrame(AEKey key,
+                List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>> variants) {
+            this.key = key;
+            this.variants = variants;
+        }
     }
 
     private record LocalCyclicRegion(
-            AelisCyclicRegionDetector.Region<AEKey, CompiledCandidate> model) {
+            AelisCyclicRegionDetector.Region<AEKey, CompiledCandidate> model,
+            AelisCyclicDemandSolver.Model<AEKey, CompiledCandidate> solver) {
+    }
+
+    private record GlobalCyclicModel(
+            AelisCyclicDemandSolver.Model<AEKey, CompiledCandidate> solver,
+            List<AEKey> inventoryKeys) {
     }
 
     private record CycleKeyModel(
@@ -7514,8 +7667,7 @@ public final class AelisPlanner {
         private final List<LocalCyclicRegion> cyclicRegions;
         // Owned by one calculation session. Inventory and live pattern checks are never cached.
         private boolean cyclicModelPrepared;
-        private Map<AEKey, List<AelisCyclicDemandSolver.Variant<AEKey, CompiledCandidate>>>
-                cyclicVariants;
+        private GlobalCyclicModel cyclicModel;
 
         private Graph(List<Node> nodes, int[] topologicalOrder, int rootIndex,
                 long logicalNodeCount, long mergedOccurrences, int barrierCount,
@@ -7564,10 +7716,6 @@ public final class AelisPlanner {
                 }
             }
             return regions;
-        }
-
-        private String executionSafetyFailure() {
-            return null;
         }
 
         private boolean requiresNativeNodeCount() {

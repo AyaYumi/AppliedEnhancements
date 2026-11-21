@@ -6,7 +6,7 @@
 
 [中文](README_ZH.md) · [API documentation](docs/API_INTEGRATION.md) · [Configuration](CONFIGURATION.md)
 
-**1.1.6-forge** extends AE2 crafting, storage access and pattern terminals on Minecraft
+**1.1.7-forge** extends AE2 crafting, storage access and pattern terminals on Minecraft
 1.20.1 / Forge. It adds shared batch extraction/ownership transactions used by
 cycle-aware CPUs, while retaining existing planner and terminal APIs.
 
@@ -40,7 +40,7 @@ ExtendedAE, AE2WTLib, JEI, EMI, AdvancedAE,
 Data Energistics and other integrations remain optional. Compatibility with newer
 addon versions depends on their internal hooks.
 
-Build `build/libs/appliedenhancements-1.1.6-forge.jar` and install the same build on
+Build `build/libs/appliedenhancements-1.1.7-forge.jar` and install the same build on
 client and server. Internal network protocol is `1.1.4-forge-5`; update both sides together. Addons use the separate public API; this
 mod is not embedded in their JARs.
 
@@ -114,7 +114,7 @@ MaxFast facade remains for existing 1.0.3 Java integrations.
 .\gradlew.bat clean assemble apiJavadoc --no-configuration-cache
 ```
 
-The runtime distribution is `build/libs/appliedenhancements-1.1.6-forge.jar`.
+The runtime distribution is `build/libs/appliedenhancements-1.1.7-forge.jar`.
 CI compiles against standard AE2 and UELM, then uploads one universal JAR and
 the generated API documentation.
 

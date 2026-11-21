@@ -213,6 +213,5 @@
   "gui.appliedenhancements.plan.tree.hint": "拖动节点调整位置 · 拖动空白平移 · 滚轮缩放 · 循环组标题可折叠 · 虚线表示可选输入",
   "gui.appliedenhancements.plan.tree.demand": "需求 %s",
   "gui.appliedenhancements.plan.tree.craft": "合成 %s",
-  "gui.appliedenhancements.plan.tree.cyclic_amount": "循环 %s",
-  "message.appliedenhancements.crafting_amount_too_large": "合成数量超过服务器上限：%s。"
+  "gui.appliedenhancements.plan.tree.cyclic_amount": "循环 %s"
 }

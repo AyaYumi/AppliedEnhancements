@@ -213,6 +213,5 @@
   "gui.appliedenhancements.plan.tree.hint": "Drag nodes to move · Drag background to pan · Scroll to zoom · Cycle headers fold · Dashed links are alternatives",
   "gui.appliedenhancements.plan.tree.demand": "Need %s",
   "gui.appliedenhancements.plan.tree.craft": "To craft %s",
-  "gui.appliedenhancements.plan.tree.cyclic_amount": "Cyclic %s",
-  "message.appliedenhancements.crafting_amount_too_large": "Crafting amount exceeds the server limit of %s."
+  "gui.appliedenhancements.plan.tree.cyclic_amount": "Cyclic %s"
 }

@@ -111,15 +111,6 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
             }
         }
 
-        // Check maximum crafting amount
-        long maximumAmount = Long.MAX_VALUE;
-        if (amount > maximumAmount) {
-            menu.getPlayer().sendSystemMessage(Component.translatable(
-                    "message.appliedenhancements.crafting_amount_too_large",
-                    maximumAmount));
-            return;
-        }
-
         if (!(menu.getPlayer() instanceof ServerPlayer player)) {
             return;
         }
@@ -137,9 +128,6 @@ public abstract class CraftAmountMenuMixin implements LongCraftingAmountMenuBrid
         // screen forever, so refuse to open one for a target that cannot plan.
         if (!(menu.getTarget() instanceof IActionHost targetHost)
                 || targetHost.getActionableNode() == null) {
-            com.appliedenhancements.runtime.AelisPlanningLog.warn(
-                    "Long-range crafting target {} has no actionable grid node (what={}, amount={})",
-                    menu.getTarget(), this.whatToCraft, amount);
             player.sendSystemMessage(Component.translatable(
                     "message.appliedenhancements.crafting_target_unavailable"));
             return;

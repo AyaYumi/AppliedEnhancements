@@ -50,6 +50,24 @@ final class AelisCyclicRegionSolver {
             Map<K, BigInteger> additionalDemands,
             Map<K, BigInteger> available,
             AelisCyclicDemandSolver.Limits limits) {
+        try {
+            var model = AelisCyclicDemandSolver.Model.copyOf(region.variants(),
+                    AelisCyclicDemandSolver::checkInterrupted);
+            return solve(region, model, demandKey, demand, additionalDemands, available, limits);
+        } catch (InterruptedException cancelled) {
+            Thread.currentThread().interrupt();
+            return new Result<>(null, AelisCyclicDemandSolver.Failure.CANCELLED, 0);
+        }
+    }
+
+    static <K, V> Result<K, V> solve(
+            AelisCyclicRegionDetector.Region<K, V> region,
+            AelisCyclicDemandSolver.Model<K, V> model,
+            K demandKey, BigInteger demand,
+            Map<K, BigInteger> additionalDemands,
+            Map<K, BigInteger> available,
+            AelisCyclicDemandSolver.Limits limits) throws InterruptedException {
+        AelisCyclicDemandSolver.checkInterrupted();
         Objects.requireNonNull(region, "region");
         Objects.requireNonNull(demandKey, "demandKey");
         Objects.requireNonNull(demand, "demand");
@@ -62,6 +80,7 @@ final class AelisCyclicRegionSolver {
 
         var regionAvailable = new LinkedHashMap<K, BigInteger>();
         for (K key : region.keys()) {
+            AelisCyclicDemandSolver.checkInterrupted();
             BigInteger amount = available.get(key);
             if (amount != null && amount.signum() > 0) {
                 regionAvailable.put(key, amount);
@@ -70,15 +89,13 @@ final class AelisCyclicRegionSolver {
         var demands = new LinkedHashMap<K, BigInteger>();
         demands.put(demandKey, demand);
         for (var entry : additionalDemands.entrySet()) {
+            AelisCyclicDemandSolver.checkInterrupted();
             if (entry.getKey() != null && entry.getValue() != null
                     && entry.getValue().signum() > 0) {
                 demands.merge(entry.getKey(), entry.getValue(), BigInteger::add);
             }
         }
-        var raw = AelisCyclicDemandSolver.solve(
-                new AelisCyclicDemandSolver.Problem<>(
-                        region.variants(), demands, regionAvailable),
-                limits);
+        var raw = AelisCyclicDemandSolver.solve(model, demands, regionAvailable, limits);
         if (!raw.solved()) {
             return new Result<>(null, raw.failure(), raw.exploredStates());
         }
@@ -90,6 +107,7 @@ final class AelisCyclicRegionSolver {
         var surplus = includeRegionKeys(rawPlan.surplus(), region);
         var externalDemands = new LinkedHashMap<K, BigInteger>();
         for (var entry : rawPlan.demands().entrySet()) {
+            AelisCyclicDemandSolver.checkInterrupted();
             if (!region.keys().contains(entry.getKey())
                     && entry.getValue().signum() > 0) {
                 externalDemands.put(entry.getKey(), entry.getValue());
@@ -106,9 +124,10 @@ final class AelisCyclicRegionSolver {
 
     private static <K, V> Map<K, BigInteger> includeRegionKeys(
             Map<K, BigInteger> values,
-            AelisCyclicRegionDetector.Region<K, V> region) {
+            AelisCyclicRegionDetector.Region<K, V> region) throws InterruptedException {
         var result = new LinkedHashMap<K, BigInteger>();
         for (var entry : values.entrySet()) {
+            AelisCyclicDemandSolver.checkInterrupted();
             if (region.keys().contains(entry.getKey())
                     && entry.getValue().signum() > 0) {
                 result.put(entry.getKey(), entry.getValue());

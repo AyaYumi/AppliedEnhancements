@@ -322,7 +322,7 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         // A new generation invalidates the previous summary even with detailed progress disabled.
         // Send this before the calculation can complete and publish its replacement plan.
         var menu = (CraftConfirmMenu) (Object) this;
-        if (!menu.isClientSide() && menu.getPlayer() instanceof ServerPlayer player) {
+        if (menu.getPlayer() instanceof ServerPlayer player && player.containerMenu == menu) {
             NetworkHandler.sendToPlayer(player,
                     new CraftingCalculationProgressPayload(menu.containerId, initialProgress.snapshot(1)));
         }
@@ -352,10 +352,14 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
      */
     @Unique
     private void appliedenhancements$clearDisplayedPlan() {
+        this.plan = null;
         appliedenhancements$planGraph = null;
         appliedenhancements$graphBinding = null;
+        appliedenhancements$graphSource = null;
+        appliedenhancements$cachedGraph = null;
         appliedenhancements$graphRetryAt = 0;
         appliedenhancements$forcedRetryPlan = null;
+        appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
         appliedenhancements$cyclicCraftAmounts = Map.of();
         appliedenhancements$bigIntegerCyclicCraftAmounts = Map.of();
         appliedenhancements$bigIntegerCraftAmounts = Map.of();
@@ -363,9 +367,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         appliedenhancements$bigIntegerStoredAmounts = Map.of();
         appliedenhancements$bigIntegerBytes = null;
         appliedenhancements$bigIntegerFinalAmount = null;
-        if (this.plan != null) {
-            this.plan = null;
-        }
     }
 
     // Forge's runtime remapper may resolve a missing int/long overload by name.
@@ -385,11 +386,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             appliedenhancements$requestedAmount = amount;
             appliedenhancements$exactRequestedAmount = null;
             appliedenhancements$calculationStrategy = strategy;
-            appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
-            appliedenhancements$cyclicCraftAmounts = Map.of();
-            appliedenhancements$bigIntegerCyclicCraftAmounts = Map.of();
-            appliedenhancements$bigIntegerCraftAmounts = Map.of();
-            appliedenhancements$bigIntegerMissingAmounts = Map.of();
             appliedenhancements$releaseInventoryReservation();
             appliedenhancements$cancelProgress();
         }
@@ -435,9 +431,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         NativeCraftingMenuCompat.setAmount(menu, requestedAmount);
         this.appliedenhancements$requestedAmount = requestedAmount;
         this.appliedenhancements$exactRequestedAmount = exact;
-        this.appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
-        this.appliedenhancements$cyclicCraftAmounts = Map.of();
-        this.appliedenhancements$bigIntegerCyclicCraftAmounts = Map.of();
 
         ICraftingSimulationRequester requester = new ICraftingSimulationRequester() {
             @Override
@@ -479,17 +472,20 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Inject(method = "replan", at = @At("HEAD"), cancellable = true)
     private void appliedenhancements$replanLong(CallbackInfo callback) {
         var menu = (CraftConfirmMenu) (Object) this;
-        if (!menu.isClientSide() && !appliedenhancements$replanningAfterReservationConflict) {
+        if (menu.isClientSide()) {
+            appliedenhancements$clearDisplayedPlan();
+            return;
+        }
+        if (!appliedenhancements$replanningAfterReservationConflict) {
             appliedenhancements$reservationConflictReplans = 0;
         }
-        if (!menu.isClientSide() && appliedenhancements$exactRequestedAmount != null && whatToCraft != null) {
+        if (appliedenhancements$exactRequestedAmount != null && whatToCraft != null) {
             if (!appliedenhancements$planRequested(whatToCraft,
                     new com.appliedenhancements.api.AelisExactRequest(appliedenhancements$exactRequestedAmount).projection(),
                     CalculationStrategy.CRAFT_LESS, appliedenhancements$exactRequestedAmount)) menu.goBack();
             callback.cancel(); return;
         }
-        if (menu.isClientSide() || appliedenhancements$requestedAmount <= Integer.MAX_VALUE
-                || this.whatToCraft == null) {
+        if (appliedenhancements$requestedAmount <= Integer.MAX_VALUE || this.whatToCraft == null) {
             return;
         }
         if (!appliedenhancements$planLong(
@@ -659,6 +655,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             return;
         }
 
+        // The first progress snapshot of a generation clears the previous plan on the client.
+        // Publish it before the replacement plan's metadata and AE2 summary.
+        appliedenhancements$sendCalculationProgress(player, menu);
         var path = appliedenhancements$resolveCalculationPath(this.result);
         Map<AEKey, Long> cyclicCraftAmounts =
                 this.result instanceof AelisCyclicCraftAmountsCarrier carrier
@@ -693,7 +692,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         appliedenhancements$bigIntegerMissingAmounts = bigIntegerMissingAmounts;
         appliedenhancements$bigIntegerStoredAmounts = bigIntegerStoredAmounts;
         appliedenhancements$bigIntegerBytes = bigIntegerBytes;
-        appliedenhancements$sendCalculationProgress(player, menu);
     }
 
     @Inject(method = { "broadcastChanges", "m_38946_" }, at = @At("RETURN"))

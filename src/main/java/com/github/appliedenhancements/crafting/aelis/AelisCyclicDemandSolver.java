@@ -49,9 +49,9 @@ final class AelisCyclicDemandSolver<K, V> {
     record Problem<K, V>(Map<K, List<Variant<K, V>>> variants,
             Map<K, BigInteger> demands, Map<K, BigInteger> available) {
         Problem {
-            variants = copyVariants(variants);
-            demands = copyNonNegative(demands, "demand");
-            available = copyNonNegative(available, "available");
+            variants = copyVariants(variants, () -> {});
+            demands = copyNonNegative(demands, "demand", () -> {});
+            available = copyNonNegative(available, "available", () -> {});
         }
     }
 
@@ -73,6 +73,7 @@ final class AelisCyclicDemandSolver<K, V> {
         SCC_NODE_LIMIT,
         SEARCH_STATE_LIMIT,
         TIME_BUDGET,
+        CANCELLED,
         NO_PRODUCER,
         NO_INTEGER_SOLUTION,
         LONG_RANGE_OVERFLOW
@@ -115,65 +116,166 @@ final class AelisCyclicDemandSolver<K, V> {
         }
     }
 
+    /** One calculation's immutable recipe data and most recent traversal order. */
+    static final class Model<K, V> {
+        private final Map<K, List<Variant<K, V>>> variants;
+        private Map<K, Set<K>> adjacency;
+        private Topology<K> topology;
+        private Set<V> cyclicMembers;
+
+        private Model(Map<K, List<Variant<K, V>>> variants) {
+            this.variants = variants;
+        }
+
+        static <K, V, E1 extends Exception, E2 extends Exception> Model<K, V> copyOf(
+                Map<K, List<Variant<K, V>>> variants,
+                AelisCyclicRegionDetector.Checkpoint<E1, E2> checkpoint) throws E1, E2 {
+            return new Model<>(copyVariants(variants, checkpoint));
+        }
+
+        Map<K, List<Variant<K, V>>> variants() {
+            return variants;
+        }
+
+        private Topology<K> topologyFor(Map<K, BigInteger> demands,
+                Map<K, BigInteger> available) throws InterruptedException {
+            var keys = new LinkedHashSet<K>();
+            for (var group : List.of(demands.keySet(), available.keySet())) {
+                for (K key : group) {
+                    checkInterrupted();
+                    keys.add(key);
+                }
+            }
+            // Keep the previous solver's demand/stock-first ordering. It breaks
+            // ties during seed scheduling, so a different order needs a new traversal.
+            var startingKeys = List.copyOf(keys);
+            if (topology != null && topology.startingKeys.equals(startingKeys)) {
+                return topology;
+            }
+            if (adjacency == null) {
+                adjacency = buildAdjacency(variants);
+            }
+            for (K key : adjacency.keySet()) {
+                checkInterrupted();
+                keys.add(key);
+            }
+            var components = tarjan(keys, adjacency);
+            int[] componentOf = new int[keys.size()];
+            var keyIndexes = indexKeys(keys);
+            var largest = 0;
+            for (int index = 0; index < components.size(); index++) {
+                List<K> component = components.get(index);
+                largest = Math.max(largest, component.size());
+                for (K key : component) {
+                    checkInterrupted();
+                    componentOf[keyIndexes.get(key)] = index;
+                }
+            }
+            var ordered = new ArrayList<Component<K>>(components.size());
+            for (int index : componentTopologicalOrder(keys, components.size(), adjacency, componentOf, keyIndexes)) {
+                checkInterrupted();
+                var component = components.get(index);
+                K first = component.get(0);
+                ordered.add(new Component<>(component, component.size() > 1
+                        || adjacency.getOrDefault(first, Set.of()).contains(first)));
+            }
+            topology = new Topology<>(startingKeys, List.copyOf(keys), List.copyOf(ordered), largest);
+            return topology;
+        }
+
+        /** Called after a successful solve. Cycle membership is independent of traversal order. */
+        Set<V> cyclicMembers() throws InterruptedException {
+            checkInterrupted();
+            if (cyclicMembers == null) {
+                var members = new LinkedHashSet<V>();
+                for (var component : topology.inOrder) {
+                    checkInterrupted();
+                    if (component.cyclic) {
+                        AelisCyclicCraftingMembership.addComponentMembers(
+                                variants, component.keys, members, AelisCyclicDemandSolver::checkInterrupted);
+                    }
+                }
+                cyclicMembers = Collections.unmodifiableSet(members);
+            }
+            return cyclicMembers;
+        }
+    }
+
+    private record Topology<K>(List<K> startingKeys, List<K> keys,
+            List<Component<K>> inOrder, int largestComponent) {
+    }
+
+    private record Component<K>(List<K> keys, boolean cyclic) {
+    }
+
+    private final Model<K, V> model;
     private final Limits limits;
     private long exploredStates;
     private Failure stoppedBy = Failure.NONE;
 
-    private AelisCyclicDemandSolver(Limits limits) {
+    private AelisCyclicDemandSolver(Model<K, V> model, Limits limits) {
+        this.model = model;
         this.limits = Objects.requireNonNull(limits, "limits");
     }
 
     static <K, V> Result<K, V> solve(Problem<K, V> problem, Limits limits) {
-        return new AelisCyclicDemandSolver<K, V>(limits).solve(problem);
+        var solver = new AelisCyclicDemandSolver<>(new Model<>(problem.variants), limits);
+        try {
+            return solver.solveChecked(problem.demands, problem.available);
+        } catch (InterruptedException cancelled) {
+            Thread.currentThread().interrupt();
+            return solver.failed(Failure.CANCELLED);
+        }
     }
 
-    private Result<K, V> solve(Problem<K, V> problem) {
-        Objects.requireNonNull(problem, "problem");
-        var keys = collectKeys(problem);
-        var adjacency = buildAdjacency(keys, problem.variants);
-        List<List<K>> components = tarjan(keys, adjacency);
-        for (List<K> component : components) {
-            if (component.size() > limits.maxSccNodes) {
-                return failed(Failure.SCC_NODE_LIMIT);
-            }
+    static <K, V> Result<K, V> solve(Model<K, V> model, Map<K, BigInteger> demands,
+            Map<K, BigInteger> available, Limits limits) throws InterruptedException {
+        checkInterrupted();
+        return new AelisCyclicDemandSolver<>(model, limits).solveChecked(
+                copyNonNegative(demands, "demand", AelisCyclicDemandSolver::checkInterrupted),
+                copyNonNegative(available, "available", AelisCyclicDemandSolver::checkInterrupted));
+    }
+
+    private Result<K, V> solveChecked(Map<K, BigInteger> demands, Map<K, BigInteger> available)
+            throws InterruptedException {
+        checkInterrupted();
+        var result = solve(demands, available);
+        checkInterrupted();
+        return result;
+    }
+
+    private Result<K, V> solve(Map<K, BigInteger> requested, Map<K, BigInteger> available)
+            throws InterruptedException {
+        var topology = model.topologyFor(requested, available);
+        if (topology.largestComponent > limits.maxSccNodes) {
+            return failed(Failure.SCC_NODE_LIMIT);
         }
 
-        int[] componentOf = new int[keys.size()];
-        var keyIndexes = indexKeys(keys);
-        for (int component = 0; component < components.size(); component++) {
-            for (K key : components.get(component)) {
-                componentOf[keyIndexes.get(key)] = component;
-            }
-        }
-        List<Integer> componentOrder = componentTopologicalOrder(
-                components, adjacency, componentOf, keyIndexes);
-
-        var demands = new LinkedHashMap<K, BigInteger>();
-        demands.putAll(problem.demands);
+        var demands = new LinkedHashMap<K, BigInteger>(requested);
         var firings = new LinkedHashMap<V, BigInteger>();
         var missing = new LinkedHashMap<K, BigInteger>();
         var requiredAvailable = new LinkedHashMap<K, BigInteger>();
         var surplus = new LinkedHashMap<K, BigInteger>();
         var cyclicSchedules = new ArrayList<List<ScheduleStep<K, V>>>();
 
-        for (int componentIndex : componentOrder) {
+        for (var part : topology.inOrder) {
             if (!checkpoint()) {
                 return failed(stoppedBy);
             }
-            List<K> component = components.get(componentIndex);
+            List<K> component = part.keys;
             boolean demanded = component.stream().anyMatch(
                     key -> positive(demands.get(key)));
             if (!demanded) {
                 continue;
             }
             boolean hasProducer = component.stream().anyMatch(
-                    key -> !problem.variants.getOrDefault(key, List.of()).isEmpty());
+                    key -> !model.variants.getOrDefault(key, List.of()).isEmpty());
             if (!hasProducer) {
                 continue;
             }
 
             ComponentPlan<K, V> componentPlan = solveComponent(
-                    component, problem, demands);
+                    component, available, demands);
             if (componentPlan == null) {
                 return failed(stoppedBy == Failure.NONE
                         ? Failure.NO_INTEGER_SOLUTION : stoppedBy);
@@ -182,10 +284,7 @@ final class AelisCyclicDemandSolver<K, V> {
             mergePositive(missing, componentPlan.missing);
             mergeMaximum(requiredAvailable, componentPlan.requiredAvailable);
             mergePositive(surplus, componentPlan.surplus);
-            boolean cyclic = component.size() > 1
-                    || adjacency.getOrDefault(component.get(0), Set.of())
-                            .contains(component.get(0));
-            if (cyclic && !componentPlan.executionSchedule.isEmpty()) {
+            if (part.cyclic && !componentPlan.executionSchedule.isEmpty()) {
                 cyclicSchedules.add(componentPlan.executionSchedule);
             }
             for (var entry : componentPlan.externalDemands.entrySet()) {
@@ -193,18 +292,19 @@ final class AelisCyclicDemandSolver<K, V> {
             }
         }
 
-        for (K key : keys) {
+        for (K key : topology.keys) {
+            checkInterrupted();
             BigInteger demand = value(demands, key);
             if (!positive(demand)) {
                 continue;
             }
-            if (problem.variants.getOrDefault(key, List.of()).isEmpty()) {
-                BigInteger shortage = demand.subtract(value(problem.available, key));
+            if (model.variants.getOrDefault(key, List.of()).isEmpty()) {
+                BigInteger shortage = demand.subtract(value(available, key));
                 if (shortage.signum() > 0) {
                     missing.merge(key, shortage, BigInteger::add);
                 }
             }
-            BigInteger directUse = value(problem.available, key).min(demand);
+            BigInteger directUse = value(available, key).min(demand);
             if (directUse.signum() > 0) {
                 requiredAvailable.merge(key, directUse, BigInteger::max);
             }
@@ -230,13 +330,14 @@ final class AelisCyclicDemandSolver<K, V> {
     }
 
     private ComponentPlan<K, V> solveComponent(List<K> component,
-            Problem<K, V> problem, Map<K, BigInteger> accumulatedDemands) {
+            Map<K, BigInteger> available, Map<K, BigInteger> accumulatedDemands) throws InterruptedException {
         var choices = new ArrayList<List<Variant<K, V>>>(component.size());
         for (K key : component) {
-            List<Variant<K, V>> variants = problem.variants.getOrDefault(key, List.of());
+            checkInterrupted();
+            List<Variant<K, V>> variants = model.variants.getOrDefault(key, List.of());
             if (variants.isEmpty()) {
                 BigInteger demand = value(accumulatedDemands, key);
-                if (demand.compareTo(value(problem.available, key)) > 0) {
+                if (demand.compareTo(value(available, key)) > 0) {
                     stoppedBy = Failure.NO_PRODUCER;
                     return null;
                 }
@@ -249,7 +350,7 @@ final class AelisCyclicDemandSolver<K, V> {
         Variant<K, V>[] selected = (Variant<K, V>[]) new Variant<?, ?>[component.size()];
         return searchSelections(
                 component, choices, selected, 0,
-                problem, accumulatedDemands);
+                available, accumulatedDemands);
     }
 
     private ComponentPlan<K, V> searchSelections(
@@ -257,19 +358,19 @@ final class AelisCyclicDemandSolver<K, V> {
             List<List<Variant<K, V>>> choices,
             Variant<K, V>[] selected,
             int index,
-            Problem<K, V> problem,
-            Map<K, BigInteger> accumulatedDemands) {
+            Map<K, BigInteger> available,
+            Map<K, BigInteger> accumulatedDemands) throws InterruptedException {
         if (!checkpoint()) {
             return null;
         }
         if (index == selected.length) {
-            return solveSelection(component, selected, problem, accumulatedDemands);
+            return solveSelection(component, selected, available, accumulatedDemands);
         }
         if (choices.get(index).isEmpty()) {
             selected[index] = null;
             return searchSelections(
                     component, choices, selected, index + 1,
-                    problem, accumulatedDemands);
+                    available, accumulatedDemands);
         }
         for (Variant<K, V> variant : choices.get(index)) {
             if (!checkpoint()) {
@@ -278,7 +379,7 @@ final class AelisCyclicDemandSolver<K, V> {
             selected[index] = variant;
             ComponentPlan<K, V> result = searchSelections(
                     component, choices, selected, index + 1,
-                    problem, accumulatedDemands);
+                    available, accumulatedDemands);
             if (result != null) {
                 return result;
             }
@@ -292,8 +393,8 @@ final class AelisCyclicDemandSolver<K, V> {
 
     private ComponentPlan<K, V> solveSelection(
             List<K> component, Variant<K, V>[] selected,
-            Problem<K, V> problem,
-            Map<K, BigInteger> accumulatedDemands) {
+            Map<K, BigInteger> available,
+            Map<K, BigInteger> accumulatedDemands) throws InterruptedException {
         int size = component.size();
         var indexes = indexKeys(component);
         var firings = new BigInteger[size];
@@ -307,13 +408,15 @@ final class AelisCyclicDemandSolver<K, V> {
         var pending = new ArrayDeque<Integer>();
         var queued = new boolean[size];
         for (int index = 0; index < size; index++) {
+            checkInterrupted();
             K key = component.get(index);
-            required[index] = value(accumulatedDemands, key).subtract(value(problem.available, key));
+            required[index] = value(accumulatedDemands, key).subtract(value(available, key));
             consumers.add(new ArrayList<>());
             Variant<K, V> variant = selected[index];
             if (variant == null) continue;
             effectiveOutput[index] = variant.outputAmount;
             for (Input<K> input : variant.inputs) {
+                checkInterrupted();
                 Integer target = indexes.get(input.key);
                 if (target == null) continue;
                 if (target == index) {
@@ -347,6 +450,7 @@ final class AelisCyclicDemandSolver<K, V> {
             BigInteger delta = needed.subtract(firings[outputIndex]);
             firings[outputIndex] = needed;
             for (DemandEdge edge : consumers.get(outputIndex)) {
+                checkInterrupted();
                 int target = edge.keyIndex;
                 required[target] = required[target].add(edge.amount.multiply(delta));
                 if (selected[target] != null && !queued[target]) {
@@ -357,10 +461,12 @@ final class AelisCyclicDemandSolver<K, V> {
         }
 
         for (int keyIndex = 0; keyIndex < size; keyIndex++) {
+            checkInterrupted();
             K key = component.get(keyIndex);
-            BigInteger balance = value(problem.available, key)
+            BigInteger balance = value(available, key)
                     .subtract(value(accumulatedDemands, key));
             for (int pattern = 0; pattern < size; pattern++) {
+                checkInterrupted();
                 Variant<K, V> variant = selected[pattern];
                 if (variant == null || firings[pattern].signum() == 0) {
                     continue;
@@ -380,7 +486,7 @@ final class AelisCyclicDemandSolver<K, V> {
         }
 
         SeedSchedule<K, V> seedSchedule = proveFiringSchedule(
-                component, selected, firings, problem.available);
+                component, selected, firings, available);
         if (seedSchedule == null) {
             return null;
         }
@@ -396,6 +502,7 @@ final class AelisCyclicDemandSolver<K, V> {
             }
             firingMap.merge(variant.id, times, BigInteger::add);
             for (Input<K> input : variant.inputs) {
+                checkInterrupted();
                 if (!indexes.containsKey(input.key)) {
                     externalDemands.merge(
                             input.key, input.amount.multiply(times), BigInteger::add);
@@ -403,10 +510,11 @@ final class AelisCyclicDemandSolver<K, V> {
             }
         }
         for (K key : component) {
-            BigInteger balance = value(problem.available, key)
+            BigInteger balance = value(available, key)
                     .add(value(seedSchedule.missing, key))
                     .subtract(value(accumulatedDemands, key));
             for (int pattern = 0; pattern < size; pattern++) {
+                checkInterrupted();
                 Variant<K, V> variant = selected[pattern];
                 if (variant == null || firings[pattern].signum() == 0) {
                     continue;
@@ -431,7 +539,7 @@ final class AelisCyclicDemandSolver<K, V> {
 
     private SeedSchedule<K, V> proveFiringSchedule(
             List<K> component, Variant<K, V>[] selected,
-            BigInteger[] totalFirings, Map<K, BigInteger> available) {
+            BigInteger[] totalFirings, Map<K, BigInteger> available) throws InterruptedException {
         int size = component.size();
         BigInteger[] remaining = totalFirings.clone();
         var balance = new LinkedHashMap<K, BigInteger>();
@@ -450,6 +558,7 @@ final class AelisCyclicDemandSolver<K, V> {
             int selectedPattern = -1;
             BigInteger selectedBatch = ZERO;
             for (int pattern = 0; pattern < size; pattern++) {
+                checkInterrupted();
                 if (remaining[pattern].signum() <= 0 || selected[pattern] == null) {
                     continue;
                 }
@@ -480,6 +589,7 @@ final class AelisCyclicDemandSolver<K, V> {
             if (selectedPattern < 0) {
                 BigInteger cheapest = null;
                 for (int pattern = 0; pattern < size; pattern++) {
+                    checkInterrupted();
                     if (remaining[pattern].signum() <= 0 || selected[pattern] == null) {
                         continue;
                     }
@@ -586,7 +696,14 @@ final class AelisCyclicDemandSolver<K, V> {
                 missing, requiredAvailable, executionSchedule);
     }
 
-    private boolean checkpoint() {
+    static void checkInterrupted() throws InterruptedException {
+        if (Thread.interrupted()) {
+            throw new InterruptedException();
+        }
+    }
+
+    private boolean checkpoint() throws InterruptedException {
+        checkInterrupted();
         exploredStates++;
         if (exploredStates > limits.maxSearchStates) {
             stoppedBy = Failure.SEARCH_STATE_LIMIT;
@@ -603,35 +720,18 @@ final class AelisCyclicDemandSolver<K, V> {
         return new Result<>(null, failure, exploredStates);
     }
 
-    private static <K, V> Set<K> collectKeys(Problem<K, V> problem) {
-        var keys = new LinkedHashSet<K>();
-        keys.addAll(problem.demands.keySet());
-        keys.addAll(problem.available.keySet());
-        for (var entry : problem.variants.entrySet()) {
-            keys.add(entry.getKey());
-            for (Variant<K, V> variant : entry.getValue()) {
-                keys.add(variant.output);
-                for (Input<K> input : variant.inputs) {
-                    keys.add(input.key);
-                }
-            }
-        }
-        return Collections.unmodifiableSet(keys);
-    }
-
     private static <K, V> Map<K, Set<K>> buildAdjacency(
-            Collection<K> keys, Map<K, List<Variant<K, V>>> variants) {
+            Map<K, List<Variant<K, V>>> variants) throws InterruptedException {
         var adjacency = new LinkedHashMap<K, Set<K>>();
-        for (K key : keys) {
-            adjacency.put(key, new LinkedHashSet<>());
-        }
         for (var entry : variants.entrySet()) {
-            Set<K> edges = adjacency.get(entry.getKey());
+            checkInterrupted();
+            Set<K> edges = adjacency.computeIfAbsent(entry.getKey(), key -> new LinkedHashSet<>());
             for (Variant<K, V> variant : entry.getValue()) {
+                checkInterrupted();
                 for (Input<K> input : variant.inputs) {
-                    if (adjacency.containsKey(input.key)) {
-                        edges.add(input.key);
-                    }
+                    checkInterrupted();
+                    edges.add(input.key);
+                    adjacency.computeIfAbsent(input.key, key -> new LinkedHashSet<>());
                 }
             }
         }
@@ -639,9 +739,10 @@ final class AelisCyclicDemandSolver<K, V> {
     }
 
     private static <K> List<List<K>> tarjan(
-            Collection<K> keys, Map<K, Set<K>> adjacency) {
+            Collection<K> keys, Map<K, Set<K>> adjacency) throws InterruptedException {
         var state = new TarjanState<K>(adjacency);
         for (K key : keys) {
+            checkInterrupted();
             if (!state.indexes.containsKey(key)) {
                 state.visit(key);
             }
@@ -650,16 +751,18 @@ final class AelisCyclicDemandSolver<K, V> {
     }
 
     private static <K> List<Integer> componentTopologicalOrder(
-            List<List<K>> components, Map<K, Set<K>> adjacency,
-            int[] componentOf, Map<K, Integer> keyIndexes) {
-        var edges = new ArrayList<Set<Integer>>(components.size());
-        int[] indegrees = new int[components.size()];
-        for (int index = 0; index < components.size(); index++) {
+            Collection<K> keys, int componentCount, Map<K, Set<K>> adjacency,
+            int[] componentOf, Map<K, Integer> keyIndexes) throws InterruptedException {
+        var edges = new ArrayList<Set<Integer>>(componentCount);
+        int[] indegrees = new int[componentCount];
+        for (int index = 0; index < componentCount; index++) {
             edges.add(new LinkedHashSet<>());
         }
-        for (var entry : adjacency.entrySet()) {
-            int from = componentOf[keyIndexes.get(entry.getKey())];
-            for (K targetKey : entry.getValue()) {
+        for (K key : keys) {
+            checkInterrupted();
+            int from = componentOf[keyIndexes.get(key)];
+            for (K targetKey : adjacency.getOrDefault(key, Set.of())) {
+                checkInterrupted();
                 int to = componentOf[keyIndexes.get(targetKey)];
                 if (from != to && edges.get(from).add(to)) {
                     indegrees[to]++;
@@ -672,8 +775,9 @@ final class AelisCyclicDemandSolver<K, V> {
                 queue.addLast(index);
             }
         }
-        var order = new ArrayList<Integer>(components.size());
+        var order = new ArrayList<Integer>(componentCount);
         while (!queue.isEmpty()) {
+            checkInterrupted();
             int component = queue.removeFirst();
             order.add(component);
             for (int target : edges.get(component)) {
@@ -682,25 +786,27 @@ final class AelisCyclicDemandSolver<K, V> {
                 }
             }
         }
-        if (order.size() != components.size()) {
+        if (order.size() != componentCount) {
             throw new IllegalStateException("Condensed graph is not acyclic");
         }
         return order;
     }
 
-    private static <K> Map<K, Integer> indexKeys(Collection<K> keys) {
+    private static <K> Map<K, Integer> indexKeys(Collection<K> keys) throws InterruptedException {
         var indexes = new LinkedHashMap<K, Integer>();
         int index = 0;
         for (K key : keys) {
+            checkInterrupted();
             indexes.put(key, index++);
         }
         return indexes;
     }
 
     private static <K, V> BigInteger internalInputAmount(
-            Variant<K, V> variant, K key) {
+            Variant<K, V> variant, K key) throws InterruptedException {
         BigInteger result = ZERO;
         for (Input<K> input : variant.inputs) {
+            checkInterrupted();
             if (key.equals(input.key)) {
                 result = result.add(input.amount);
             }
@@ -724,13 +830,15 @@ final class AelisCyclicDemandSolver<K, V> {
         return values.getOrDefault(key, ZERO);
     }
 
-    private static <K> Map<K, BigInteger> copyNonNegative(
-            Map<K, BigInteger> values, String label) {
+    private static <K, E1 extends Exception, E2 extends Exception> Map<K, BigInteger> copyNonNegative(
+            Map<K, BigInteger> values, String label,
+            AelisCyclicRegionDetector.Checkpoint<E1, E2> checkpoint) throws E1, E2 {
         if (values == null || values.isEmpty()) {
             return Map.of();
         }
         var copy = new LinkedHashMap<K, BigInteger>();
         for (var entry : values.entrySet()) {
+            checkpoint.check();
             Objects.requireNonNull(entry.getKey(), label + " key");
             BigInteger value = Objects.requireNonNull(entry.getValue(), label + " value");
             if (value.signum() < 0) {
@@ -743,17 +851,20 @@ final class AelisCyclicDemandSolver<K, V> {
         return Map.copyOf(copy);
     }
 
-    private static <K, V> Map<K, List<Variant<K, V>>> copyVariants(
-            Map<K, List<Variant<K, V>>> variants) {
+    private static <K, V, E1 extends Exception, E2 extends Exception>
+            Map<K, List<Variant<K, V>>> copyVariants(Map<K, List<Variant<K, V>>> variants,
+                    AelisCyclicRegionDetector.Checkpoint<E1, E2> checkpoint) throws E1, E2 {
         if (variants == null || variants.isEmpty()) {
             return Map.of();
         }
         var copy = new LinkedHashMap<K, List<Variant<K, V>>>();
         for (var entry : variants.entrySet()) {
+            checkpoint.check();
             Objects.requireNonNull(entry.getKey(), "variant key");
             var list = new ArrayList<Variant<K, V>>();
             if (entry.getValue() != null) {
                 for (Variant<K, V> variant : entry.getValue()) {
+                    checkpoint.check();
                     if (!entry.getKey().equals(variant.output)) {
                         throw new IllegalArgumentException(
                                 "Variant output does not match its key");
@@ -817,10 +928,11 @@ final class AelisCyclicDemandSolver<K, V> {
             this.adjacency = adjacency;
         }
 
-        private void visit(K key) {
+        private void visit(K key) throws InterruptedException {
             var traversal = new ArrayDeque<TarjanFrame<K>>();
             enter(key, null, traversal);
             while (!traversal.isEmpty()) {
+                checkInterrupted();
                 TarjanFrame<K> frame = traversal.peek();
                 if (frame.neighbors.hasNext()) {
                     K target = frame.neighbors.next();
@@ -846,6 +958,7 @@ final class AelisCyclicDemandSolver<K, V> {
                 var component = new ArrayList<K>();
                 K member;
                 do {
+                    checkInterrupted();
                     member = stack.pop();
                     onStack.remove(member);
                     component.add(member);
