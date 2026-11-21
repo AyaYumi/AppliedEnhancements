@@ -46,13 +46,7 @@ public final class AelisExactCraftingService {
             try (var scope = new ExactRequestScope(exactRequest)) {
                 var plan = calculation.run();
                 if (plan == null) throw new IllegalStateException("Exact calculation returned no plan");
-                var copy = AelisCycleExecutionApi.copyMetadata(plan, plan);
-                ((com.github.appliedenhancements.integration.ae2.AelisBigIntegerCraftAmountsCarrier) copy)
-                        .appliedenhancements$setBigIntegerFinalAmount(
-                                plan.finalOutput().amount() == exactRequest.projection()
-                                        && AelisExactCraftingPlanApi.read(plan).path() == AelisPlanPath.AELIS
-                                        ? exactRequest.amount() : BigInteger.valueOf(plan.finalOutput().amount()));
-                return copy;
+                return AelisCycleExecutionApi.copyMetadata(plan, plan);
             }
         });
     }

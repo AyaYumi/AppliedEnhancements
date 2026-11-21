@@ -1,8 +1,8 @@
-# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.21.1 / 1.1.6）
+# Exact planning and CPU execution API / 大整数规划与 CPU 执行 API（1.21.1 / 1.1.7）
 
 ## English API contract
 
-For Applied Enhancements **1.1.6**, Minecraft **1.21.1**, Java 21 and NeoForge.
+For Applied Enhancements **1.1.7**, Minecraft **1.21.1**, Java 21 and NeoForge.
 Call `AelisExactCraftingService.begin(level, requester, request)` on the owning
 server thread with a connected requester. Construction snapshots network state;
 await the returned `Future<ICraftingPlan>` asynchronously. Both
@@ -56,7 +56,7 @@ Clients and servers must use the same build with payload protocol 11.
 ## 中文 API 契约
 
 此 API 通过公开执行契约接入独立 CPU。
-客户端与服务端须使用本次同一构建（网络协议 11）；接入方须使用匹配当前构建的 1.1.6 JAR 编译和运行。
+客户端与服务端须使用本次同一构建（网络协议 11）；接入方须使用匹配当前构建的 1.1.7 JAR 编译和运行。
 
 ## 稳定的计划元数据 API
 

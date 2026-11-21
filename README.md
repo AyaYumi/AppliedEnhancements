@@ -6,7 +6,7 @@
 
 [中文](README_ZH.md) · [API documentation](docs/API_INTEGRATION.md) · [Configuration](CONFIGURATION.md)
 
-Applied Enhancements **1.1.6** enhances AE2 crafting, storage access and pattern
+Applied Enhancements **1.1.7** enhances AE2 crafting, storage access and pattern
 terminals for Minecraft 1.21.1 / NeoForge. It provides exact planning, cycle-aware
 CPU execution, shared batch extraction/ownership transactions and terminal tools.
 
@@ -28,11 +28,13 @@ CPU execution, shared batch extraction/ownership transactions and terminal tools
 ## Requirements and installation
 
 Java 21, Minecraft 1.21.1, NeoForge 21.1.220+ and AE2 19.2.17+ are required.
-The default build uses AE2 19.2.18. ExtendedAE, AE2WTLib, JEI, AdvancedAE,
-Data Energistics and other integrations remain optional. New addon versions need
-runtime verification when they change internal hooks.
+The default development build uses NeoForge 21.1.248, AE2 19.2.18 and
+JEI 19.70.0.469 (beta). JEI remains optional, with 19.27.0+ supported;
+JEI 19.70.0.469 itself requires NeoForge 21.1.238+. ExtendedAE, AE2WTLib,
+AdvancedAE, Data Energistics and other integrations remain optional. New addon
+versions need runtime verification when they change internal hooks.
 
-Build `build/libs/appliedenhancements-1.1.6.jar` and install the same build on
+Build `build/libs/appliedenhancements-1.1.7.jar` and install the same build on
 client and server. Internal network protocol is 11, replacing protocol 10 in 1.1.3;
 update both sides together. Addons use the separate public API; this mod is not
 embedded in their JARs.

@@ -50,7 +50,7 @@ final class JeiPlanBookmarks implements OptionalPlanBookmarks.Handler {
         if (key instanceof AEItemKey item) value = item.toStack();
         else if (key instanceof AEFluidKey fluid) value = fluid.toStack(1000);
         else return Optional.empty();
-        return runtime.getIngredientManager().createTypedIngredient(value)
+        return runtime.getIngredientManager().createTypedIngredient(value, false)
                 .map(typed -> (ITypedIngredient<?>) typed);
     }
 

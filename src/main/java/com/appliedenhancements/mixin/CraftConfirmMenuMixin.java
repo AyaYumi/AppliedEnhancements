@@ -23,6 +23,7 @@ import com.appliedenhancements.runtime.CraftingProgressTaskBinding;
 import com.appliedenhancements.runtime.ManualCraftingInventoryLock;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressHandle;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressMenuBridge;
+import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressPhase;
 import com.github.appliedenhancements.integration.ae2.CraftingCalculationProgressSnapshot;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPath;
 import com.github.appliedenhancements.integration.ae2.AelisCalculationPathCarrier;
@@ -137,6 +138,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Unique
     private CraftingCalculationProgressSnapshot appliedenhancements$calculationProgress =
             CraftingCalculationProgressSnapshot.idle();
+
+    @Unique
+    private boolean appliedenhancements$hasPlanned;
 
     @Unique
     private long appliedenhancements$progressRevision;
@@ -268,17 +272,26 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
     @Unique
     private CraftingCalculationProgressHandle appliedenhancements$startProgressTask(
             boolean progressDisplayEnabled) {
-        CraftingCalculationProgressHandle progress = null;
-        if (progressDisplayEnabled && Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get()) {
-            long generation = appliedenhancements$nextProgressGeneration.incrementAndGet();
-            if (generation <= 0) {
-                appliedenhancements$nextProgressGeneration.set(1);
-                generation = 1;
-            }
-            progress = new CraftingCalculationProgressHandle(generation);
+        long generation = appliedenhancements$nextProgressGeneration.incrementAndGet();
+        if (generation <= 0) {
+            appliedenhancements$nextProgressGeneration.set(1);
+            generation = 1;
         }
+        var progress = progressDisplayEnabled && Config.ENABLE_AUTOMATIC_AELIS_PLANNER.get()
+                ? new CraftingCalculationProgressHandle(generation) : null;
         appliedenhancements$progressBinding.begin(progress);
-        appliedenhancements$progressRevision = 0;
+        appliedenhancements$progressRevision = 1;
+        var menu = (CraftConfirmMenu) (Object) this;
+        boolean replacingPlan = appliedenhancements$hasPlanned;
+        appliedenhancements$hasPlanned = true;
+        if (replacingPlan && menu.getPlayer() instanceof ServerPlayer player && player.containerMenu == menu) {
+            // A native queued snapshot invalidates the preceding plan without
+            // requiring an AELIS progress handle.
+            var started = new CraftingCalculationProgressSnapshot(generation, appliedenhancements$progressRevision,
+                    CraftingCalculationProgressPhase.QUEUED, AelisCalculationPath.AE2_NATIVE,
+                    0, 0, 0, -1, 0, 0, false);
+            PacketDistributor.sendToPlayer(player, new CraftingCalculationProgressPayload(menu.containerId, started));
+        }
         appliedenhancements$lastProgressSyncTick = Long.MIN_VALUE;
         appliedenhancements$terminalProgressSentGeneration = -1;
         appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
@@ -304,11 +317,19 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
      */
     @Unique
     private void appliedenhancements$clearDisplayedPlan() {
+        this.plan = null;
         appliedenhancements$planGraph = null;
         appliedenhancements$graphBinding = null;
-        if (this.plan != null) {
-            this.plan = null;
-        }
+        appliedenhancements$graphSource = null;
+        appliedenhancements$cachedGraph = null;
+        appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
+        appliedenhancements$cyclicCraftAmounts = Map.of();
+        appliedenhancements$bigIntegerCyclicCraftAmounts = Map.of();
+        appliedenhancements$bigIntegerCraftAmounts = Map.of();
+        appliedenhancements$bigIntegerMissingAmounts = Map.of();
+        appliedenhancements$bigIntegerStoredAmounts = Map.of();
+        appliedenhancements$bigIntegerBytes = null;
+        appliedenhancements$bigIntegerFinalAmount = null;
     }
 
 
@@ -324,11 +345,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             if (!appliedenhancements$replanningAfterReservationConflict) {
                 appliedenhancements$reservationConflictReplans = 0;
             }
-            appliedenhancements$calculationPath = AelisCalculationPath.AE2_NATIVE;
-            appliedenhancements$cyclicCraftAmounts = Map.of();
-            appliedenhancements$bigIntegerCyclicCraftAmounts = Map.of();
-            appliedenhancements$bigIntegerCraftAmounts = Map.of();
-            appliedenhancements$bigIntegerMissingAmounts = Map.of();
+            appliedenhancements$hasPlanned |= this.plan != null;
+            appliedenhancements$clearDisplayedPlan();
             appliedenhancements$releaseInventoryReservation();
             appliedenhancements$cancelProgress();
         }
@@ -351,6 +369,13 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         try (var quantity = CraftingSubmissionScope.withRequest(appliedenhancements$submittedQuantity);
                 var tracking = CraftingSubmissionScope.withProgress(progress)) {
             return original.call(craftingService, level, requester, what, submittedAmount, strategy);
+        }
+    }
+
+    @Inject(method = "replan", at = @At("HEAD"))
+    private void appliedenhancements$clearClientPlanBeforeReplan(CallbackInfo callback) {
+        if (((CraftConfirmMenu) (Object) this).isClientSide()) {
+            appliedenhancements$clearDisplayedPlan();
         }
     }
 
@@ -381,6 +406,9 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
             return;
         }
 
+        // The first snapshot of a generation invalidates old metadata. Send
+        // it before the replacement plan's metadata and AE2 summary packet.
+        appliedenhancements$sendCalculationProgress(player, menu);
         var path = appliedenhancements$resolveCalculationPath(this.result);
         Map<AEKey, Long> cyclicCraftAmounts =
                 this.result instanceof AelisCyclicCraftAmountsCarrier carrier
@@ -415,7 +443,6 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         appliedenhancements$bigIntegerMissingAmounts = bigIntegerMissingAmounts;
         appliedenhancements$bigIntegerStoredAmounts = bigIntegerStoredAmounts;
         appliedenhancements$bigIntegerBytes = bigIntegerBytes;
-        appliedenhancements$sendCalculationProgress(player, menu);
     }
 
     @Inject(method = "broadcastChanges", at = @At("RETURN"))
@@ -598,7 +625,8 @@ public abstract class CraftConfirmMenuMixin implements CraftingCalculationProgre
         }
 
         var snapshot = progress.snapshot(++appliedenhancements$progressRevision);
-        if (snapshot.path() != AelisCalculationPath.AELIS) {
+        if (snapshot.path() != AelisCalculationPath.AELIS
+                || snapshot.phase() == CraftingCalculationProgressPhase.IDLE) {
             return;
         }
         appliedenhancements$lastProgressSyncTick = player.serverLevel().getGameTime();

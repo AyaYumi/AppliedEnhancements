@@ -64,17 +64,30 @@ final class AelisCyclicRegionDetector<K, V> {
         return analyze(models).regions;
     }
 
+    @FunctionalInterface
+    interface Checkpoint<E1 extends Exception, E2 extends Exception> {
+        void check() throws E1, E2;
+    }
+
     static <K, V> Analysis<K, V> analyze(Map<K, KeyModel<K, V>> models) {
+        return analyze(models, () -> {});
+    }
+
+    static <K, V, E1 extends Exception, E2 extends Exception> Analysis<K, V> analyze(
+            Map<K, KeyModel<K, V>> models, Checkpoint<E1, E2> checkpoint) throws E1, E2 {
         Objects.requireNonNull(models, "models");
         var keys = new LinkedHashSet<K>();
         keys.addAll(models.keySet());
         for (KeyModel<K, V> model : models.values()) {
+            checkpoint.check();
             if (model == null) {
                 continue;
             }
             for (var variant : model.variants) {
+                checkpoint.check();
                 keys.add(variant.output());
                 for (var input : variant.inputs()) {
+                    checkpoint.check();
                     keys.add(input.key());
                 }
             }
@@ -82,16 +95,20 @@ final class AelisCyclicRegionDetector<K, V> {
 
         var adjacency = new LinkedHashMap<K, Set<K>>();
         for (K key : keys) {
+            checkpoint.check();
             adjacency.put(key, new LinkedHashSet<>());
         }
         for (var entry : models.entrySet()) {
+            checkpoint.check();
             KeyModel<K, V> model = entry.getValue();
             if (model == null) {
                 continue;
             }
             Set<K> edges = adjacency.get(entry.getKey());
             for (var variant : model.variants) {
+                checkpoint.check();
                 for (var input : variant.inputs()) {
+                    checkpoint.check();
                     edges.add(input.key());
                 }
             }
@@ -99,14 +116,16 @@ final class AelisCyclicRegionDetector<K, V> {
 
         var state = new TarjanState<K>(adjacency);
         for (K key : keys) {
+            checkpoint.check();
             if (!state.indexes.containsKey(key)) {
-                state.visit(key);
+                state.visit(key, checkpoint);
             }
         }
 
         var regions = new ArrayList<Region<K, V>>();
         var rejectedRegions = new ArrayList<RejectedRegion<K>>();
         for (List<K> component : state.components) {
+            checkpoint.check();
             boolean cyclic = component.size() > 1
                     || adjacency.getOrDefault(component.getFirst(), Set.of())
                             .contains(component.getFirst());
@@ -118,6 +137,7 @@ final class AelisCyclicRegionDetector<K, V> {
             var rejectionReasons = new LinkedHashMap<K, String>();
             boolean supported = true;
             for (K key : component) {
+                checkpoint.check();
                 KeyModel<K, V> model = models.get(key);
                 if (model == null) {
                     rejectionReasons.put(key, "missing producer model");
@@ -158,10 +178,12 @@ final class AelisCyclicRegionDetector<K, V> {
             this.adjacency = adjacency;
         }
 
-        private void visit(K key) {
+        private <E1 extends Exception, E2 extends Exception> void visit(
+                K key, Checkpoint<E1, E2> checkpoint) throws E1, E2 {
             var traversal = new ArrayDeque<Frame<K>>();
             enter(key, null, traversal);
             while (!traversal.isEmpty()) {
+                checkpoint.check();
                 Frame<K> frame = traversal.peek();
                 if (frame.neighbors.hasNext()) {
                     K target = frame.neighbors.next();
@@ -185,6 +207,7 @@ final class AelisCyclicRegionDetector<K, V> {
                 var component = new ArrayList<K>();
                 K member;
                 do {
+                    checkpoint.check();
                     member = stack.pop();
                     onStack.remove(member);
                     component.add(member);

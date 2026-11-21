@@ -2,7 +2,7 @@
 
 Minecraft 1.21.1 / NeoForge.
 
-Applied Enhancements **1.1.6** generates `config/appliedenhancements-common.toml`
+Applied Enhancements **1.1.7** generates `config/appliedenhancements-common.toml`
 in the active instance. Edit existing sections and restart both sides.
 API integration: [English](docs/API_INTEGRATION.md) · [中文](docs/API_INTEGRATION_ZH.md)
 

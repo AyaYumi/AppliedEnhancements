@@ -1,6 +1,7 @@
 package com.appliedenhancements.integration.jei;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -9,9 +10,17 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 /** Prevents optional JEI classes from leaking into always-loaded code. */
 class JeiOptionalIsolationTest {
+    @Test
+    @EnabledIfSystemProperty(named = "appliedenhancements.test.jei", matches = "false")
+    void jeiIsAbsentFromTheRuntimeWhenDisabled() {
+        assertThrows(ClassNotFoundException.class,
+                () -> Class.forName("mezz.jei.common.Internal", false, getClass().getClassLoader()));
+    }
+
     @Test
     void jeiImportsStayInsideOptionalIntegrationPackage() throws IOException {
         Path sourceRoot = Path.of(System.getProperty("user.dir"))

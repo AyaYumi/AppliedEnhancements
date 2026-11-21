@@ -131,6 +131,7 @@ dependencies {
     compileOnly "mezz.jei:jei-1.21.1-neoforge:${jei_version}"
     if (!project.hasProperty('withoutJei')) {
         localRuntime "mezz.jei:jei-1.21.1-neoforge:${jei_version}"
+        testRuntimeOnly "mezz.jei:jei-1.21.1-neoforge:${jei_version}"
     }
 
     // MixinExtras for advanced mixin features
@@ -203,6 +204,7 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
+    systemProperty 'appliedenhancements.test.jei', !project.hasProperty('withoutJei')
 }
 
 // IDEA no longer automatically downloads sources/javadoc jars for dependencies, so we need to explicitly enable the behavior.

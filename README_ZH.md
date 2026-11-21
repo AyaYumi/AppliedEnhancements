@@ -2,7 +2,7 @@
 
 [English](README.md) · [接口文档](docs/API_INTEGRATION_ZH.md) · [配置参考](CONFIGURATION.md)
 
-Applied Enhancements **1.1.6** 为 Minecraft 1.21.1 / NeoForge 提供 AE2 合成、
+Applied Enhancements **1.1.7** 为 Minecraft 1.21.1 / NeoForge 提供 AE2 合成、
 存储访问和样板终端增强，支持精确规划、循环 CPU 执行、共享批量投料与材料所有权
 事务，以及样板终端工具。
 
@@ -24,10 +24,12 @@ Applied Enhancements **1.1.6** 为 Minecraft 1.21.1 / NeoForge 提供 AE2 合成
 ## 安装
 
 需要 Java 21、Minecraft 1.21.1、NeoForge 21.1.220+、AE2 19.2.17+。
-默认构建使用 AE2 19.2.18。ExtendedAE、AE2WTLib、JEI、AdvancedAE 和其他
-附属兼容均为可选；内部接口变化后的新版仍需实际运行验证。
+默认开发构建使用 NeoForge 21.1.248、AE2 19.2.18 和 JEI 19.70.0.469（Beta）。
+JEI 仍为可选，支持 19.27.0+；JEI 19.70.0.469 自身需要 NeoForge 21.1.238+。
+ExtendedAE、AE2WTLib、AdvancedAE 和其他附属兼容均为可选；内部接口变化后的新版
+仍需实际运行验证。
 
-构建 `build/libs/appliedenhancements-1.1.6.jar` 后放入两端 mods，客户端和
+构建 `build/libs/appliedenhancements-1.1.7.jar` 后放入两端 mods，客户端和
 服务端使用相同构建，内部载荷协议由 1.1.3 的 10 升级为 11，升级时须同时更新两端。
 附属使用独立安装的公开 API，不嵌入本模组。
 

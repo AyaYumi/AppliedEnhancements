@@ -186,7 +186,7 @@ final class AelisCraftingPlannerImpl implements AelisCraftingPlanner {
             long requestedAmount,
             boolean simulation,
             KeyCounter missingItems) throws InterruptedException {
-        try (var scope = CraftingPlannerIntervention.openExplicit()) {
+        try (var scope = CraftingPlannerIntervention.openPlanning()) {
             return tryExecuteScoped(root, inventory, requestedAmount, simulation, missingItems);
         }
     }

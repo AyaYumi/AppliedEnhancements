@@ -682,7 +682,7 @@ public final class AelisCraftConfirmScreen extends CraftConfirmScreen {
         if (ServerConfigSyncState.isProgressDisplayEnabled()
                 && menu instanceof CraftingCalculationProgressMenuBridge bridge) {
             var progress = bridge.molecularmanipulator$getCalculationProgress();
-            if (progress.active()) {
+            if (progress.active() && progress.path() == AelisCalculationPath.AELIS) {
                 label = Component.empty().append(label).append(" · ").append(Component.translatable(
                         "gui.appliedenhancements.calculation_progress.phase."
                                 + progress.phase().name().toLowerCase(Locale.ROOT)));
